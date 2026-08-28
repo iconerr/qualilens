@@ -20,17 +20,26 @@
 # Before every commit, the tree is scanned for anything credential-shaped
 # and for data paths; a hit refuses the commit outright. No exceptions.
 #
-# Usage: ./sync_repo.sh "commit message"
+# Usage: ./sync_repo.sh "commit message" [existing-bundle.zip]
+# Pass an existing bundle when cutting a release, so the repo, the release
+# asset, and the VERSION stamp inside it are one and the same build —
+# otherwise a fresh staging is packaged (which re-stamps VERSION).
 # The repo working copy lives OUTSIDE Dropbox (git and sync clients corrupt
 # each other): $QUALILENS_REPO_DIR, default ~/Code/qualilens.
 set -e
 cd "$(dirname "$0")"
 REPO_DIR="${QUALILENS_REPO_DIR:-$HOME/Code/qualilens}"
-MSG="${1:?usage: ./sync_repo.sh \"commit message\"}"
+MSG="${1:?usage: ./sync_repo.sh \"commit message\" [bundle.zip]}"
+BUNDLE="${2:-}"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-./package.sh "$TMP/bundle.zip" >/dev/null
+if [ -n "$BUNDLE" ]; then
+  [ -f "$BUNDLE" ] || { echo "No such bundle: $BUNDLE" >&2; exit 1; }
+  cp "$BUNDLE" "$TMP/bundle.zip"
+else
+  ./package.sh "$TMP/bundle.zip" >/dev/null
+fi
 unzip -q "$TMP/bundle.zip" -d "$TMP"
 STAGE="$TMP/QualiLens"
 
