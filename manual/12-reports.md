@@ -40,7 +40,7 @@ Each method draws the one figure its tradition expects. It appears in the intera
 
 | Method | Figure | What it shows |
 |---|---|---|
-| Grounded theory | The grounded theory model | Your categories arranged around the core category, an arrow from each into the core |
+| Grounded theory | The grounded theory model | A left-to-right paradigm flow: antecedent categories, then the core category, then strategies and consequences |
 | Thematic analysis | Thematic map | Each theme with its constituent codes beneath it, excerpt counts in parentheses |
 | Content analysis | Code frequency chart | A horizontal bar per code, above the frequency table; segments stacked by group when group comparison is on |
 | Framework | Matrix heatmap | Sources by codes above the matrix, each populated cell carrying its count, shaded by intensity |
@@ -48,7 +48,7 @@ Each method draws the one figure its tradition expects. It appears in the intera
 
 The figure is drawn from the structure you approved at the checkpoints, so it changes when your decisions change. Rename a category and the box is renamed. Merge two themes and the map has one hub fewer.
 
-Two rules govern the grounded theory model, and both protect you from the figure claiming more than your analysis did. First, an arrow is labeled with a relationship only when selective coding related that category **to the core itself**. A relationship between two categories is real analysis, but printing its label on an arrow into the core would assert a claim you never approved, so that arrow stays unlabeled and the relationship remains in the narrative. Second, when you accepted an existing category as the core rather than a higher-order concept, it is drawn once, at the center, and not again among the satellites.
+The grounded theory model reads left to right, the way theory models are conventionally drawn: categories whose relationship to the core names a condition, a context, or a constitutive dimension sit on the left with arrows into the core; categories whose relationship names a strategy or a consequence sit on the right, with arrows leading out of it. The placement is decided by the wording of each relationship, and the wording itself is printed inside the category's box, verbatim — so even if a relationship's phrasing lands a box on an arguable side, the figure never says more than selective coding said. Three rules protect you further. First, a relationship is printed only when selective coding related that category **to the core itself**; a relationship between two categories is real analysis, but attaching it to the core would assert a claim you never approved, so it stays in the narrative. Second, a category with no core-directed relationship is drawn on the left with an unlabeled arrow and no relation line. Third, when you accepted an existing category as the core rather than a higher-order concept, it is drawn once, at the center, and not again among the categories.
 
 Figures are views, not inventories. The model shows at most ten categories, chosen by the weight of their evidence. The thematic map shows at most six themes and eight codes per theme. The chart shows the fifteen most frequent codes, and either heatmap at most twenty sources or papers by twelve codes or concepts. Every figure that truncates says so on its face, and the tables and evidence section beneath remain complete. Read the figure for shape, and the tables for the record.
 

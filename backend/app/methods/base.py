@@ -27,6 +27,12 @@ class Stage:
     run: Optional[Callable] = None           # work: fn(ctx) -> None
     build_payload: Optional[Callable] = None  # checkpoint: fn(ctx) -> (title, instructions, payload)
     apply_resolution: Optional[Callable] = None  # checkpoint: fn(ctx, resolution) -> None
+    # What this stage owns, for branching: when a branch re-enters the
+    # pipeline BEFORE this stage, these are dropped from the copy so the
+    # stage runs again instead of skipping on the source run's artifacts.
+    resets: tuple = ()           # run-state keys (e.g. "matrix_rows")
+    reset_units: tuple = ()      # done_units prefixes (e.g. "apply")
+    reset_excerpt_stages: tuple = ()  # code stages whose excerpts this stage wrote
 
 
 @dataclass

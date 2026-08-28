@@ -194,6 +194,158 @@ def resolve_checkpoint(run_id: str, checkpoint_id: str, resolution: dict) -> Non
     _launch(run_id)
 
 
+def _remap_ids(obj, id_map: dict):
+    """Deep-copy obj with every string VALUE that is a copied code's id
+    replaced by its branch id. Meta blobs may carry code ids anywhere (the
+    GT core's relationships, is_existing_category_id); keys are never code
+    ids today, so only values are rewritten."""
+    if isinstance(obj, str):
+        return id_map.get(obj, obj)
+    if isinstance(obj, list):
+        return [_remap_ids(x, id_map) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _remap_ids(v, id_map) for k, v in obj.items()}
+    return obj
+
+
+def branch_run(source_run_id: str, stage_name: str) -> str:
+    """Create a NEW run that carries everything the source run had produced
+    up to the named checkpoint — codes, evidence, state, and the earlier
+    resolved reviews — and reopens that checkpoint for different decisions.
+    The source run and its report are untouched; stages after the review run
+    again on the branch (and bill again), while the spend already made stays
+    recorded on the source run."""
+    conn = db.get_conn()
+    run = conn.execute("SELECT * FROM runs WHERE id=?", (source_run_id,)).fetchone()
+    if not run:
+        raise ValueError("Run not found")
+    if run["status"] == "running":
+        raise ValueError("The run is still executing — wait for it or cancel it "
+                         "before revisiting a review.")
+    project = conn.execute("SELECT method FROM projects WHERE id=?",
+                           (run["project_id"],)).fetchone()
+    method = METHODS[project["method"]]
+    idx = next((i for i, s in enumerate(method.stages) if s.name == stage_name), None)
+    if idx is None:
+        raise ValueError(f"Unknown stage '{stage_name}'")
+    stage = method.stages[idx]
+    if stage.kind != "checkpoint":
+        raise ValueError("Only review checkpoints can be revisited.")
+    if run["stage_index"] < idx:
+        raise ValueError("The run never reached this review.")
+    if run["stage_index"] == idx and run["status"] == "awaiting_review":
+        raise ValueError("The run is waiting at this review right now — open it "
+                         "instead of branching.")
+
+    new_id = db.new_id()
+    code_rows = conn.execute("SELECT * FROM codes WHERE run_id=? ORDER BY created_at",
+                             (source_run_id,)).fetchall()
+    # codes get fresh ids (they are global primary keys); links are remapped
+    id_map = {r["id"]: db.new_id() for r in code_rows}
+    stage_of = {r["id"]: r["stage"] for r in code_rows}
+
+    # everything OWNED by stages after the branch point is left behind, so
+    # those stages run again on the branch instead of skipping on stale
+    # artifacts: their state keys, their unit markers, and the excerpts they
+    # wrote (e.g. a branch back to the codebook review must re-code — the
+    # copied coding would belong to the OLD codebook)
+    drop_state, drop_units, drop_excerpt_stages = set(), set(), set()
+    for later in method.stages[idx + 1:]:
+        drop_state.update(later.resets)
+        drop_units.update(later.reset_units)
+        drop_excerpt_stages.update(later.reset_excerpt_stages)
+
+    excerpt_rows = conn.execute(
+        "SELECT * FROM excerpts WHERE run_id=? ORDER BY created_at",
+        (source_run_id,)).fetchall()
+
+    state = json.loads(run["state"] or "{}")
+    if state.get("core_id") in id_map:       # grounded theory carries a code id
+        state["core_id"] = id_map[state["core_id"]]
+    for key in drop_state:
+        state.pop(key, None)
+    if drop_units:
+        state["done_units"] = [
+            u for u in state.get("done_units", [])
+            if not any(u.startswith(p + ":") for p in drop_units)]
+    # a source run from before the corpus freeze carries no snapshot; the
+    # branch must not inherit that openness — reconstruct its corpus from
+    # what the copied artifacts reference, else from what is ready now
+    if not (isinstance(state.get("source_ids"), list) and state["source_ids"]):
+        refs = {e["source_id"] for e in excerpt_rows}
+        refs |= set(state.get("summaries") or {})
+        refs |= set(state.get("extractions") or {})
+        state["source_ids"] = sorted(refs) if refs else [
+            r["id"] for r in conn.execute(
+                "SELECT id FROM sources WHERE project_id=? AND status='ready' "
+                "ORDER BY filename", (run["project_id"],)).fetchall()]
+    # the reopened review's panel says plainly that its earlier decisions
+    # are already applied (see _execute)
+    state["branched_from"] = source_run_id
+    state["branched_at"] = stage_name
+
+    try:
+        # the run row first — codes/excerpts/checkpoints reference it
+        conn.execute(
+            "INSERT INTO runs(id,project_id,status,stage_index,state,created_at,"
+            "updated_at) VALUES(?,?,?,?,?,?,?)",
+            (new_id, run["project_id"], "running", idx, json.dumps(state),
+             db.now(), db.now()))
+        for r in code_rows:
+            # meta may embed code ids (the GT core's relationships and
+            # is_existing_category_id) — remap them like the columns, or the
+            # branch's figure would silently match nothing
+            meta = r["meta"]
+            try:
+                meta = json.dumps(_remap_ids(json.loads(meta or "{}"), id_map))
+            except (ValueError, TypeError):
+                pass                       # unreadable meta is copied verbatim
+            conn.execute(
+                "INSERT INTO codes(id,run_id,name,definition,stage,parent_id,status,"
+                "merged_into,meta,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (id_map[r["id"]], new_id, r["name"], r["definition"], r["stage"],
+                 id_map.get(r["parent_id"]), r["status"], id_map.get(r["merged_into"]),
+                 meta, r["created_at"]))
+        for e in excerpt_rows:
+            if e["code_id"] not in id_map:
+                continue
+            if stage_of.get(e["code_id"]) in drop_excerpt_stages:
+                continue
+            conn.execute(
+                "INSERT INTO excerpts(id,run_id,code_id,source_id,quote,start_char,"
+                "end_char,memo,confidence,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (db.new_id(), new_id, id_map[e["code_id"]], e["source_id"],
+                 e["quote"], e["start_char"], e["end_char"], e["memo"],
+                 e["confidence"], e["created_at"]))
+        # reviews resolved BEFORE the branch point stay in the audit record
+        for cp in conn.execute(
+                "SELECT * FROM checkpoints WHERE run_id=? AND status='resolved'",
+                (source_run_id,)).fetchall():
+            cp_idx = next((i for i, s in enumerate(method.stages)
+                           if s.name == cp["stage"]), None)
+            if cp_idx is not None and cp_idx < idx:
+                conn.execute(
+                    "INSERT INTO checkpoints(id,run_id,stage,title,instructions,"
+                    "payload,status,resolution,created_at,resolved_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (db.new_id(), new_id, cp["stage"], cp["title"],
+                     cp["instructions"], cp["payload"], cp["status"],
+                     cp["resolution"], cp["created_at"], cp["resolved_at"]))
+        conn.commit()
+    except Exception:
+        # never leave a half-copied run or an open write transaction behind
+        conn.rollback()
+        raise
+    db.log_event(new_id, "info",
+                 f"Branched from run {source_run_id} at '{stage.label}' — the "
+                 "analysis up to this review was carried over; its cost remains "
+                 "recorded on the source run")
+    db.log_event(source_run_id, "info",
+                 f"Run {new_id} branched from this run to revisit '{stage.label}'")
+    _launch(new_id)
+    return new_id
+
+
 def cancel_run(run_id: str) -> None:
     conn = db.get_conn()
     run = conn.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()
@@ -241,6 +393,12 @@ def _execute(run_id: str) -> None:
                     (run_id, stage.name)).fetchone()
                 if not existing:
                     title, instructions, payload = stage.build_payload(ctx)
+                    if ctx.state.get("branched_at") == stage.name:
+                        instructions += (
+                            " This review was reopened from an earlier run: the "
+                            "decisions you made there are already applied, and "
+                            "further decisions build on them — codes merged or "
+                            "deleted there do not reappear.")
                     conn.execute(
                         "INSERT INTO checkpoints(id,run_id,stage,title,instructions,"
                         "payload,created_at) VALUES(?,?,?,?,?,?,?)",

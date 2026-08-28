@@ -27,7 +27,7 @@ The screen refreshes itself while the run is live, and it stops refreshing once 
 | `awaiting review` | A checkpoint is waiting for you | Approve and continue, or cancel |
 | `completed` | Every stage finished and the report exists | Open the report, or export it |
 | `failed` | A stage raised an error, or the app restarted mid-run | Resume, or leave it |
-| `cancelled` | You cancelled | Nothing. Start a new run |
+| `cancelled` | You cancelled | Start a new run, or branch from a review it passed |
 
 ## Closing the browser
 
@@ -41,7 +41,7 @@ Stopping the server with Ctrl-C does interrupt a run. The next launch handles th
 
 Cancellation stops the run before the next model call, rather than at the next stage boundary. A stage in the middle of coding twenty sources therefore halts within one call rather than finishing all twenty. That is what makes cancellation useful for stopping your spend.
 
-You cannot resume a cancelled run. The work already completed stays in the database, and the audit trail records the cancellation. To continue you start a new run, which begins at the first stage and pays again for everything.
+You cannot resume a cancelled run. The work already completed stays in the database, and the audit trail records the cancellation. To continue you have two paths. A new run begins at the first stage and pays again for everything. A branch from any review the cancelled run had passed carries the work before that review at no cost and reopens it — see [Revisiting a review you have already passed](11-runs-and-recovery.md#revisiting-a-review-you-have-already-passed) below.
 
 Cancel when you have seen enough of the coding to know your setup is wrong. The money you save is the money that would have been spent on the rest of the corpus. Do not cancel a run that has merely failed. You can resume a failed run, and you cannot resume a cancelled one.
 
@@ -76,11 +76,23 @@ The instruction is the same in all three cases. Open the run or the source, and 
 
 ## Starting another run over the same project
 
-The project page lists every run with its timestamp, the stage it is on or the word finished, and its status. **New run** starts a fresh one.
+The project page lists every run as a clickable row — click anywhere on it to open that run's screen. Each row carries the run's date, a line saying what it is doing or waiting for, and its status badge, and completed runs carry **Open report** and **Word** buttons right on the row, so a finished analysis is one click from its findings. **New run** starts a fresh one from the first stage.
 
 A new run reuses your project's method, setup answers, provider, model, and sources. It starts from the first stage, with nothing carried over from previous runs. Codes, excerpts, checkpoints, and reports belong to the run that produced them. A project with three runs therefore holds three independent analyses of the same data, and you can compare them.
 
 That comparison is the most useful thing a second run offers you. Run the same configuration twice and read the two theme sets against each other. This is the closest QualiLens comes to a stability check, and it costs a second full run to obtain.
+
+## Revisiting a review you have already passed
+
+Reviews are where your judgment enters the analysis, and judgment sometimes ripens late. You approve the open codes, see the categories they produced, and only then realize two codes should have been merged. The pipeline never reopens a resolved review in place — that would rewrite the record of what you decided — but it lets you branch.
+
+On the Run screen, once the run is not actively executing, every review it has passed shows **↩ Revisit this review…** in the pipeline column (wait for a running run, or cancel it, to branch). Pressing it explains what will happen and asks you to confirm: a NEW run is created — not from scratch — carrying everything the run had at that point, including the coding, the evidence, and the earlier reviews you resolved, and it reopens that review for further decisions. The original run, its report, and its audit trail stay exactly as they are, so you can compare the two afterward.
+
+Be precise about what "reopens" means, and the reopened panel says the same. The branch carries the run's state as it stood, **including the decisions you already made at that review**: you can rename further, merge further, delete further, and add — but a code you merged or deleted the first time, an excerpt you removed, or an emergent candidate you discarded does not come back, because the pipeline never invents a state that no run was actually in. When the decision you regret was destructive, branch at an EARLIER review where the material still existed, and let the stages between them run again.
+
+Three more things to know before you branch. Stages after the revisited review run again on the new run, and bill again; work before it is carried over and costs nothing. Where the method codes *after* the review — content analysis applies its codebook after the codebook review — the branch re-codes from your revised decisions rather than keeping coding produced under the old ones, which is the point of branching. And the audit trails stay honest on both sides: each run records the branch, the carried-over reviews appear in the new run's record, and the money spent before the branch remains recorded on the source run.
+
+Branching is how you explore an alternative reading without destroying the one you have. A cancelled run can be branched too — cancellation ends a run for good, but what it had produced up to any review it passed remains usable ground for a new one.
 
 ## What you cannot change once a run exists
 

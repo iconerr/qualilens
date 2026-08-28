@@ -36,12 +36,42 @@ export default function ProjectPage() {
         </div>
         {p.runs.length === 0 && <p className="desc mt">No runs yet.</p>}
         {p.runs.map(r => (
-          <div key={r.id} className="row spread" style={{ padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
-            <span>
-              <Link to={`/runs/${r.id}`}>{new Date(r.created_at * 1000).toLocaleString()}</Link>
-              <span className="muted small"> · {r.stage_name ?? 'finished'}</span>
-            </span>
-            <span className={`badge ${r.status}`}>{statusLabel(r.status)}</span>
+          <div key={r.id} className="run-row" role="link" tabIndex={0}
+            title="Open this run"
+            onClick={() => nav(`/runs/${r.id}`)}
+            onKeyDown={e => {
+              // only the row itself — Enter on an inner button must not
+              // also fire a navigation
+              if (e.key === 'Enter' && e.target === e.currentTarget) nav(`/runs/${r.id}`)
+            }}>
+            <div>
+              <b>Run of {new Date(r.created_at * 1000).toLocaleString()}</b>
+              <div className="muted small">
+                {r.status === 'completed' ? 'Completed — the report is ready'
+                  : r.status === 'awaiting_review' ? `Waiting for your review: ${statusLabel(r.stage_name ?? '')}`
+                    : r.status === 'running' ? `Running: ${statusLabel(r.stage_name ?? '')}`
+                      : r.status === 'failed' ? 'Failed — open it to resume'
+                        : 'Cancelled'}
+              </div>
+            </div>
+            <div className="row">
+              {/* only the real controls swallow the click — the badge and
+                  the chevron still open the run, as the row promises */}
+              <span className={`badge ${r.status}`}>{statusLabel(r.status)}</span>
+              {r.status === 'completed' && <>
+                <Link to={`/runs/${r.id}/report`} onClick={e => e.stopPropagation()}>
+                  <button className="small primary">Open report</button></Link>
+                <a href={`/api/runs/${r.id}/report.docx`} onClick={e => e.stopPropagation()}>
+                  <button className="small">Word</button></a>
+              </>}
+              {r.status === 'awaiting_review' &&
+                <Link to={`/runs/${r.id}`} onClick={e => e.stopPropagation()}>
+                  <button className="small primary">Review now</button></Link>}
+              {r.status === 'failed' &&
+                <Link to={`/runs/${r.id}`} onClick={e => e.stopPropagation()}>
+                  <button className="small">Open to resume</button></Link>}
+              <span className="chev" aria-hidden="true">›</span>
+            </div>
           </div>
         ))}
       </div>

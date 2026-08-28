@@ -1346,3 +1346,189 @@ def test_download_refuses_foreign_asset_host(monkeypatch):
     monkeypatch.setattr(update, "fetch_latest_release", lambda: rel)
     with pytest.raises(update.UpdateError, match="not hosted"):
         update.download_latest_bundle(pl.Path("/tmp"))
+
+
+# ---------- branching: revisit a review as a new run ----------
+
+def test_branch_run_reopens_checkpoint_and_recomputes(mock_llm):
+    pid, sids = make_ca_project("BranchCA")
+    rid = client.post(f'/api/projects/{pid}/runs').json()["run_id"]
+    d = wait_run(rid, "awaiting_review")
+    client.post(f"/api/runs/{rid}/checkpoints/{d['pending_checkpoint']['id']}/resolve",
+                json={"decisions": []})
+    wait_run(rid, "completed")
+    conn = db.get_conn()
+    src_codes = conn.execute("SELECT COUNT(*) c FROM codes WHERE run_id=?",
+                             (rid,)).fetchone()["c"]
+    src_ex = excerpt_count(rid)
+
+    r = client.post(f'/api/runs/{rid}/branch', json={"stage": "review_codebook"})
+    assert r.status_code == 200, r.text
+    nid = r.json()["run_id"]
+    d2 = wait_run(nid, "awaiting_review")
+    assert d2["pending_checkpoint"]["stage"] == "review_codebook"
+    # codes are copied under FRESH ids, fully disjoint from the source run's
+    new_ids = {x["id"] for x in conn.execute(
+        "SELECT id FROM codes WHERE run_id=?", (nid,)).fetchall()}
+    old_ids = {x["id"] for x in conn.execute(
+        "SELECT id FROM codes WHERE run_id=?", (rid,)).fetchall()}
+    assert new_ids and not (new_ids & old_ids)
+    # the coding stage runs AFTER this review, so its output is left behind:
+    # the branch reopens the codebook with no excerpts, and re-codes after
+    assert excerpt_count(nid) == 0
+    client.post(f"/api/runs/{nid}/checkpoints/{d2['pending_checkpoint']['id']}/resolve",
+                json={"decisions": []})
+    wait_run(nid, "completed")
+    assert client.get(f'/api/runs/{nid}/report').json()["stats"]["kind"] \
+        == "content_frequencies"
+    assert excerpt_count(nid) == src_ex, "the branch re-coded the corpus afresh"
+    # the source run is untouched — same codes, same evidence, report intact
+    assert conn.execute("SELECT COUNT(*) c FROM codes WHERE run_id=?",
+                        (rid,)).fetchone()["c"] == src_codes
+    assert excerpt_count(rid) == src_ex
+    assert client.get(f'/api/runs/{rid}/report').status_code == 200
+
+
+def test_branch_refusals(mock_llm):
+    pid, _ = make_ca_project("BranchRefuse", docs=(DOC_A,))
+    rid = client.post(f'/api/projects/{pid}/runs').json()["run_id"]
+    d = wait_run(rid, "awaiting_review")
+    r = client.post(f'/api/runs/{rid}/branch', json={"stage": "review_codebook"})
+    assert r.status_code == 400 and "waiting at this review" in r.json()["detail"]
+    r = client.post(f'/api/runs/{rid}/branch', json={"stage": "apply"})
+    assert r.status_code == 400 and "review checkpoints" in r.json()["detail"]
+    r = client.post(f'/api/runs/{rid}/branch', json={"stage": "nope"})
+    assert r.status_code == 400
+    client.post(f"/api/runs/{rid}/checkpoints/{d['pending_checkpoint']['id']}/resolve",
+                json={"decisions": []})
+    wait_run(rid, "completed")
+
+
+def test_branch_prunes_later_stage_state(mock_llm):
+    """A branch must not inherit artifacts of stages after the branch point —
+    a stale matrix would let the matrix stage skip recomputation and ignore
+    the researcher's revised decisions."""
+    conn = db.get_conn()
+    pid, rid = db.new_id(), db.new_id()
+    conn.execute("INSERT INTO projects(id,name,method,config,created_at) VALUES(?,?,?,?,?)",
+                 (pid, "FW", "framework",
+                  json.dumps({"provider": "anthropic", "research_question": "q",
+                              "codebook_text": "A: a"}), db.now()))
+    sid = db.new_id()
+    conn.execute("INSERT INTO sources(id,project_id,filename,kind,status,text,meta,created_at) "
+                 "VALUES(?,?,?,?,?,?,?,?)",
+                 (sid, pid, "s.txt", "text", "ready", DOC_A, "{}", db.now()))
+    state = {"source_ids": [sid], "done_units": [f"chart:{sid}:0"],
+             "matrix_rows": {sid: {"A": {"summary": "stale", "n": 1}}}}
+    conn.execute("INSERT INTO runs(id,project_id,status,stage_index,state,created_at,updated_at) "
+                 "VALUES(?,?,?,?,?,?,?)",
+                 (rid, pid, "completed", 4, json.dumps(state), db.now(), db.now()))
+    conn.commit()
+    nid = pipeline.branch_run(rid, "review_charting")
+    wait_run(nid, "awaiting_review")
+    st = json.loads(conn.execute("SELECT state FROM runs WHERE id=?",
+                                 (nid,)).fetchone()["state"])
+    assert "matrix_rows" not in st, "later-stage artifacts must not survive a branch"
+    assert st["done_units"] == state["done_units"], "work before the review is kept"
+    assert st["source_ids"] == [sid], "the frozen corpus is inherited"
+
+
+def test_gt_bucket_places_paradigm_roles():
+    from app.viz import gt_bucket
+    assert gt_bucket("situational conditions for") == "conditions"
+    assert gt_bucket("sensory basis for") == "conditions"
+    assert gt_bucket("contextual amplifier of") == "context"
+    assert gt_bucket("cognitive framing that supports") == "context"
+    assert gt_bucket("core dimension of") == "dimensions"
+    assert gt_bucket("self-regulation strategies that sustain") == "strategies"
+    assert gt_bucket("consequence of") == "consequences"
+    assert gt_bucket("") == "related"
+    assert gt_bucket("relates to") == "related"
+
+
+def test_branch_remaps_code_ids_inside_meta(mock_llm):
+    """A GT branch at review_core must remap the category ids the core code's
+    meta carries (relationships, is_existing_category_id) — stale ids would
+    silently corrupt the branched report's paradigm figure."""
+    conn = db.get_conn()
+    pid, rid = db.new_id(), db.new_id()
+    conn.execute("INSERT INTO projects(id,name,method,config,created_at) VALUES(?,?,?,?,?)",
+                 (pid, "GT", "grounded_theory",
+                  json.dumps({"provider": "anthropic", "research_question": "q"}),
+                  db.now()))
+    sid = db.new_id()
+    conn.execute("INSERT INTO sources(id,project_id,filename,kind,status,text,meta,created_at) "
+                 "VALUES(?,?,?,?,?,?,?,?)",
+                 (sid, pid, "s.txt", "text", "ready", DOC_A, "{}", db.now()))
+    cat, core = db.new_id(), db.new_id()
+    state = {"source_ids": [sid], "core_id": core}
+    conn.execute("INSERT INTO runs(id,project_id,status,stage_index,state,created_at,updated_at) "
+                 "VALUES(?,?,?,?,?,?,?)",
+                 (rid, pid, "completed", 8, json.dumps(state), db.now(), db.now()))
+    conn.execute("INSERT INTO codes(id,run_id,name,definition,stage,meta,created_at) "
+                 "VALUES(?,?,?,?,?,?,?)",
+                 (cat, rid, "Cat", "", "category", "{}", db.now()))
+    core_meta = {"storyline": "s", "is_existing_category_id": cat,
+                 "relationships": [{"from_category_id": cat,
+                                    "relation": "condition for", "to": "core"}]}
+    conn.execute("INSERT INTO codes(id,run_id,name,definition,stage,meta,created_at) "
+                 "VALUES(?,?,?,?,?,?,?)",
+                 (core, rid, "Core", "", "core", json.dumps(core_meta), db.now()))
+    conn.commit()
+    nid = pipeline.branch_run(rid, "review_core")
+    wait_run(nid, "awaiting_review")
+    new_cat = conn.execute("SELECT id FROM codes WHERE run_id=? AND stage='category'",
+                           (nid,)).fetchone()["id"]
+    new_core = db.row_to_dict(conn.execute(
+        "SELECT * FROM codes WHERE run_id=? AND stage='core'", (nid,)).fetchone(),
+        ("meta",))
+    assert new_cat != cat
+    assert new_core["meta"]["is_existing_category_id"] == new_cat
+    assert new_core["meta"]["relationships"][0]["from_category_id"] == new_cat
+    assert new_core["meta"]["relationships"][0]["to"] == "core"   # literal kept
+    st = json.loads(conn.execute("SELECT state FROM runs WHERE id=?",
+                                 (nid,)).fetchone()["state"])
+    assert st["core_id"] == new_core["id"]
+    assert st["branched_from"] == rid and st["branched_at"] == "review_core"
+    cp = conn.execute("SELECT instructions FROM checkpoints WHERE run_id=? "
+                      "AND status='pending'", (nid,)).fetchone()
+    assert "already applied" in cp["instructions"], \
+        "the reopened review must say its earlier decisions are baked in"
+
+
+def test_branch_backfills_corpus_freeze_for_legacy_runs(mock_llm):
+    """A source run from before the corpus freeze has no source_ids snapshot;
+    its branch must not inherit that openness — the corpus is reconstructed
+    from what the copied artifacts reference."""
+    conn = db.get_conn()
+    pid, rid = db.new_id(), db.new_id()
+    conn.execute("INSERT INTO projects(id,name,method,config,created_at) VALUES(?,?,?,?,?)",
+                 (pid, "Legacy", "content_analysis",
+                  json.dumps({"provider": "anthropic", "research_question": "q",
+                              "ca_mode": "Deductive — I will supply the codebook",
+                              "codebook_text": "A: a"}), db.now()))
+    sid = db.new_id()
+    conn.execute("INSERT INTO sources(id,project_id,filename,kind,status,text,meta,created_at) "
+                 "VALUES(?,?,?,?,?,?,?,?)",
+                 (sid, pid, "orig.txt", "text", "ready", DOC_A, "{}", db.now()))
+    conn.execute("INSERT INTO runs(id,project_id,status,stage_index,state,created_at,updated_at) "
+                 "VALUES(?,?,?,?,?,?,?)",
+                 (rid, pid, "completed", 4, "{}", db.now(), db.now()))
+    cid = db.new_id()
+    conn.execute("INSERT INTO codes(id,run_id,name,definition,stage,meta,created_at) "
+                 "VALUES(?,?,?,?,?,?,?)", (cid, rid, "A", "a", "codebook", "{}", db.now()))
+    conn.execute("INSERT INTO excerpts(id,run_id,code_id,source_id,quote,memo,created_at) "
+                 "VALUES(?,?,?,?,?,?,?)",
+                 (db.new_id(), rid, cid, sid, "the price was transparent", "", db.now()))
+    # a source added AFTER the legacy run finished must not join its branch
+    late = db.new_id()
+    conn.execute("INSERT INTO sources(id,project_id,filename,kind,status,text,meta,created_at) "
+                 "VALUES(?,?,?,?,?,?,?,?)",
+                 (late, pid, "late.txt", "text", "ready", DOC_B, "{}", db.now()))
+    conn.commit()
+    nid = pipeline.branch_run(rid, "review_codebook")
+    wait_run(nid, "awaiting_review")
+    st = json.loads(conn.execute("SELECT state FROM runs WHERE id=?",
+                                 (nid,)).fetchone()["state"])
+    assert st["source_ids"] == [sid], \
+        "the branch's corpus is what the copied artifacts reference"

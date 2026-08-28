@@ -248,9 +248,13 @@ METHOD = Method(
     questions=QUESTIONS,
     stages=[
         Stage("load_framework", "Load framework", run=stage_load_framework),
-        Stage("apply", "Chart sources against framework", run=stage_apply),
+        Stage("apply", "Chart sources against framework", run=stage_apply,
+              # declared for completeness: no checkpoint precedes this stage
+              # today, so a branch can never land before it
+              reset_units=("chart",), reset_excerpt_stages=("codebook", "emergent")),
         Stage("review_charting", "Review charting", kind="checkpoint",
               build_payload=cp_review_payload, apply_resolution=cp_review_apply),
-        Stage("matrix_report", "Framework matrix & report", run=stage_matrix_report),
+        Stage("matrix_report", "Framework matrix & report", run=stage_matrix_report,
+              resets=("matrix_rows",)),
     ],
 )

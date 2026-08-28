@@ -67,7 +67,16 @@ export default function Home() {
               </p>
             </div>
             <div className="row">
-              {p.latest_run && <span className={`badge ${p.latest_run.status}`}>{statusLabel(p.latest_run.status)}</span>}
+              {p.latest_run && (
+                <span className={`badge ${p.latest_run.status}`} role="link"
+                  tabIndex={0} style={{ cursor: 'pointer' }} title="Open the latest run"
+                  onClick={e => { e.stopPropagation(); nav(`/runs/${p.latest_run!.id}`) }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { e.stopPropagation(); nav(`/runs/${p.latest_run!.id}`) }
+                  }}>
+                  {statusLabel(p.latest_run.status)}
+                </span>
+              )}
               <button className="small danger" onClick={e => del(e, p.id, p.name)}>Delete</button>
             </div>
           </div>

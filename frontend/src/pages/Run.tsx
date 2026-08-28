@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, statusLabel, type Checkpoint, type Run } from '../api'
 
 const TERMINAL = new Set(['completed', 'cancelled', 'failed'])
 
 export default function RunPage() {
   const { id } = useParams<{ id: string }>()
+  const nav = useNavigate()
   const [run, setRun] = useState<Run | null>(null)
   const [events, setEvents] = useState<{ ts: number; kind: string; message: string }[]>([])
   const [error, setError] = useState('')
@@ -16,6 +17,10 @@ export default function RunPage() {
   const [resolvedCp, setResolvedCp] = useState('')  // hide a checkpoint just resolved
   const lastTs = useRef(0)
   const logRef = useRef<HTMLDivElement>(null)
+
+  // navigating to another run (e.g. a branch) must not carry this run's
+  // event log or dismissed-checkpoint state along
+  useEffect(() => { setEvents([]); lastTs.current = 0; setResolvedCp('') }, [id])
 
   useEffect(() => {
     let alive = true
@@ -43,6 +48,19 @@ export default function RunPage() {
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight })
   }, [events])
+
+  const revisit = async (stage: string, label: string) => {
+    if (!confirm(`Revisit “${label}”?\n\n`
+      + 'This creates a NEW run — not from scratch: it carries everything this '
+      + 'run had at that review (the coding, the evidence, and your earlier '
+      + 'decisions) and reopens the review for you to decide differently. '
+      + 'This run and its report stay exactly as they are.\n\n'
+      + 'Stages after the review will run again on the new run, and bill again.')) return
+    try {
+      const { run_id } = await api.branchRun(id!, stage)
+      nav(`/runs/${run_id}`)
+    } catch (e: any) { setError(String(e.message ?? e)) }
+  }
 
   if (!run) return <div className="page">{error ? <div className="error-box">{error}</div> : 'Loading…'}</div>
 
@@ -103,12 +121,21 @@ export default function RunPage() {
           <div className="stagelist">
             {run.stages.map((s, i) => {
               const cls = i < run.stage_index ? 'done' : i === run.stage_index ? 'current' : 'pending'
+              const revisitable = s.kind === 'checkpoint' && i < run.stage_index
+                && run.status !== 'running'
               return (
                 <div key={s.name} className={`stage-item ${cls}`}>
                   <div className="dot" />
                   <div>
                     <div className="s-label">{s.label}</div>
                     <div className="s-kind">{s.kind === 'checkpoint' ? 'your review' : 'automated'}</div>
+                    {revisitable && (
+                      <button className="small" style={{ marginTop: 4 }}
+                        title="Start a new run from this review, carrying everything up to it"
+                        onClick={() => revisit(s.name, s.label)}>
+                        ↩ Revisit this review…
+                      </button>
+                    )}
                   </div>
                 </div>
               )
@@ -130,8 +157,10 @@ export default function RunPage() {
           </p>
           {(run.status === 'running' || run.status === 'awaiting_review') && (
             <button className="small danger" onClick={() => {
-              if (confirm('Cancel this run? Cancellation is final — a cancelled run '
-                + 'cannot be resumed, and you would start a new run from scratch.'))
+              if (confirm('Cancel this run? Cancellation is final for this run — it '
+                + 'cannot be resumed. Reviews it has already passed stay available: '
+                + '“↩ Revisit this review…” starts a new run carrying the work up '
+                + 'to that point.'))
                 api.cancelRun(id!).catch((e: any) => setError(String(e.message ?? e)))
             }}>Cancel run</button>
           )}

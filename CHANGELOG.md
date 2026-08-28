@@ -27,7 +27,11 @@ Initial public release.
   ungrounded support is dropped and logged, and a citation guard scans the
   generated text for citation-shaped strings matching no uploaded paper.
 - Interactive report plus a formatted Word export, with method-appropriate
-  figures that disclose truncation on their face.
+  figures that disclose truncation on their face — the grounded theory model
+  drawn as a left-to-right paradigm flow.
+- Any review a run has passed can be revisited: a branch carries everything
+  up to that review into a new run and reopens it, leaving the original run
+  and its report untouched.
 - Four providers (Anthropic, OpenAI, Google, Mistral), an editable model
   catalog with a live model check, Whisper transcription for audio and
   video, cost estimation before a run, resumable runs that never re-bill

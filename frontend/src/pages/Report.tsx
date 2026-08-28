@@ -79,8 +79,9 @@ export default function ReportPage() {
       {stats.kind === 'gt_model' && (
         <section>
           <h2>The Grounded Theory Model</h2>
-          <p className="desc">Categories in relation to the core category; arrow labels
-            carry the relationships proposed during selective coding and reviewed by you.</p>
+          <p className="desc">A left-to-right paradigm flow: each category prints its
+            core-directed relationship verbatim — conditions, context, and dimensions
+            to the left of the core, strategies and consequences to its right.</p>
           <div className="viz-card"><GTModel themes={rep.themes} stats={stats} /></div>
         </section>
       )}

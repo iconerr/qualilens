@@ -533,6 +533,17 @@ def resolve_cp(run_id: str, checkpoint_id: str, body: dict):
     return {"ok": True}
 
 
+@app.post("/api/runs/{run_id}/branch")
+def branch(run_id: str, body: dict):
+    """Revisit a review: a new run carrying everything up to that checkpoint,
+    which it reopens. The source run and its report stay untouched."""
+    try:
+        new_id = pipeline.branch_run(run_id, str(body.get("stage") or ""))
+    except ValueError as e:
+        _err(400, str(e))
+    return {"run_id": new_id}
+
+
 @app.post("/api/runs/{run_id}/resume")
 def resume(run_id: str):
     try:

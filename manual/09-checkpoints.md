@@ -9,6 +9,8 @@ A checkpoint is where the pipeline stops and hands your analysis to you. The run
 
 A run waits indefinitely. Close the browser, come back tomorrow, and the panel is still there. You can also cancel from a checkpoint, which ends the run permanently.
 
+A resolved review is final for its own run, but it is not the end of the road: from the Run screen's pipeline you can revisit any review the run has passed, which branches a new run from that point with everything up to it carried over — including the decisions already made at that review, which further decisions build on rather than undo. [Runs, Cancellation, and Recovery](11-runs-and-recovery.md) explains what carries, what re-runs, and when to branch earlier instead.
+
 Four kinds of panel exist. Which one you see depends on the method and the stage.
 
 | Panel | Appears at |

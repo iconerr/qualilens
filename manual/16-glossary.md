@@ -54,6 +54,8 @@ SPDX-License-Identifier: Apache-2.0
 
 **Checkpoint.** A stage where the pipeline stops and presents its output for your decisions. See [Checkpoints](09-checkpoints.md).
 
+**Branch.** A new run created by revisiting a review an earlier run has passed. It carries everything that run had at the review — the codes, the evidence, the earlier resolved reviews, and the decisions already made at the revisited review itself — and reopens that review for further decisions. Stages after the review run again on the branch; the source run and its report are untouched. See [Runs, Cancellation, and Recovery](11-runs-and-recovery.md).
+
 **Via.** The label the checkpoint's evidence panel puts on an excerpt that a grouping code carries through one of its child codes, naming that child. All of a theme's evidence is held this way, because themes carry no excerpts of their own.
 
 **Resolution.** The set of decisions you submit at a checkpoint. It is stored with the checkpoint, so your audit trail records what you decided and not merely that you decided something.
@@ -98,7 +100,7 @@ SPDX-License-Identifier: Apache-2.0
 | `awaiting review` | A checkpoint is waiting | Approve and continue, or cancel |
 | `completed` | Every stage finished and the report exists | Open or export the report |
 | `failed` | A stage errored, or the app restarted mid-run | Resume |
-| `cancelled` | You cancelled, and this is final | Start a new run |
+| `cancelled` | You cancelled, and this is final | Start a new run, or branch from a review it passed |
 
 ### Checkpoint status
 

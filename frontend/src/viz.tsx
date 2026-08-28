@@ -8,7 +8,6 @@
 const INK = '#22252a'
 const MUTED = '#6b7280'
 const ACCENT = '#1f3a5f'
-const ACCENT_SOFT = '#e8eef6'
 const LINE = '#c9c7bf'
 const PALETTE = [ACCENT, '#d9a520', '#5a8f6f', '#a1657c', '#7a6fb0', '#b08948']
 
@@ -69,7 +68,7 @@ export function GTModel({ themes, stats }: { themes: any[]; stats: any }) {
     overflow = cats.length - MAX_GT_CATS
     cats = cats.slice(0, MAX_GT_CATS)
   }
-  const core = stats?.core?.name ?? 'Core category'
+  const core = stats?.core?.name || 'Core category'
   // label ONLY relationships whose target is the core (labeling a
   // category-to-category relation on an arrow into the core would assert a
   // relationship the analysis never made); join multiples
@@ -85,49 +84,117 @@ export function GTModel({ themes, stats }: { themes: any[]; stats: any }) {
     }
   }
 
-  const W = 900, H = 620, cx = W / 2, cy = H / 2
-  const rx = 330, ry = 225
-  const coreRx = 158, coreRy = 82
+  // The paradigm-model flow, read left to right: antecedent categories
+  // (conditions, context, dimensions) → the core phenomenon → strategies and
+  // consequences. The bucket only positions a box; its own core-directed
+  // relation is printed verbatim inside it, and arrows carry no floating
+  // labels, so nothing can collide or mislead.
+  const bucket = (rel: string): string => {
+    const r = (rel ?? '').toLowerCase()
+    if (!r) return 'related'
+    if (['consequence', 'outcome', 'result'].some(k => r.includes(k))) return 'consequences'
+    if (['strateg', 'action', 'response', 'coping', 'manag', 'practice']
+      .some(k => r.includes(k))) return 'strategies'
+    if (['condition', 'cause', 'antecedent', 'trigger', 'driver', 'basis',
+      'prerequisite', 'foundation'].some(k => r.includes(k))) return 'conditions'
+    if (['context', 'intervening', 'amplif', 'setting', 'environment', 'fram',
+      'moderat', 'backdrop'].some(k => r.includes(k))) return 'context'
+    if (['dimension', 'aspect', 'component', 'facet', 'element', 'part of',
+      'constitut', 'embod', 'manifest', 'form of'].some(k => r.includes(k))) return 'dimensions'
+    return 'related'
+  }
+  const relOf = (t: any) => relBy[t.id]?.slice(0, 2).join(' / ') ?? ''
+  const side = (t: any) =>
+    ['strategies', 'consequences'].includes(bucket(relOf(t))) ? 'right' : 'left'
+  const order = ['conditions', 'context', 'dimensions', 'related', 'strategies', 'consequences']
+  const sorted = [...cats].sort((a, b) =>
+    order.indexOf(bucket(relOf(a))) - order.indexOf(bucket(relOf(b))))
+  const left = sorted.filter(t => side(t) === 'left')
+  const right = sorted.filter(t => side(t) === 'right')
+
+  const BOX_W = 320, BOX_H = 128, GAP = 36
+  const CORE_W = 300, CORE_H = 210
+  const rows = Math.max(left.length, right.length, 1)
+  const W = 1150
+  const H = rows * (BOX_H + GAP) + 100
+  const midY = H / 2
+  const colYs = (n: number) => {
+    const span = n * BOX_H + (n - 1) * GAP
+    const top = midY - span / 2 + BOX_H / 2
+    return Array.from({ length: n }, (_, i) => top + i * (BOX_H + GAP))
+  }
+  const coreEdgeY = (y: number) => {
+    // the arrowhead must land ON the core's edge, never beside it
+    const lean = (y - midY) * 0.45
+    const limit = CORE_H / 2 - 22
+    return midY + Math.max(-limit, Math.min(limit, lean))
+  }
+  const coreL = W / 2 - CORE_W / 2, coreR = W / 2 + CORE_W / 2
+  const leftX = () => 30 + BOX_W / 2
+  const rightX = () => W - 30 - BOX_W / 2
+
+  const Box = ({ x, y, t }: { x: number; y: number; t: any }) => {
+    const rel = relOf(t)
+    return (
+      <g>
+        <rect x={x - BOX_W / 2} y={y - BOX_H / 2} width={BOX_W} height={BOX_H}
+          rx={10} fill="white" stroke={LINE} strokeWidth={1.3} />
+        {rel ? (
+          <>
+            <Lines x={x} y={y - 26} lines={wrap(t.name, 30, 3)} size={13}
+              fill={INK} weight={700} />
+            <line x1={x - 130} y1={y + 12} x2={x + 130} y2={y + 12}
+              stroke={LINE} strokeWidth={1} />
+            <g fontStyle="italic">
+              <Lines x={x} y={y + 42} lines={wrap(rel, 38, 2)} size={11} fill={MUTED} />
+            </g>
+          </>
+        ) : (
+          <Lines x={x} y={y} lines={wrap(t.name, 30, 3)} size={13}
+            fill={INK} weight={700} />
+        )}
+      </g>
+    )
+  }
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 860 }}
-      role="img" aria-label="Grounded theory model">
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 1080 }}
+      role="img" aria-label="Grounded theory model, read left to right">
       <defs>
         <marker id="gt-arrow" viewBox="0 0 10 10" refX="9" refY="5"
           markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" fill={MUTED} />
         </marker>
       </defs>
-      {cats.map((t, i) => {
-        const ang = (2 * Math.PI * i) / cats.length - Math.PI / 2
-        const x = cx + rx * Math.cos(ang), y = cy + ry * Math.sin(ang)
-        const d = Math.hypot(cx - x, cy - y)
-        const ux = (cx - x) / d, uy = (cy - y) / d
-        const sx = x + ux * 105, sy = y + uy * 48
-        // land the arrowhead on the core ELLIPSE boundary (plus margin), so
-        // the ellipse never paints over it
-        const tEdge = 1 / Math.sqrt((ux / coreRx) ** 2 + (uy / coreRy) ** 2)
-        const ex = cx - ux * (tEdge + 8), ey = cy - uy * (tEdge + 8)
-        const rel = relBy[t.id]?.slice(0, 2).join(' / ')
+      {/* arrows first, boxes after: a spoke from an outer box passes cleanly
+          beneath its neighbors instead of grazing their edges */}
+      {left.map((t, i) => {
+        const y = colYs(left.length)[i]
         return (
-          <g key={t.id}>
-            <line x1={sx} y1={sy} x2={ex} y2={ey} stroke={MUTED}
-              strokeWidth={1.4} markerEnd="url(#gt-arrow)" />
-            {rel && (
-              <g>
-                <rect x={(sx + ex) / 2 - 62} y={(sy + ey) / 2 - 22} width={124}
-                  height={26} rx={5} fill="white" opacity={0.9} />
-                <Lines x={(sx + ex) / 2} y={(sy + ey) / 2 - 8}
-                  lines={wrap(rel, 22, 2)} size={11} fill={MUTED} />
-              </g>
-            )}
-            <rect x={x - 100} y={y - 42} width={200} height={84} rx={10}
-              fill={ACCENT_SOFT} stroke={ACCENT} strokeWidth={1.4} />
-            <Lines x={x} y={y + 4} lines={wrap(t.name, 22, 3)} size={13} fill={INK} />
-          </g>
+          <line key={`la-${t.id}`} x1={leftX() + BOX_W / 2 + 4} y1={y}
+            x2={coreL - 10} y2={coreEdgeY(y)}
+            stroke={MUTED} strokeWidth={1.4} markerEnd="url(#gt-arrow)" />
         )
       })}
-      <ellipse cx={cx} cy={cy} rx={coreRx} ry={coreRy} fill={ACCENT} />
-      <Lines x={cx} y={cy + 4} lines={wrap(core, 20, 3)} size={15}
+      {right.map((t, i) => {
+        const y = colYs(right.length)[i]
+        return (
+          <line key={`ra-${t.id}`} x1={coreR + 10} y1={coreEdgeY(y)}
+            x2={rightX() - BOX_W / 2 - 4} y2={y}
+            stroke={MUTED} strokeWidth={1.4} markerEnd="url(#gt-arrow)" />
+        )
+      })}
+      {left.map((t, i) => (
+        <Box key={`lb-${t.id}`} x={leftX()} y={colYs(left.length)[i]} t={t} />
+      ))}
+      {right.map((t, i) => (
+        <Box key={`rb-${t.id}`} x={rightX()} y={colYs(right.length)[i]} t={t} />
+      ))}
+      <rect x={coreL} y={midY - CORE_H / 2} width={CORE_W} height={CORE_H}
+        rx={14} fill={ACCENT} />
+      <text x={W / 2} y={midY - CORE_H / 2 + 30} textAnchor="middle"
+        fontSize={11} fill="white" opacity={0.75}>Core category</text>
+      <Lines x={W / 2} y={midY + 10} lines={wrap(core, 24, 4)} size={15}
         fill="white" weight={700} />
       {overflow > 0 && (
         <text x={W - 8} y={H - 8} textAnchor="end" fontSize={11} fill={MUTED}

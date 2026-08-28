@@ -109,6 +109,8 @@ export const api = {
     j<{ ts: number; kind: string; message: string }[]>(`/api/runs/${id}/events?after=${after}`),
   resolveCheckpoint: (runId: string, cpId: string, resolution: unknown) =>
     j(`/api/runs/${runId}/checkpoints/${cpId}/resolve`, post(resolution)),
+  branchRun: (runId: string, stage: string) =>
+    j<{ run_id: string }>(`/api/runs/${runId}/branch`, post({ stage })),
   resumeRun: (id: string) => j(`/api/runs/${id}/resume`, post()),
   cancelRun: (id: string) => j(`/api/runs/${id}/cancel`, post()),
   report: (runId: string) => j<any>(`/api/runs/${runId}/report`),

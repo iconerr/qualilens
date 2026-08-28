@@ -781,6 +781,7 @@ METHOD = Method(
         Stage("review_synthesis", "Review concepts", kind="checkpoint",
               build_payload=cp_concepts_payload,
               apply_resolution=apply_code_review_resolution),
-        Stage("matrix_report", "Concept matrix & report", run=stage_matrix_report),
+        Stage("matrix_report", "Concept matrix & report", run=stage_matrix_report,
+              resets=("matrix_rows",)),
     ],
 )

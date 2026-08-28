@@ -224,7 +224,10 @@ METHOD = Method(
         Stage("review_codebook", "Review codebook", kind="checkpoint",
               build_payload=cp_codebook_payload,
               apply_resolution=apply_code_review_resolution),
-        Stage("apply", "Apply codes", run=stage_apply),
+        Stage("apply", "Apply codes", run=stage_apply,
+              # a branch back to the codebook review must re-code: the copied
+              # coding belongs to the OLD codebook
+              reset_units=("apply",), reset_excerpt_stages=("codebook",)),
         Stage("quantify_report", "Quantify & report", run=stage_quantify_report),
     ],
 )

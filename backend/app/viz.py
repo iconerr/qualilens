@@ -12,13 +12,12 @@ guarded and logged: a figure that fails must never break report generation.
 """
 
 import logging
-import math
 import textwrap
 from io import BytesIO
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
-from matplotlib.patches import Ellipse, FancyArrowPatch, FancyBboxPatch
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 log = logging.getLogger("qualilens.viz")
 
@@ -124,7 +123,55 @@ def _evidence_weight(theme: dict) -> int:
             + sum(len(c.get("excerpts") or []) for c in theme.get("children") or []))
 
 
+def gt_bucket(relation: str) -> str:
+    """Place a category in the paradigm-model flow by its core-directed
+    relation text. Antecedent-side buckets (conditions, context, dimensions,
+    related) draw LEFT of the core; response-side buckets (strategies,
+    consequences) draw RIGHT. The classification only positions the box —
+    the relation text itself is printed verbatim inside it, so a heuristic
+    misplacement can never misstate the analysis."""
+    r = (relation or "").casefold()
+    if not r:
+        return "related"
+    if any(k in r for k in ("consequence", "outcome", "result")):
+        return "consequences"
+    if any(k in r for k in ("strateg", "action", "response", "coping",
+                            "manag", "practice")):
+        return "strategies"
+    if any(k in r for k in ("condition", "cause", "antecedent", "trigger",
+                            "driver", "basis", "prerequisite", "foundation")):
+        return "conditions"
+    if any(k in r for k in ("context", "intervening", "amplif", "setting",
+                            "environment", "fram", "moderat", "backdrop")):
+        return "context"
+    if any(k in r for k in ("dimension", "aspect", "component", "facet",
+                            "element", "part of", "constitut", "embod",
+                            "manifest", "form of")):
+        return "dimensions"
+    return "related"
+
+
+# antecedent-side buckets, in stacking order; everything else goes right
+_GT_LEFT = ("conditions", "context", "dimensions", "related")
+_GT_RIGHT = ("strategies", "consequences")
+
+
+def _gt_columns(themes: list, rel_by_id: dict) -> tuple:
+    """Split categories into the left (antecedent) and right (response)
+    columns of the paradigm-model flow, preserving bucket order."""
+    buckets: dict = {b: [] for b in _GT_LEFT + _GT_RIGHT}
+    for t in themes:
+        buckets[gt_bucket(rel_by_id.get(t["id"], ""))].append(t)
+    left = [t for b in _GT_LEFT for t in buckets[b]]
+    right = [t for b in _GT_RIGHT for t in buckets[b]]
+    return left, right
+
+
 def gt_model_png(payload: dict):
+    """The paradigm-model flow, read left to right: antecedent categories
+    (conditions, context, dimensions) → the core phenomenon → strategies and
+    consequences. Each category box prints its own core-directed relation
+    verbatim; arrows carry no floating labels, so nothing can collide."""
     stats = payload.get("stats") or {}
     core_meta = stats.get("core") or {}
     core = core_meta.get("name") or "Core category"
@@ -140,51 +187,76 @@ def gt_model_png(payload: dict):
         overflow = len(themes) - MAX_GT_CATEGORIES
         themes = themes[:MAX_GT_CATEGORIES]
     rel_by_id = gt_relation_labels(stats)
+    left, right = _gt_columns(themes, rel_by_id)
 
-    fig = _fig(9, 6.4)
+    box_h, gap = 1.35, 0.4
+    rows = max(len(left), len(right), 1)
+    height_units = rows * (box_h + gap) + 1.2
+    fig = _fig(11, max(4.6, height_units * 0.95))
     ax = fig.add_subplot()
-    ax.set_xlim(0, 10)
-    ax.set_ylim(0, 7)
+    ax.set_xlim(0, 12)
+    ax.set_ylim(0, height_units)
     ax.axis("off")
-    cx, cy = 5, 3.5
-    core_rx, core_ry = 1.65, 0.85
+    mid_y = height_units / 2
+    core_w, core_h = 3.2, 2.1
+    cx = 6.0
 
-    n = len(themes)
-    rx, ry = 3.6, 2.5
-    for i, t in enumerate(themes):
-        ang = 2 * math.pi * i / n - math.pi / 2
-        x, y = cx + rx * math.cos(ang), cy + ry * math.sin(ang)
-        box = FancyBboxPatch((x - 1.05, y - 0.45), 2.1, 0.9,
-                             boxstyle="round,pad=0.08",
-                             facecolor=ACCENT_SOFT, edgecolor=ACCENT, lw=1.1)
-        ax.add_patch(box)
-        ax.text(x, y, _wrap(t["name"], 18, 3), ha="center", va="center",
-                fontsize=8.5, color=INK)
-        # arrow from box edge to the core ELLIPSE BOUNDARY (plus margin), so
-        # the arrowhead is never painted over by the ellipse
-        dx, dy = cx - x, cy - y
-        d = math.hypot(dx, dy)
-        ux, uy = dx / d, dy / d
-        sx, sy = x + ux * 1.15, y + uy * 0.55
-        t_edge = 1.0 / math.sqrt((ux / core_rx) ** 2 + (uy / core_ry) ** 2)
-        ex, ey = cx - ux * (t_edge + 0.10), cy - uy * (t_edge + 0.10)
-        ax.add_patch(FancyArrowPatch((sx, sy), (ex, ey),
-                                     arrowstyle="-|>", mutation_scale=13,
-                                     color=MUTED, lw=1.0))
+    def draw_box(x, y, t):
+        # boxes sit ABOVE the arrows (zorder), so an arrow from an outer box
+        # passes cleanly beneath its neighbors instead of grazing their edges
+        ax.add_patch(FancyBboxPatch((x - 1.8, y - box_h / 2), 3.6, box_h,
+                                    boxstyle="round,pad=0.07",
+                                    facecolor="white", edgecolor=LINE,
+                                    lw=1.2, zorder=2))
         rel = rel_by_id.get(t["id"], "")
         if rel:
-            mx, my = (sx + ex) / 2, (sy + ey) / 2
-            ax.text(mx, my + 0.14, _wrap(rel, 20, 2), ha="center", va="center",
-                    fontsize=7, color=MUTED, style="italic",
-                    bbox=dict(boxstyle="round,pad=0.15", fc="white",
-                              ec="none", alpha=0.85))
+            ax.text(x, y + 0.27, _wrap(t["name"], 30, 3), ha="center",
+                    va="center", fontsize=8.5, color=INK,
+                    fontweight="bold", zorder=3)
+            # a hairline rule separates the name from its relation, the way
+            # the app's cards separate a title from its metadata line
+            ax.plot([x - 1.45, x + 1.45], [y - 0.13, y - 0.13],
+                    color=LINE, lw=0.8, zorder=3)
+            ax.text(x, y - 0.45, _wrap(rel, 36, 2), ha="center", va="center",
+                    fontsize=7, color=MUTED, style="italic", zorder=3)
+        else:
+            ax.text(x, y, _wrap(t["name"], 30, 3), ha="center", va="center",
+                    fontsize=8.5, color=INK, fontweight="bold", zorder=3)
 
-    ax.add_patch(Ellipse((cx, cy), core_rx * 2, core_ry * 2,
-                         facecolor=ACCENT, edgecolor=ACCENT, lw=1.4))
-    ax.text(cx, cy, _wrap(core, 20, 3), ha="center", va="center",
-            fontsize=10, color="white", fontweight="bold")
+    def col_ys(n):
+        span = n * box_h + (n - 1) * gap
+        top = mid_y + span / 2 - box_h / 2
+        return [top - i * (box_h + gap) for i in range(n)]
+
+    def core_edge_y(y):
+        # the arrowhead must land ON the core's edge, never beside it
+        lean = (y - mid_y) * 0.45
+        limit = core_h / 2 - 0.25
+        return mid_y + max(-limit, min(limit, lean))
+
+    for y, t in zip(col_ys(len(left)), left):
+        draw_box(2.1, y, t)
+        ax.add_patch(FancyArrowPatch(
+            (3.95, y), (cx - core_w / 2 - 0.12, core_edge_y(y)),
+            arrowstyle="-|>", mutation_scale=12, color=MUTED, lw=1.0,
+            zorder=1))
+    for y, t in zip(col_ys(len(right)), right):
+        draw_box(9.9, y, t)
+        ax.add_patch(FancyArrowPatch(
+            (cx + core_w / 2 + 0.12, core_edge_y(y)), (8.05, y),
+            arrowstyle="-|>", mutation_scale=12, color=MUTED, lw=1.0,
+            zorder=1))
+
+    ax.add_patch(FancyBboxPatch((cx - core_w / 2, mid_y - core_h / 2),
+                                core_w, core_h, boxstyle="round,pad=0.10",
+                                facecolor=ACCENT, edgecolor=ACCENT, lw=1.4,
+                                zorder=2))
+    ax.text(cx, mid_y + core_h / 2 - 0.32, "Core category", ha="center",
+            va="center", fontsize=6.5, color="white", alpha=0.75, zorder=3)
+    ax.text(cx, mid_y - 0.12, _wrap(core, 24, 4), ha="center", va="center",
+            fontsize=10, color="white", fontweight="bold", zorder=3)
     if overflow:
-        ax.text(9.9, 0.15, f"+{overflow} further categor"
+        ax.text(11.9, 0.12, f"+{overflow} further categor"
                 + ("y" if overflow == 1 else "ies") + " not shown",
                 ha="right", fontsize=7.5, color=MUTED, style="italic")
     return _png(fig)
