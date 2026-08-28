@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use QualiLens in your research, please cite it as below."
+title: "QualiLens: A local application for LLM-assisted qualitative data analysis"
+type: software
+authors:
+  - family-names: Aggarwal
+    given-names: Ashita
+  - family-names: Commuri
+    given-names: Suraj
+year: 2026
+license: Apache-2.0

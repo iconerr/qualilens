@@ -1,0 +1,41 @@
+{
+  "_readme": [
+    "QualiLens model catalog. Edit THIS file when a provider retires or",
+    "releases a model — no code changes needed. The first model that",
+    "matches default_model is preselected in the wizard; users can always",
+    "type a custom model id there as well. Verify your edits with the",
+    "'Check models' button in Settings, which compares this catalog against",
+    "the provider's live model list using your API key (free, no tokens).",
+    "Edits take effect on the next page load — no restart needed. Caveat:",
+    "some vendors serve alias ids (e.g. '-latest') that work in chat but may",
+    "not appear in their list endpoint; a working model marked ✗ may simply",
+    "be an alias — confirm with the Test button before removing it.",
+    "pricing_usd_per_mtok is [input, output] per million tokens and feeds",
+    "only the pre-run cost estimate. If this file is missing or invalid,",
+    "the app falls back to defaults compiled into backend/app/llm.py."
+  ],
+  "anthropic": {
+    "label": "Anthropic (Claude)",
+    "default_model": "claude-sonnet-5",
+    "models": ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001"],
+    "pricing_usd_per_mtok": [3.0, 15.0]
+  },
+  "openai": {
+    "label": "OpenAI (GPT)",
+    "default_model": "gpt-5.1",
+    "models": ["gpt-5.1", "gpt-5", "gpt-4.1", "gpt-4o"],
+    "pricing_usd_per_mtok": [2.5, 10.0]
+  },
+  "google": {
+    "label": "Google (Gemini)",
+    "default_model": "gemini-2.5-pro",
+    "models": ["gemini-2.5-pro", "gemini-2.5-flash"],
+    "pricing_usd_per_mtok": [1.25, 10.0]
+  },
+  "mistral": {
+    "label": "Mistral",
+    "default_model": "mistral-large-latest",
+    "models": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"],
+    "pricing_usd_per_mtok": [2.0, 6.0]
+  }
+}
