@@ -7,7 +7,10 @@
 set -e
 cd "$(dirname "$0")"
 
-# Find a suitable Python (3.11+): prefer explicit versions, fall back to python3
+fail() { echo ""; echo "ERROR: $1" >&2; exit 1; }
+
+# ---- Pre-flight: Python 3.11+ ----
+
 find_python() {
   for cand in python3.13 python3.12 python3.11 python3; do
     if command -v "$cand" >/dev/null 2>&1; then
@@ -19,6 +22,22 @@ find_python() {
   done
   return 1
 }
+
+# ---- Pre-flight: disk space ----
+
+check_disk_space() {
+  local avail_kb
+  if command -v df >/dev/null 2>&1; then
+    avail_kb="$(df -k "$(pwd)" | awk 'NR==2 {print $4}')"
+    if [ -n "$avail_kb" ] && [ "$avail_kb" -lt 512000 ] 2>/dev/null; then
+      fail "Less than 500 MB of disk space available. Free some space and try again."
+    fi
+  fi
+}
+
+check_disk_space
+
+# ---- Python environment ----
 
 # A venv is tied to the machine AND path that created it. Probe it by actually
 # importing the app's server package through the venv's own interpreter — a
@@ -32,11 +51,15 @@ fi
 
 if [ ! -d backend/.venv ] || ! backend/.venv/bin/python -c 'import uvicorn' >/dev/null 2>&1; then
   if [ ! -d backend/.venv ]; then
-    PY="$(find_python)" || { echo "QualiLens needs Python 3.11 or newer (none found). Install it from https://www.python.org/downloads/ (macOS Homebrew: brew install python@3.12)." >&2; exit 1; }
+    PY="$(find_python)" || fail "QualiLens needs Python 3.11 or newer (none found).
+  Install it from https://www.python.org/downloads/
+  macOS Homebrew: brew install python@3.12"
     echo "Creating Python environment with $PY (first run only)…"
-    "$PY" -m venv backend/.venv
+    "$PY" -m venv backend/.venv || fail "Could not create the Python environment. Check that Python is installed correctly."
   fi
-  backend/.venv/bin/python -m pip -q install -r backend/requirements.txt
+  echo "Installing Python dependencies…"
+  backend/.venv/bin/python -m pip -q install -r backend/requirements.txt \
+    || fail "Python dependency installation failed. Check your internet connection and try again."
 fi
 
 # an app update can change requirements.txt — reinstall when it differs from
@@ -44,15 +67,44 @@ fi
 REQ_SHA="$(shasum backend/requirements.txt | cut -d' ' -f1)"
 if [ "$REQ_SHA" != "$(cat backend/.venv/req.sha 2>/dev/null)" ]; then
   echo "Dependencies changed — updating the Python environment…"
-  backend/.venv/bin/python -m pip -q install -r backend/requirements.txt
+  backend/.venv/bin/python -m pip -q install -r backend/requirements.txt \
+    || fail "Python dependency update failed."
   printf '%s' "$REQ_SHA" > backend/.venv/req.sha
 fi
 
+# ---- Frontend build (GitHub clones only; bundles ship with dist/) ----
+
 if [ ! -f frontend/dist/index.html ]; then
-  command -v npm >/dev/null 2>&1 || { echo "QualiLens needs Node/npm to build its interface once. Install from https://nodejs.org" >&2; exit 1; }
-  echo "Building frontend (first run only)…"
-  (cd frontend && npm install --silent && npm run build)
+  command -v npm >/dev/null 2>&1 \
+    || fail "The pre-built interface is not included (this is normal for a GitHub clone).
+  QualiLens needs Node.js to build it once. Install Node 18+ from https://nodejs.org
+  then run ./run.sh again."
+
+  # Check Node version (18+ required for TypeScript 6 and React 19)
+  NODE_MAJOR="$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)"
+  if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ] 2>/dev/null; then
+    fail "Node.js 18 or newer is required (found $(node -v 2>/dev/null || echo 'none')).
+  Install from https://nodejs.org"
+  fi
+
+  echo "Building the interface (first run only — this takes about a minute)…"
+
+  echo "  Installing JavaScript dependencies…"
+  (cd frontend && npm install --loglevel=warn) \
+    || fail "JavaScript dependency installation failed.
+  Check your internet connection and available disk space, then try:
+    cd frontend && rm -rf node_modules && npm install"
+
+  echo "  Compiling…"
+  (cd frontend && npm run build) \
+    || fail "Frontend build failed.
+  Try: cd frontend && rm -rf node_modules && npm install && npm run build
+  If the problem persists, open an issue at https://github.com/iconerr/qualilens/issues"
+
+  echo "  Done."
 fi
+
+# ---- Launch ----
 
 PORT="${QUALILENS_PORT:-8765}"
 if command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -68,6 +120,7 @@ open_browser() {
   fi
 }
 
+echo ""
 echo "QualiLens running at http://127.0.0.1:$PORT  (Ctrl-C to stop)"
 (sleep 1.5 && open_browser "http://127.0.0.1:$PORT") &
 cd backend && exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT"

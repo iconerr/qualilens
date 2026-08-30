@@ -7,13 +7,24 @@ SPDX-License-Identifier: Apache-2.0
 
 ## What you need before the first launch
 
-QualiLens builds its own environment the first time you run it. Three things must already be on your computer before that.
+QualiLens builds its own environment the first time you run it. What you need on your computer depends on how you received it.
+
+**If you received QualiLens as a zip bundle** (the file a colleague sends, or a release download), the interface is already built inside the bundle. You need only Python.
 
 | Requirement | Why it is needed | How to check | How to install |
 |---|---|---|---|
-| Python 3.10 or later | Runs the backend, the analysis pipelines, and the local database | `python3 --version` | `brew install python@3.12` on macOS, or download from python.org |
-| Node and npm | Builds the browser interface once, on the first launch only | `npm --version` | Download from nodejs.org |
+| Python 3.11 or later | Runs the backend, the analysis pipelines, and the local database | `python3 --version` | `brew install python@3.12` on macOS, or download from python.org |
 | ffmpeg (optional) | Extracts audio from video files and splits long recordings for transcription | `ffmpeg -version` | `brew install ffmpeg` on macOS |
+
+**If you cloned the GitHub repository**, the interface must be built once on your machine. You need Node in addition to Python.
+
+| Requirement | Why it is needed | How to check | How to install |
+|---|---|---|---|
+| Python 3.11 or later | Runs the backend, the analysis pipelines, and the local database | `python3 --version` | `brew install python@3.12` on macOS, or download from python.org |
+| Node 18 or later and npm | Builds the browser interface once, on the first launch only | `node -v` | Download from nodejs.org |
+| ffmpeg (optional) | Extracts audio from video files and splits long recordings for transcription | `ffmpeg -version` | `brew install ffmpeg` on macOS |
+
+The launcher detects which situation you are in and tells you what is missing. If Node is absent and the interface has not been built, the error message names what to install and where.
 
 You can skip ffmpeg if you will only ever upload documents and audio files under roughly 24 MB. You will need ffmpeg once you upload a video, or an audio file too large for the transcription service to accept in one piece. The Settings screen tells you at any time whether QualiLens can see ffmpeg on your computer.
 

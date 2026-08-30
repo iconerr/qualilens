@@ -13,7 +13,11 @@ Every failure QualiLens can show you is listed here, with its cause and its reme
 |---|---|---|
 | `QualiLens needs Python 3.11 or newer (none found)` | No Python of version 3.11 or later is on the path | Install one, for example with `brew install python@3.12`, then run the launcher again |
 | `The bundled Python environment does not work on this machine/path — rebuilding it…` | The folder was copied from another computer, or renamed or moved on this one. Environments are tied to the path that created them | Nothing. The rebuild is automatic, takes about a minute, and the message is information rather than an error |
-| `QualiLens needs Node/npm to build its interface once` | The interface has never been built and npm is missing | Install Node from nodejs.org. This is needed once, not on every launch |
+| `The pre-built interface is not included (this is normal for a GitHub clone). QualiLens needs Node.js to build it once.` | You cloned the repo from GitHub, which does not include the built interface, and Node is not installed | Install Node 18 or later from nodejs.org, then run the launcher again. This is needed once, not on every launch. If you received the app as a zip bundle, this message should not appear — report it as a bug |
+| `Node.js 18 or newer is required` | Node is installed but too old for the dependencies | Upgrade Node from nodejs.org |
+| `JavaScript dependency installation failed` | npm install failed, usually because of a network problem or insufficient disk space | Check your internet connection and free disk space, then try the recovery command printed below the error |
+| `Frontend build failed` | The interface code did not compile. On a fresh installation this should not happen | Try the recovery command printed below the error. If it persists, open an issue on the GitHub repository |
+| `Less than 500 MB of disk space available` | The launcher checks available space before starting | Free some space and try again |
 | `Port 8765 is already in use (is QualiLens already running?)` | Another process holds the port, often an earlier QualiLens you forgot to stop | Open the address the message prints, or start on another port with `QUALILENS_PORT=8790 ./run.sh` |
 
 The launcher checks for the built artifacts rather than the folders. A first run that failed part way therefore retries cleanly on the next launch, rather than skipping the step that failed.

@@ -70,12 +70,13 @@ export default function App() {
     <>
       <header className="topbar">
         <Link to="/" className="brand">
-          <svg className="mark" viewBox="0 0 26 26" aria-hidden="true">
-            <rect width="26" height="26" rx="7" fill="#1f3a5f" />
-            <rect x="6" y="7.5" width="14" height="2.6" rx="1.3" fill="#ffffff" opacity="0.9" />
-            <rect x="6" y="12" width="9" height="2.6" rx="1.3" fill="#ffffff" opacity="0.55" />
-            <rect x="16.5" y="12" width="3.5" height="2.6" rx="1.3" fill="#d9a520" />
-            <rect x="6" y="16.5" width="12" height="2.6" rx="1.3" fill="#ffffff" opacity="0.75" />
+          <svg className="mark" viewBox="0 0 48 48" aria-hidden="true">
+            <line x1="2" y1="4" x2="22" y2="19" stroke="#863bff" strokeWidth="2.8" strokeLinecap="round" opacity="0.35"/>
+            <line x1="2" y1="14" x2="22" y2="21" stroke="#863bff" strokeWidth="2.8" strokeLinecap="round" opacity="0.55"/>
+            <line x1="2" y1="24" x2="22" y2="24" stroke="#863bff" strokeWidth="2.8" strokeLinecap="round" opacity="0.75"/>
+            <line x1="2" y1="34" x2="22" y2="27" stroke="#863bff" strokeWidth="2.8" strokeLinecap="round" opacity="0.55"/>
+            <line x1="2" y1="44" x2="22" y2="29" stroke="#863bff" strokeWidth="2.8" strokeLinecap="round" opacity="0.35"/>
+            <polyline points="31,12 44,24 31,36" stroke="#863bff" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
           QualiLens<small>You. AI. Done.</small>
         </Link>
