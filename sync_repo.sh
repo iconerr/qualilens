@@ -8,8 +8,9 @@
 # explicit manifest that builds the shareable bundle — so what is public is
 # exactly what recipients get, curated by one authority. Private material
 # (backend/data with your keys, FINGERPRINT.md, devnotes/, transcripts,
-# memos) is excluded by construction: it is not on the manifest, so it never
-# enters the staging, the repo directory, or the history.
+# memos, Publication-Routes, Sample Data) is excluded by construction: it is
+# not on the manifest, so it never enters the staging, the repo directory,
+# or the history.
 #
 # Two departures from the bundle:
 #   - frontend/dist is omitted (the repo tracks source; the runnable build
@@ -64,7 +65,8 @@ if grep -RInE --binary-files=without-match --exclude-dir=.git \
   exit 1
 fi
 if find "$REPO_DIR" \( -name 'qualilens.db*' -o -name '*.venv*' \
-    -o -path '*backend/data*' -o -name 'FINGERPRINT.md' -o -path '*devnotes*' \) \
+    -o -path '*backend/data*' -o -name 'FINGERPRINT.md' -o -path '*devnotes*' \
+    -o -name 'Publication-Routes*' -o -path '*Sample Data*' \) \
     | grep -q .; then
   echo "REFUSING to commit: a database, data path, or private file is in the repo tree." >&2
   exit 1
