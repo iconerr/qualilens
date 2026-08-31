@@ -118,6 +118,27 @@ export default function Settings() {
     setStatus(s => ({ ...s, [pid]: r.ok ? `Key works (reply: "${r.reply}")` : `Failed: ${r.error}` }))
   }
 
+  if (updState.phase === 'done') return (
+    <div className="page" style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', minHeight: '60vh', textAlign: 'center',
+      gap: 16
+    }}>
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none"
+        stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round"
+        strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" opacity="0.2" />
+        <path d="M8 12l3 3 5-6" />
+      </svg>
+      <h1 style={{ margin: 0 }}>Update installed</h1>
+      <p style={{ maxWidth: 420, lineHeight: 1.6 }}>
+        The app is stopping. Close this tab, then
+        run <code>./run.sh</code> to start the new version.
+      </p>
+      <p className="small muted" style={{ maxWidth: 480 }}>{updState.msg}</p>
+    </div>
+  )
+
   if (!meta) return <div className="page">{error ? <div className="error-box">{error}</div> : 'Loading…'}</div>
 
   return (
