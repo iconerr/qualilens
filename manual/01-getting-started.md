@@ -122,7 +122,7 @@ after signing is refused before a byte is written — then replaces only the
 app's own application files and keeps the outgoing version in
 `.update-backup`. Your projects, API keys, and uploaded data are never part
 of an update; the updater works from a fixed list of application paths and
-refuses everything else, so your data survives by construction rather than
+refuses everything else, so your data survive by construction rather than
 by care. An update is also refused while any run is executing or waiting at
 a checkpoint, because applying it stops the server.
 

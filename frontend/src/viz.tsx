@@ -3,7 +3,7 @@
 
 // Method-appropriate report visualizations, hand-rolled SVG (no dependencies):
 // the grounded theory model, the thematic map, a code-frequency chart, and a
-// framework-matrix heatmap. Each renders nothing when its data is absent.
+// framework-matrix heatmap. Each renders nothing when its data are absent.
 
 // Mirrors the tokens in styles.css (SVG cannot read CSS variables when the
 // figure is exported). Ink carries the structure; the categorical palette is

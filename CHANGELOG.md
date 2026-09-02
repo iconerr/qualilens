@@ -9,6 +9,10 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.6.1 — 2026-09-02
+
+- Settings: "Where your data live".
+
 ## 1.6.0 — 2026-09-02
 
 - A checkpoint can be worked in a spreadsheet. **Download as spreadsheet**
@@ -129,7 +133,7 @@ Initial public release.
   catalog with a live model check, Whisper transcription for audio and
   video, cost estimation before a run, resumable runs that do not re-bill
   finished work, and honored cancellation.
-- The app runs locally; data goes only to the provider you chose. In-place
+- The app runs locally; data go only to the provider you chose. In-place
   updates from a downloaded bundle or, pull-only and on demand, from this
   repository's releases — the updater's allowlist leaves your projects,
   keys, and uploads untouched.

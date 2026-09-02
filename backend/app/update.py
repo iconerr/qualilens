@@ -6,7 +6,7 @@
 Safety model, in order of importance:
 1. `backend/data/` (projects, keys, uploads) is untouchable — the updater
    works from an ALLOWLIST of application paths and refuses everything else,
-   so user data survives by construction, not by care.
+   so user data survive by construction, not by care.
 2. Every archive member is validated against zip-slip (absolute paths, `..`,
    symlinks) and against size bounds before a single byte is written.
 3. The bundle must carry a valid Ed25519 signature from the QualiLens

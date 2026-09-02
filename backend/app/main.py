@@ -280,7 +280,7 @@ def check_updates():
 def install_update():
     """Download the latest published release and apply it through the same
     validated updater as the zip path. The release is resolved server-side —
-    no URL is accepted from the client — and user data is untouchable by the
+    no URL is accepted from the client — and user data are untouchable by the
     updater's allowlist, as ever."""
     import tempfile
     _refuse_if_runs_active("install an update")

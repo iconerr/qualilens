@@ -273,7 +273,7 @@ export default function Settings() {
       </div>
 
       <div className="card">
-        <h3 style={{ margin: 0 }}>Where your data lives</h3>
+        <h3 style={{ margin: 0 }}>Where your data live</h3>
         <p className="desc" style={{ margin: '10px 0 0' }}>
           Projects, uploaded files, and API keys are stored in <code>{meta.data_dir}</code>,
           unencrypted, protected only by your computer's file permissions.
