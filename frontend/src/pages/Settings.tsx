@@ -5,6 +5,81 @@ import { useEffect, useState } from 'react'
 import { useRef } from 'react'
 import { api, testKey, type Meta } from '../api'
 
+// After an update the server stops itself so ./run.sh can relaunch the new
+// build. This page has nothing to talk to until then, and when the new server
+// comes up it mints a new session token that this page does not hold. So the
+// page waits, polls the root URL (which needs no token), and the moment a
+// server answers with a different build stamp than the one this page was
+// served by, reloads itself — which is exactly what the human would otherwise
+// be told to do, and the step that used to strand people on a token error.
+const THIS_BUILD = document.querySelector('meta[name="ql-build"]')?.getAttribute('content') ?? ''
+
+function UpdateWaiting({ detail }: { detail: string }) {
+  const [secs, setSecs] = useState(0)
+  const [sameBuildFor, setSameBuildFor] = useState(0)
+  useEffect(() => {
+    let alive = true
+    const tick = async () => {
+      if (!alive) return
+      setSecs(s => s + 2)
+      try {
+        const res = await fetch('/', { cache: 'no-store', credentials: 'same-origin' })
+        if (res.ok) {
+          const html = await res.text()
+          const build = /<meta name="ql-build" content="([^"]*)"/.exec(html)?.[1] ?? ''
+          if (build && build !== THIS_BUILD) { window.location.reload(); return }
+          setSameBuildFor(t => t + 2)      // a server answered, but not a new build (yet)
+        }
+      } catch { /* connection refused: the app is between stop and relaunch */ }
+    }
+    const id = window.setInterval(tick, 2000)
+    return () => { alive = false; window.clearInterval(id) }
+  }, [])
+  const origin = window.location.origin
+  return (
+    <div className="page" style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', minHeight: '60vh', textAlign: 'center', gap: 16
+    }}>
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none"
+        stroke="var(--green)" strokeWidth="1.8" strokeLinecap="round"
+        strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" opacity="0.25" />
+        <path d="M8 12l3 3 5-6" />
+      </svg>
+      <h1 style={{ margin: 0 }}>Update installed</h1>
+      <p style={{ maxWidth: 460, lineHeight: 1.6, margin: 0 }}>
+        QualiLens has stopped so the new build can start. Start it again: in the Terminal
+        window where it was running, press <kbd>↑</kbd> then <kbd>Return</kbd> — or open a
+        Terminal in the QualiLens folder and run <code>./run.sh</code>.
+      </p>
+      <p style={{ maxWidth: 460, lineHeight: 1.6, margin: 0 }}>
+        <b>This page reconnects on its own</b> once the new build is up; nothing else to do.
+      </p>
+      <p className="small muted" style={{ margin: 0 }}>
+        Waiting for the new build… {secs > 0 && <span className="mono">{secs}s</span>}
+      </p>
+      {(secs >= 60 || sameBuildFor >= 20) && (
+        <div className="warn-box" style={{ maxWidth: 520, textAlign: 'left' }}>
+          {sameBuildFor >= 20
+            ? <>A server is answering, but it runs the same build as before. If you relaunched
+                from a different folder, or the launcher printed that the port is in use,
+                stop that server (the launcher prints the command) and run <code>./run.sh</code>
+                again in the updated folder.</>
+            : <>Not reconnecting yet. If the launcher says the port is already in use, an older
+                server is still running — stop it with the command it prints, then run{' '}
+                <code>./run.sh</code> again. Once the app says it is running, this page
+                reloads; if it does not, open <a href={origin}>{origin}</a> in a new tab.</>}
+        </div>
+      )}
+      <div className="row" style={{ gap: 10 }}>
+        <button onClick={() => window.location.reload()}>Reload now</button>
+      </div>
+      <p className="small muted" style={{ maxWidth: 520, marginTop: 8 }}>{detail}</p>
+    </div>
+  )
+}
+
 export default function Settings() {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [saved, setSaved] = useState<Record<string, { has_key: boolean; key_hint: string }>>({})
@@ -38,14 +113,14 @@ export default function Settings() {
   const installUpdate = async () => {
     if (!confirm('Download and install the latest release from GitHub?\n\n'
       + 'Your projects, keys, and uploads are never touched by an update. The '
-      + 'app will stop itself when done, and you restart it with ./run.sh.')) return
+      + 'app will stop itself when done; you start it again with ./run.sh and '
+      + 'this page reconnects on its own.')) return
     setUpdState({ phase: 'busy', msg: 'Downloading the release and applying it…' })
     try {
       const r = await api.installUpdate()
       setUpdState({ phase: 'done',
         msg: `Updated ${r.from_version} → ${r.to_version} (${r.files_installed} files; `
-          + `previous version kept in ${r.backup}). The app is stopping — `
-          + 'run ./run.sh to start the new version.' + (r.note ? ` ${r.note}` : '') })
+          + `previous version kept in ${r.backup}).` + (r.note ? ` ${r.note}` : '') })
     } catch (e: any) {
       setUpdState({ phase: 'error', msg: String(e.message ?? e) })
     }
@@ -54,15 +129,14 @@ export default function Settings() {
   const applyUpdate = async (f: File | undefined) => {
     if (!f) return
     if (!confirm(`Update QualiLens from “${f.name}”?\n\nYour projects, keys, and uploads are `
-      + 'never touched by an update. The app will stop itself when done, and you '
-      + 'restart it with ./run.sh.')) return
+      + 'never touched by an update. The app will stop itself when done; you start '
+      + 'it again with ./run.sh and this page reconnects on its own.')) return
     setUpdState({ phase: 'busy', msg: 'Validating and applying the bundle…' })
     try {
       const r = await api.applyUpdate(f)
       setUpdState({ phase: 'done',
         msg: `Updated ${r.from_version} → ${r.to_version} (${r.files_installed} files; `
-          + `previous version kept in ${r.backup}). The app is stopping — `
-          + 'run ./run.sh to start the new version.' + (r.note ? ` ${r.note}` : '') })
+          + `previous version kept in ${r.backup}).` + (r.note ? ` ${r.note}` : '') })
     } catch (e: any) {
       setUpdState({ phase: 'error', msg: String(e.message ?? e) })
     } finally {
@@ -118,26 +192,7 @@ export default function Settings() {
     setStatus(s => ({ ...s, [pid]: r.ok ? `Key works (reply: "${r.reply}")` : `Failed: ${r.error}` }))
   }
 
-  if (updState.phase === 'done') return (
-    <div className="page" style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', minHeight: '60vh', textAlign: 'center',
-      gap: 16
-    }}>
-      <svg width="56" height="56" viewBox="0 0 24 24" fill="none"
-        stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round"
-        strokeLinejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" opacity="0.2" />
-        <path d="M8 12l3 3 5-6" />
-      </svg>
-      <h1 style={{ margin: 0 }}>Update installed</h1>
-      <p style={{ maxWidth: 420, lineHeight: 1.6 }}>
-        The app is stopping. Close this tab, then
-        run <code>./run.sh</code> to start the new version.
-      </p>
-      <p className="small muted" style={{ maxWidth: 480 }}>{updState.msg}</p>
-    </div>
-  )
+  if (updState.phase === 'done') return <UpdateWaiting detail={updState.msg} />
 
   if (!meta) return <div className="page">{error ? <div className="error-box">{error}</div> : 'Loading…'}</div>
 
@@ -235,7 +290,7 @@ export default function Settings() {
       <div className="card">
         <div className="row spread">
           <h3 style={{ margin: 0 }}>Application</h3>
-          <span className="badge pending">version {meta.version ?? 'unknown'}</span>
+          <span className="badge pending mono">build {meta.version ?? 'unknown'}</span>
         </div>
         <p className="desc" style={{ margin: '10px 0' }}>
           Updates are pull-only. <b>Check for updates</b> makes one request to

@@ -508,6 +508,13 @@ def apply_code_review_resolution(ctx: RunContext, resolution: dict) -> None:
             db.log_event(ctx.run_id, "info",
                          f"Skipped decision for unknown code {cid}", d)
             continue
+        # a note is the researcher's reasoning; it belongs in the trail even
+        # when the decision itself changes nothing (a considered "keep")
+        note = d.get("notes")
+        if isinstance(note, str) and note.strip():
+            db.log_event(ctx.run_id, "user_decision",
+                         f"Researcher note on code '{row['name']}': {note.strip()}",
+                         {"id": cid, "action": action, "notes": note.strip()})
         if action == "rename" or (action == "keep" and
                                   (d.get("name") is not None or d.get("definition") is not None)):
             raw_name = d.get("name")
@@ -574,6 +581,8 @@ def apply_code_review_resolution(ctx: RunContext, resolution: dict) -> None:
         cid = ctx.add_code(name, str(a.get("definition", "")),
                            resolution.get("stage") or a.get("stage", "open_code"),
                            meta={"user_edited": True, "origin": "researcher_added"})
-        db.log_event(ctx.run_id, "user_decision", f"Researcher added code '{name}'",
-                     {"id": cid})
+        note = a.get("notes")
+        db.log_event(ctx.run_id, "user_decision", f"Researcher added code '{name}'"
+                     + (f" — note: {note.strip()}" if isinstance(note, str) and note.strip() else ""),
+                     {"id": cid, **({"notes": note.strip()} if isinstance(note, str) and note.strip() else {})})
     conn.commit()

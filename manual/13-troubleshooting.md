@@ -18,7 +18,9 @@ Every failure QualiLens can show you is listed here, with its cause and its reme
 | `JavaScript dependency installation failed` | npm install failed, usually because of a network problem or insufficient disk space | Check your internet connection and free disk space, then try the recovery command printed below the error |
 | `Frontend build failed` | The interface code did not compile. On a fresh installation this should not happen | Try the recovery command printed below the error. If it persists, open an issue on the GitHub repository |
 | `Less than 500 MB of disk space available` | The launcher checks available space before starting | Free some space and try again |
-| `Port 8765 is already in use (is QualiLens already running?)` | Another process holds the port, often an earlier QualiLens you forgot to stop | Open the address the message prints, or start on another port with `QUALILENS_PORT=8790 ./run.sh` |
+| `Port 8765 is already in use.` | Another process holds the port. The lines that follow say which: a QualiLens server (with the build it is running, when it started, and its process number) or another program | Read the lines below the message. If the running QualiLens is this folder's build, open the address it prints. If it is an older build, or predates build stamps, stop it with the `kill` command printed and run the launcher again. For another program, stop it or start QualiLens on another port with `QUALILENS_PORT=8790 ./run.sh` |
+
+A running server keeps the code it loaded when it started, however the folder changes afterwards. A QualiLens left running in a forgotten Terminal tab therefore keeps serving an old build after an update has landed in the folder, and the browser shows the old app while the folder holds the new one. The port check is the first thing the launcher does, before any environment work, so the report appears at once.
 
 The launcher checks for the built artifacts rather than the folders. A first run that failed part way therefore retries cleanly on the next launch, rather than skipping the step that failed.
 
@@ -28,7 +30,8 @@ A line reading `NOTICE: the data folder … appears to sit inside a cloud-synced
 
 | Message | Cause | Remedy |
 |---|---|---|
-| `Missing or stale session token — reload the QualiLens page` | The app was restarted while this tab stayed open, so the tab carries the previous launch's token; or the request did not come from a page QualiLens served | Reload the page. Your staged checkpoint decisions survive a reload |
+| `Missing or stale session token — reload the QualiLens page` | The app was restarted while this tab stayed open, so the tab carries the previous launch's token; or the request did not come from a page QualiLens served | Normally you never see this: the page reloads itself once to fetch the new token. If the message shows, the reload did not help, which means the app is not running — start it with `./run.sh`, then reload. Staged checkpoint decisions survive a reload |
+| The **Update installed** page keeps waiting | The new build has not started yet, or an older copy of the app still holds the port | Start the app with `./run.sh`. If the launcher reports the port in use, stop the server it names and run the launcher again. The page reloads by itself once the new build answers; **Reload now** forces it |
 | `QualiLens answers only to 127.0.0.1 or localhost` | The address bar names the machine some other way (its LAN address, a hostname), or something on the machine forwarded the request | Open `http://127.0.0.1:8765` |
 | `Cross-site request refused` | A page from another site tried to use the app, or a browser extension rewrote the request's origin | Use the app from its own tab; the refusal is the protection working |
 

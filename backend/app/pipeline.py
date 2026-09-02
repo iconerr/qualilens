@@ -203,7 +203,11 @@ def resolve_checkpoint(run_id: str, checkpoint_id: str, resolution: dict) -> Non
         db.log_event(run_id, "error",
                      f"Applying checkpoint '{cp['title']}' failed; checkpoint reopened")
         raise
-    db.log_event(run_id, "user_decision", f"Checkpoint '{cp['title']}' resolved")
+    imported = resolution.get("imported_from") if isinstance(resolution.get("imported_from"), dict) else None
+    db.log_event(run_id, "user_decision",
+                 f"Checkpoint '{cp['title']}' resolved"
+                 + (f" with decisions loaded from spreadsheet '{imported.get('filename', '')}'" if imported else ""),
+                 {"imported_from": imported} if imported else None)
     _set_run(run_id, status="running", stage_index=run["stage_index"] + 1)
     db.checkpoint_wal("PASSIVE")   # the researcher's decisions reach the main file now
     _launch(run_id)

@@ -46,7 +46,7 @@ export default function ReportPage() {
           <h1>{rep.title}</h1>
           <p className="sub">
             <Link to={`/runs/${id}`}>← run</Link>
-            {' · '}{rep.provider}/{rep.model}
+            {' · '}<span className="mono">{rep.provider}/{rep.model}</span>
             {' · '}{new Date(rep.generated_at * 1000).toLocaleString()}
           </p>
         </div>
@@ -68,7 +68,7 @@ export default function ReportPage() {
               <tr key={k}><td className="muted" style={{ width: 240 }}>{rep.config_labels?.[k] ?? k}</td>
                 <td style={{ whiteSpace: 'pre-wrap' }}>{String(v ?? '').trim() || <span className="muted">(blank)</span>}</td></tr>
             ))}
-            <tr><td className="muted">Provider and model</td><td>{rep.provider}/{rep.model}</td></tr>
+            <tr><td className="muted">Provider and model</td><td className="mono">{rep.provider}/{rep.model}</td></tr>
           </tbody></table>
         </section>
       )}
@@ -123,18 +123,18 @@ export default function ReportPage() {
             of source text and correct for unequal source and group sizes; compare groups on rates, not counts.</p>}
           <table className="freq">
             <thead><tr>
-              <th>Code</th><th>Count</th><th>%</th><th>Sources</th>
-              {'per_10k_chars' in (stats.rows[0] ?? {}) && <th>per 10k chars</th>}
-              {(stats.groups ?? []).map((g: string) => <th key={g}>{g}</th>)}
-              {(stats.groups ?? []).map((g: string) => <th key={`${g}-rate`}>{g} per 10k</th>)}
+              <th>Code</th><th className="num">Count</th><th className="num">%</th><th className="num">Sources</th>
+              {'per_10k_chars' in (stats.rows[0] ?? {}) && <th className="num">per 10k chars</th>}
+              {(stats.groups ?? []).map((g: string) => <th key={g} className="num">{g}</th>)}
+              {(stats.groups ?? []).map((g: string) => <th key={`${g}-rate`} className="num">{g} per 10k</th>)}
             </tr></thead>
             <tbody>
               {stats.rows.map((r: any) => (
                 <tr key={r.code}>
-                  <td>{r.code}</td><td>{r.count}</td><td>{r.pct}%</td><td>{r.sources}</td>
-                  {'per_10k_chars' in r && <td>{r.per_10k_chars}</td>}
-                  {(stats.groups ?? []).map((g: string) => <td key={g}>{r.by_group?.[g] ?? 0}</td>)}
-                  {(stats.groups ?? []).map((g: string) => <td key={`${g}-rate`}>{r.by_group_per_10k?.[g] ?? '—'}</td>)}
+                  <td>{r.code}</td><td className="num">{r.count}</td><td className="num">{r.pct}%</td><td className="num">{r.sources}</td>
+                  {'per_10k_chars' in r && <td className="num">{r.per_10k_chars}</td>}
+                  {(stats.groups ?? []).map((g: string) => <td key={g} className="num">{r.by_group?.[g] ?? 0}</td>)}
+                  {(stats.groups ?? []).map((g: string) => <td key={`${g}-rate`} className="num">{r.by_group_per_10k?.[g] ?? '—'}</td>)}
                 </tr>
               ))}
             </tbody>
@@ -275,7 +275,8 @@ export default function ReportPage() {
           {' '}{((usage.output_tokens ?? 0) / 1000).toFixed(0)}k output tokens.
           {rep.audit?.models_used && Object.keys(rep.audit.models_used).length > 0 && (
             <> Models that answered: {Object.entries(rep.audit.models_used)
-              .map(([m, n]: [string, any]) => `${m} (${n})`).join(', ')}.</>)}
+              .map(([m, n]: [string, any], i: number, arr: any[]) => (
+                <span key={m}><span className="mono">{m}</span> ({n}){i < arr.length - 1 ? ', ' : ''}</span>))}.</>)}
           {typeof rep.audit?.excerpts_unlocated === 'number' && (
             <> Evidence: {rep.audit.excerpts_located} excerpts located verbatim,{' '}
               {rep.audit.excerpts_unlocated} unverified.</>)}

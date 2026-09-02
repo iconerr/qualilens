@@ -128,6 +128,22 @@ This is what makes the evidence links usable. You can open four transcripts to c
 
 The held state is cleared once you approve the checkpoint. It lives in the browser rather than in the database, so it does not survive a different browser or a private window, and it is not part of the audit trail.
 
+### Working in a spreadsheet
+
+A checkpoint with a hundred codes is a codebook, and a codebook is easier to read, share with a co-coder, and revise in a spreadsheet than in a column of boxes. Two buttons under the toolbar make that possible without leaving the record.
+
+**Download as spreadsheet** saves an `.xlsx` workbook with three sheets. *Codes* has one row per code — id, name, definition, the excerpt count, the first excerpt for orientation, and three columns for you: *action*, *merge into*, and *notes*. *Excerpts* lists every excerpt behind every code, for reference. *About* names the project, run, and checkpoint the file belongs to and repeats the rules below. Numbers, Excel, and Google Sheets all open and save it.
+
+Edit the workbook as you would any codebook. Change a name or a definition in place; that is a rename or a redefinition, and no action word is needed. Choose *merge* in the action column and put the target's id or its exact name in *merge into*. Choose *delete* to delete. Leave the action blank to keep. Add a code by adding a row with an empty id and a name. Write your reasoning in *notes*. Do not edit the id column; it is how each row finds its code.
+
+**Upload spreadsheet** reads the file back and loads its decisions into this screen as staged edits, with a line above the list saying what it found — how many renamed, merged, deleted, added, with notes — and how many rows it ignored, with the reason for each. Nothing is applied by the upload. You read the screen, change anything you like, and press **Approve & continue** as always. If edits were already staged on the screen, the upload replaces them, and asks first.
+
+The rules the upload keeps, each of which refuses or reports rather than guesses: a workbook from a different checkpoint is refused, naming the checkpoint it belongs to; a row whose id is not in this checkpoint is ignored and listed; a code with no row in the file is unchanged — deleting a row in the spreadsheet does not delete a code, only the *delete* action does; a blank name keeps the old name; a merge target that matches no code, or more than one, is reported; a file that is not an `.xlsx`, or is larger than 10 MB, is refused.
+
+Notes travel with your decisions into the audit trail: each becomes an event beside the decision it explains, and a note on a code you keep unchanged is recorded as a considered keep. When you approve, the workbook itself is kept with the run's uploads and named in the audit trail and the audit export, so the worksheet you actually worked in becomes part of the record.
+
+The extraction table in literature synthesis has the same two buttons. Its workbook has a *Papers* sheet — one row per paper with label, citation, the five fields, the findings the paper attributes to other work, an *exclude* column that takes *yes* or *no*, and *notes* — and a *Quotes* sheet listing the extraction quotes by paper and field. A changed field becomes an edit to that field alone; a blank label keeps the old one.
+
 ### Approve and continue
 
 This button submits every edit, action, and addition at once, applies them, and restarts the pipeline at the next stage.
@@ -172,7 +188,7 @@ Everything you type is a researcher edit in the same sense as a rename in the co
 
 **Exclude** removes a paper from the synthesis without removing it from the record. The synthesis, the matrix, and the narrative proceed without it; its extraction row stays in the report's appendix, marked as excluded, and the exclusion is logged. Use it for the paper that extraction reveals to be off topic. **Re-include** reverses a staged exclusion before you approve. Excluding every paper is refused at approval, because a synthesis needs at least one paper — re-include one, or cancel the run.
 
-Like the code review, your staged edits are held in the browser for this checkpoint and survive reloads and side trips into coded papers, and approval is atomic and single-use.
+Like the code review, your staged edits are held in the browser for this checkpoint and survive reloads and side trips into coded papers, and approval is atomic and single-use. The table can also be downloaded as a workbook, edited, and uploaded again; [Working in a spreadsheet](#working-in-a-spreadsheet) describes the round trip.
 
 The chapter on [literature synthesis](08-literature-synthesis.md) explains what to look for in the table itself.
 

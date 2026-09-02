@@ -191,7 +191,7 @@ environment built on another machine and rebuilds it automatically.
 ## Running the tests
 
 ```bash
-cd backend && .venv/bin/python -m pytest tests/test_fixes.py tests/test_hardening.py -q && .venv/bin/python tests/e2e_grounded_theory.py && .venv/bin/python tests/e2e_methods.py
+cd backend && .venv/bin/python -m pytest tests/test_fixes.py tests/test_hardening.py tests/test_sheets.py -q && .venv/bin/python tests/e2e_grounded_theory.py && .venv/bin/python tests/e2e_methods.py
 ```
 
 All tests run against scratch databases with a mocked model — no API keys or

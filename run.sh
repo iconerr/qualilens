@@ -37,6 +37,56 @@ check_disk_space() {
 
 check_disk_space
 
+# ---- Pre-flight: the port (before any environment work, which can take minutes) ----
+
+PORT="${QUALILENS_PORT:-8765}"
+
+# A server keeps the code it loaded at start, however this folder changes
+# afterwards — a QualiLens left running in a forgotten Terminal tab keeps
+# serving an old build while the folder holds a new one. So when the port is
+# taken, say WHO holds it, since WHEN, WHICH build it is running, and exactly
+# how to stop it. The build is read from the served page's ql-build meta tag
+# (servers before 1.5.1 have none, which itself dates them).
+port_in_use_report() {
+  local holder="$1" started cmd running here
+  started="$(ps -o lstart= -p "$holder" 2>/dev/null | sed 's/^ *//' || true)"
+  cmd="$(ps -o command= -p "$holder" 2>/dev/null || true)"
+  here="$(cat VERSION 2>/dev/null || echo unknown)"
+  echo "Port $PORT is already in use." >&2
+  case "$cmd" in
+    *uvicorn*app.main*)
+      running=""
+      if command -v curl >/dev/null 2>&1; then
+        running="$(curl -s --max-time 2 "http://127.0.0.1:$PORT/" \
+                   | sed -n 's/.*<meta name="ql-build" content="\([^"]*\)".*/\1/p' | head -1)"
+      fi
+      if [ -n "$running" ]; then
+        echo "A QualiLens server running build $running has held it since ${started:-an unknown time} (process $holder)." >&2
+      else
+        echo "A QualiLens server has held it since ${started:-an unknown time} (process $holder); it predates build stamps, so it is older than this folder." >&2
+      fi
+      if [ "$running" = "$here" ]; then
+        echo "That is this folder's build ($here): open http://127.0.0.1:$PORT — or stop it first with:" >&2
+      else
+        echo "This folder holds build $here. A running server keeps the code it started with, so stop it and run ./run.sh again:" >&2
+      fi
+      echo "  kill $holder" >&2
+      ;;
+    *)
+      echo "Another program holds it (process $holder: ${cmd:0:80})." >&2
+      echo "Stop it, or set QUALILENS_PORT to another port." >&2
+      ;;
+  esac
+}
+
+if command -v lsof >/dev/null 2>&1; then
+  HOLDER="$(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | head -1)"
+  if [ -n "$HOLDER" ]; then
+    port_in_use_report "$HOLDER"
+    exit 1
+  fi
+fi
+
 # ---- Python environment ----
 
 # A venv is tied to the machine AND path that created it. Probe it by actually
@@ -105,13 +155,6 @@ if [ ! -f frontend/dist/index.html ]; then
 fi
 
 # ---- Launch ----
-
-PORT="${QUALILENS_PORT:-8765}"
-if command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "Port $PORT is already in use (is QualiLens already running?)." >&2
-  echo "Open http://127.0.0.1:$PORT — or set QUALILENS_PORT to another port." >&2
-  exit 1
-fi
 
 open_browser() {
   if command -v open >/dev/null 2>&1; then open "$1"        # macOS

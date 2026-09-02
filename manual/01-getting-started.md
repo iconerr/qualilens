@@ -44,11 +44,13 @@ The first run creates a Python environment, installs the backend dependencies, a
 QualiLens running at http://127.0.0.1:8765  (Ctrl-C to stop)
 ```
 
-Stop the app with Ctrl-C in the terminal where it is running. Closing the browser tab does not stop it. Closing the browser during a long analysis stage is also safe, because the run continues in the background and its state is saved as the run proceeds.
+Stop the app with Ctrl-C in the terminal where it is running. Closing the browser tab does not stop it, and neither does minimising or forgetting the terminal window: the server keeps running until you stop it or the computer restarts. Closing the browser during a long analysis stage is also safe, because the run continues in the background and its state is saved as the run proceeds.
+
+Stop the app before updating it, and after an update stop any older copy that is still running: a server keeps the code it loaded when it started, so an old one left running keeps serving the old app while the folder holds the new one. The launcher notices this and says which build holds the port, when it started, and how to stop it; see [Troubleshooting](13-troubleshooting.md#starting-the-app).
 
 ### Changing the port
 
-The app listens on port 8765. The launcher refuses to start and tells you so if something else on your computer already holds that port. Either close the other process, or start QualiLens on a different port.
+The app listens on port 8765. The launcher checks the port first, before any other work, and refuses to start if something else on your computer already holds it — naming the process, and, when it is a QualiLens server, the build it is running. Either stop that process, or start QualiLens on a different port.
 
 ```bash
 QUALILENS_PORT=8790 ./run.sh
@@ -56,7 +58,7 @@ QUALILENS_PORT=8790 ./run.sh
 
 The address is bound to 127.0.0.1. QualiLens is therefore reachable only from the computer it runs on, and nothing on your network can open it.
 
-Your browser is the one thing on that computer that could. A web page you have open in another tab can send requests to any local port, and a page that has been made to resolve to 127.0.0.1 could try to read from it. QualiLens closes both routes. The server answers only when the request names `127.0.0.1` or `localhost` as its host, refuses any request a browser marks as coming from another site, and requires a session token on every API call. The token is minted fresh each time the app starts and written into the page the app serves, so only pages QualiLens itself served carry it. You will see the token at work in one situation only: if the app is restarted while a tab stays open, the tab's next action fails with a message asking you to reload the page. Reload, and carry on.
+Your browser is the one thing on that computer that could. A web page you have open in another tab can send requests to any local port, and a page that has been made to resolve to 127.0.0.1 could try to read from it. QualiLens closes both routes. The server answers only when the request names `127.0.0.1` or `localhost` as its host, refuses any request a browser marks as coming from another site, and requires a session token on every API call. The token is minted fresh each time the app starts and written into the page the app serves, so only pages QualiLens itself served carry it. You will notice the token in one situation only: if the app is restarted while a tab stays open, the tab's next action is refused and the page reloads itself once to fetch the new token. You see a brief reload, and carry on.
 
 The app runs on macOS and Linux; on Windows, use WSL.
 
@@ -128,8 +130,25 @@ If you had edited `backend/app/models.json` by hand, the update replaces it;
 your copy is saved beside your data as `models.json.previous` so you can
 reapply the edits.
 
-When the update is applied the app stops itself. Start it again with
-`./run.sh`, which also installs any new dependencies the update brought.
+When the update is applied the app stops itself and the page changes to
+**Update installed**, which asks you to start the app again — in the Terminal
+window where it was running, press ↑ then Return, or run `./run.sh` in the
+QualiLens folder; the launcher also installs any new dependencies the update
+brought. The page then reconnects on its own: it checks every two seconds
+for the new build and, when it answers, reloads itself onto it. There is
+nothing to close or reopen. If a minute passes without a reconnection, the
+page says what to check, and the most common cause is an older copy of the
+app still holding the port, which the launcher reports by name with the
+command to stop it.
+
+A related courtesy applies at any restart, not only after an update. A tab
+left open across a restart holds a session token the new server does not
+know; the first thing it asks of the server is refused, and the page reloads
+itself once to fetch the new token rather than showing you the refusal.
+Browsers that restore tabs from days ago behave the same way. Only when a
+reload does not help — because the app is not running — does the message
+`Missing or stale session token` appear, and then the remedy is to start
+the app.
 
 Replacing the folder by hand remains possible but is the dangerous path:
 `backend/data/` inside the old folder holds everything you have made. If you
@@ -142,6 +161,7 @@ old one.
 |---|---|
 | `backend/data/qualilens.db` | Every project, source text, code, excerpt, checkpoint decision, event, and report. This one file is your analysis. |
 | `backend/data/uploads/` | The original files you uploaded, each stored under its source identifier plus the original filename. |
+| `backend/data/uploads/checkpoints/` | Spreadsheets uploaded at checkpoints, kept so the audit trail can name the worksheet a resolution came from. |
 | `backend/.venv/` | The Python environment the launcher builds. Safe to delete, and it will be rebuilt on the next launch. |
 | `frontend/dist/` | The built interface. Safe to delete, and it will be rebuilt on the next launch. |
 
@@ -184,7 +204,7 @@ Name the version of the software alongside the citation in your methods section,
 The test suite runs against scratch databases with a mocked AI model. It involves no API keys and no spend, and it never touches your real project database.
 
 ```bash
-cd backend && .venv/bin/python -m pytest tests/test_fixes.py tests/test_hardening.py -q \
+cd backend && .venv/bin/python -m pytest tests/test_fixes.py tests/test_hardening.py tests/test_sheets.py -q \
   && .venv/bin/python tests/e2e_grounded_theory.py \
   && .venv/bin/python tests/e2e_methods.py
 ```

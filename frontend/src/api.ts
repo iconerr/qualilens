@@ -53,6 +53,15 @@ export interface CodedSource {
   spans: CodedSpan[]; unlocated: CodedSpan[];
   codes: { id: string; name: string; stage: string; parent_name: string | null; count: number; unlocated_count: number }[];
 }
+export interface SheetImport {
+  kind: 'code_review' | 'extraction_review'
+  decisions?: { id: string; action: string; name?: string; definition?: string; merge_into?: string; notes?: string }[]
+  additions?: { name: string; definition: string; notes?: string }[]
+  rows?: ({ source_id: string; exclude?: boolean; notes?: string } & Record<string, unknown>)[]
+  ignored: { row: number; id?: string; reason: string }[]
+  summary: Record<string, number>
+  imported_from: { filename: string; sha256: string; stored: string }
+}
 export interface Run extends RunSummary {
   project_id: string; project_name: string;
   stages: { name: string; label: string; kind: string }[];
@@ -73,9 +82,30 @@ function withToken(init?: RequestInit): RequestInit {
   return { ...init, headers, credentials: 'same-origin' }
 }
 
+// A 401 from our own server means this page holds a token the server no
+// longer knows: the app was restarted (an update, a relaunch) and the page
+// survived it — Safari restores tabs with their old script state for days.
+// The only remedy is the one the old error message asked the human for, so
+// do it for them: reload once, which fetches index.html and the new token.
+// The guard stops a loop if reloading did not help (then the error shows).
+const STALE_KEY = 'ql-stale-reload'
+function reloadIfStaleToken(res: Response): boolean {
+  if (res.status !== 401 || typeof window === 'undefined') return false
+  try {
+    const last = Number(sessionStorage.getItem(STALE_KEY) ?? 0)
+    if (Date.now() - last < 15000) return false
+    sessionStorage.setItem(STALE_KEY, String(Date.now()))
+  } catch { /* storage unavailable: still reload once per page life */ }
+  window.location.reload()
+  return true
+}
+
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, withToken(init))
-  if (!res.ok) throw new Error(await errText(res))
+  if (!res.ok) {
+    if (reloadIfStaleToken(res)) return new Promise<T>(() => { /* the page is reloading */ })
+    throw new Error(await errText(res))
+  }
   return res.json()
 }
 
@@ -111,7 +141,10 @@ export const api = {
     fd.append('file', file)
     fd.append('grp', grp)
     const res = await fetch(`/api/projects/${projectId}/sources`, withToken({ method: 'POST', body: fd }))
-    if (!res.ok) throw new Error(await errText(res))
+    if (!res.ok) {
+      if (reloadIfStaleToken(res)) return new Promise<Source>(() => { /* reloading */ })
+      throw new Error(await errText(res))
+    }
     return res.json() as Promise<Source>
   },
   deleteSource: (id: string) => j(`/api/sources/${id}`, { method: 'DELETE' }),
@@ -146,12 +179,28 @@ export const api = {
     const fd = new FormData()
     fd.append('file', file)
     const res = await fetch('/api/settings/update', withToken({ method: 'POST', body: fd }))
-    if (!res.ok) throw new Error(await errText(res))
+    if (!res.ok) {
+      if (reloadIfStaleToken(res)) return new Promise<never>(() => { /* reloading */ })
+      throw new Error(await errText(res))
+    }
     return res.json() as Promise<{ ok: boolean; from_version: string; to_version: string;
       files_installed: number; backup: string; restart_required?: boolean; note?: string }>
   },
   codedSource: (runId: string, sourceId: string) =>
     j<CodedSource>(`/api/runs/${runId}/sources/${sourceId}/coded`),
+  // a checkpoint as a spreadsheet: the download is a plain link (see
+  // sheetUrl); the upload returns the decisions the screen then stages
+  sheetUrl: (runId: string, cpId: string) => `/api/runs/${runId}/checkpoints/${cpId}/sheet.xlsx`,
+  importSheet: async (runId: string, cpId: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch(`/api/runs/${runId}/checkpoints/${cpId}/sheet`, withToken({ method: 'POST', body: fd }))
+    if (!res.ok) {
+      if (reloadIfStaleToken(res)) return new Promise<SheetImport>(() => { /* reloading */ })
+      throw new Error(await errText(res))
+    }
+    return res.json() as Promise<SheetImport>
+  },
   checkUpdates: () =>
     j<{ ok: boolean; error?: string; current?: string; tag?: string; build?: string;
         newer?: boolean; has_bundle?: boolean; release_url?: string; note?: string }>(

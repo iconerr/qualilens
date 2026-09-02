@@ -49,9 +49,9 @@ if [ "$need_build" = 1 ]; then
     echo "Node.js 18 or newer is required (found $(node -v 2>/dev/null || echo 'none'))." >&2; exit 1
   fi
   echo "Building the interface (sources changed since the last build)…"
-  if [ ! -d frontend/node_modules ]; then
-    (cd frontend && npm install --loglevel=warn) || { echo "JavaScript dependency installation failed." >&2; exit 1; }
-  fi
+  # npm install is a no-op in a second when nothing changed, and the only
+  # correct move when package.json gained a dependency (the bundled fonts did)
+  (cd frontend && npm install --loglevel=warn --no-fund --no-audit) || { echo "JavaScript dependency installation failed." >&2; exit 1; }
   (cd frontend && npm run build) || { echo "Frontend build failed." >&2; exit 1; }
 fi
 
@@ -125,12 +125,6 @@ fi
 
 # ---- sign ----
 KEY="${QUALILENS_SIGNING_KEY:-$HOME/.qualilens/release-signing.key}"
-if [ ! -f "$KEY" ] && [ -f devnotes/release-signing.key ]; then
-  # transitional: a key still inside the working folder. Move it out:
-  #   mkdir -p ~/.qualilens && mv devnotes/release-signing.key ~/.qualilens/ && chmod 600 ~/.qualilens/release-signing.key
-  KEY="devnotes/release-signing.key"
-  echo "NOTE: signing with a key inside the working folder; move it to ~/.qualilens/ (see devnotes/RELEASING.md)." >&2
-fi
 SIGNED=0
 if [ -f "$KEY" ]; then
   if "$PY" -c 'import cryptography' >/dev/null 2>&1; then

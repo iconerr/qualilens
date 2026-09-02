@@ -9,8 +9,28 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
-## Unreleased
+## 1.6.0 — 2026-09-02
 
+- A checkpoint can be worked in a spreadsheet. **Download as spreadsheet**
+  saves the code review (or the literature-synthesis extraction table) as
+  an `.xlsx` workbook with a column for your action, one for a merge
+  target, and one for notes; **Upload spreadsheet** reads it back and loads
+  its decisions into the review screen for you to check before approving.
+  Rows are matched by id, an unknown row is listed rather than guessed at,
+  a code with no row is unchanged, and a workbook from another checkpoint is
+  refused. Notes enter the audit trail beside the decisions they explain,
+  and the workbook itself is kept with the run and named in the audit
+  export. Definition boxes on the review screen now grow with their text.
+- A quieter interface: a cool near-white ground, one ink for text and the
+  primary action, colour kept for done, waiting, and wrong. The app now
+  ships its own type — Inter for the interface and JetBrains Mono for model
+  ids, build stamps, and the audit log — so it looks the same on Mac,
+  Windows, and Linux, and fetches nothing to do so. Figures follow the same
+  palette; the thematic map's connectors no longer cross code boxes.
+- After an update, the page waits for the new build and reconnects on its
+  own once you have started the app again; nothing to close or reopen. A
+  tab left open across any restart now reloads itself to pick up the new
+  session, instead of showing a token error.
 - The launcher checks the port before any other work and, when it is taken,
   says what holds it: for a QualiLens server, the build it is running, when
   it started, and the exact command to stop it. A server left running in a

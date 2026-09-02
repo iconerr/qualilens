@@ -24,7 +24,7 @@ Open an issue first for anything larger than a typo, so we can agree on the
 shape before you write code. For pull requests:
 
 - Keep the test suite green with no API spend:
-  `cd backend && .venv/bin/python -m pytest tests/test_fixes.py tests/test_hardening.py -q`, then
+  `cd backend && .venv/bin/python -m pytest tests/test_fixes.py tests/test_hardening.py tests/test_sheets.py -q`, then
   `.venv/bin/python tests/e2e_grounded_theory.py` and
   `.venv/bin/python tests/e2e_methods.py`. New behavior needs new mocked
   tests; nothing in `backend/tests/` may call a real provider.

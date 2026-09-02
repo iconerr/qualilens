@@ -5,11 +5,14 @@
 // the grounded theory model, the thematic map, a code-frequency chart, and a
 // framework-matrix heatmap. Each renders nothing when its data is absent.
 
-const INK = '#22252a'
-const MUTED = '#6b7280'
-const ACCENT = '#1f3a5f'
-const LINE = '#c9c7bf'
-const PALETTE = [ACCENT, '#d9a520', '#5a8f6f', '#a1657c', '#7a6fb0', '#b08948']
+// Mirrors the tokens in styles.css (SVG cannot read CSS variables when the
+// figure is exported). Ink carries the structure; the categorical palette is
+// for group comparisons only, and is kept quiet.
+const INK = '#16171a'
+const MUTED = '#5c5f66'
+const ACCENT = '#2a2c32'
+const LINE = '#c4c6cd'
+const PALETTE = [ACCENT, '#c9971c', '#4f8a6a', '#9a6079', '#6f68a8', '#a3823f']
 
 function wrap(s: string, width: number, maxLines = 3): string[] {
   // hard-break tokens longer than the width (e.g. long filenames)
@@ -138,11 +141,11 @@ export function GTModel({ themes, stats }: { themes: any[]; stats: any }) {
     return (
       <g>
         <rect x={x - BOX_W / 2} y={y - BOX_H / 2} width={BOX_W} height={BOX_H}
-          rx={10} fill="white" stroke={LINE} strokeWidth={1.3} />
+          rx={6} fill="white" stroke={LINE} strokeWidth={1.3} />
         {rel ? (
           <>
             <Lines x={x} y={y - 26} lines={wrap(t.name, 30, 3)} size={13}
-              fill={INK} weight={700} />
+              fill={INK} weight={600} />
             <line x1={x - 130} y1={y + 12} x2={x + 130} y2={y + 12}
               stroke={LINE} strokeWidth={1} />
             <g fontStyle="italic">
@@ -151,7 +154,7 @@ export function GTModel({ themes, stats }: { themes: any[]; stats: any }) {
           </>
         ) : (
           <Lines x={x} y={y} lines={wrap(t.name, 30, 3)} size={13}
-            fill={INK} weight={700} />
+            fill={INK} weight={600} />
         )}
       </g>
     )
@@ -191,11 +194,11 @@ export function GTModel({ themes, stats }: { themes: any[]; stats: any }) {
         <Box key={`rb-${t.id}`} x={rightX()} y={colYs(right.length)[i]} t={t} />
       ))}
       <rect x={coreL} y={midY - CORE_H / 2} width={CORE_W} height={CORE_H}
-        rx={14} fill={ACCENT} />
+        rx={6} fill={ACCENT} />
       <text x={W / 2} y={midY - CORE_H / 2 + 30} textAnchor="middle"
         fontSize={11} fill="white" opacity={0.75}>Core category</text>
       <Lines x={W / 2} y={midY + 10} lines={wrap(core, 24, 4)} size={15}
-        fill="white" weight={700} />
+        fill="white" weight={600} />
       {overflow > 0 && (
         <text x={W - 8} y={H - 8} textAnchor="end" fontSize={11} fill={MUTED}
           fontStyle="italic">+{overflow} further categor{overflow === 1 ? 'y' : 'ies'} not shown</text>
@@ -225,12 +228,16 @@ export function ThematicMap({ themes }: { themes: any[] }) {
         const kids = t.children.slice(0, MAX_CODES)
         return (
           <g key={t.id}>
+            {/* one spine, drawn before the boxes so no connector crosses a box */}
+            {kids.length > 0 && (
+              <line x1={x} y1={78} x2={x} y2={130 + (kids.length - 1) * 58}
+                stroke={LINE} strokeWidth={1.2} />
+            )}
             {kids.map((k: any, j: number) => {
               const y = 130 + j * 58
               return (
                 <g key={k.id}>
-                  <line x1={x} y1={78} x2={x} y2={y} stroke={LINE} strokeWidth={1.2} />
-                  <rect x={x - 92} y={y} width={184} height={44} rx={8}
+                  <rect x={x - 92} y={y} width={184} height={44} rx={6}
                     fill="white" stroke={LINE} strokeWidth={1.1} />
                   <Lines x={x} y={y + 25}
                     lines={wrap(`${k.name} (${(k.excerpts ?? []).length})`, 26, 2)}
@@ -243,9 +250,9 @@ export function ThematicMap({ themes }: { themes: any[] }) {
                 lines={[`+${t.children.length - MAX_CODES} more codes`]}
                 size={11} fill={MUTED} />
             )}
-            <rect x={x - 96} y={16} width={192} height={62} rx={10} fill={ACCENT} />
+            <rect x={x - 96} y={16} width={192} height={62} rx={6} fill={ACCENT} />
             <Lines x={x} y={50} lines={wrap(t.name, 24, 3)} size={13}
-              fill="white" weight={700} />
+              fill="white" weight={600} />
           </g>
         )
       })}
@@ -346,11 +353,11 @@ export function MatrixHeatmap({ stats, rowNoun = 'source', colNoun = 'code' }:
   const W = LABEL + codes.length * CELL + 16
   const H = HEAD + rows.length * 34 + 8 + (hiddenNote ? 20 : 0)
   const shade = (v: number) => {
-    if (!v) return '#f6f5f1'
+    if (!v) return '#f4f4f6'
     const t = v / vmax
-    // white-to-accent ramp
+    // light-grey-to-ink ramp
     const mix = (a: number, b: number) => Math.round(a + (b - a) * t)
-    return `rgb(${mix(232, 31)}, ${mix(238, 58)}, ${mix(246, 95)})`
+    return `rgb(${mix(228, 42)}, ${mix(229, 44)}, ${mix(233, 50)})`
   }
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: W }}

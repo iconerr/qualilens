@@ -81,7 +81,11 @@ export default function App() {
           QualiLens<small>You. AI. Done.</small>
         </Link>
         <nav>
-          <a href="/manual.html" target="_blank" rel="noopener">Manual</a>
+          {/* the one link that leaves this tab says so, with the same mark
+              the rest of the app uses for links that open elsewhere */}
+          <a href="/manual.html" target="_blank" rel="noopener"
+            title="Opens the manual in a new tab; your work here stays where it is">
+            Manual<span className="ext" aria-hidden="true">↗</span></a>
           <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>Settings</NavLink>
           <NavLink to="/new" className="nav-primary">New analysis</NavLink>
         </nav>

@@ -730,6 +730,7 @@ def test_package_sh_signs_and_ships_a_fresh_build(tmp_path):
     key = tmp_path / "test.key"
     pub = signing.keygen(key)
     env = dict(os.environ, QUALILENS_SIGNING_KEY=str(key), QUALILENS_PYTHON=sys.executable)
+    # (package.sh re-stamps VERSION in the tree; conftest restores it after every test)
     r = subprocess.run(["bash", str(root / "package.sh"), str(tmp_path / "b.zip")],
                        cwd=tmp_path, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
@@ -750,6 +751,112 @@ def test_package_sh_signs_and_ships_a_fresh_build(tmp_path):
         m = _re.search(r'<meta name="ql-src" content="([0-9a-f]+)"', built)
         assert m, "dist/index.html must carry the source fingerprint"
         assert m.group(1) == frontend_source_fingerprint(stage / "QualiLens" / "frontend")
+
+
+# ====================================================================
+# Launcher: a server remembers the build it started with, and run.sh names
+# whoever holds the port (2026-09-02: a pre-audit server left running in a
+# forgotten Terminal tab kept serving old code for days after the fixes
+# landed in the folder — run.sh only said "is QualiLens already running?").
+# ====================================================================
+
+def test_index_and_meta_carry_the_running_build():
+    from app import main as main_mod
+    assert main_mod.STARTED_BUILD and main_mod.STARTED_BUILD != "unknown"
+    assert client.get("/api/meta").json()["running_build"] == main_mod.STARTED_BUILD
+    if not main_mod.FRONTEND_DIST.exists():
+        pytest.skip("no built frontend beside the backend")
+    r = stranger.get("/")          # no token needed: run.sh reads this page
+    assert f'<meta name="ql-build" content="{main_mod.STARTED_BUILD}">' in r.text
+
+
+_STANDIN = r"""
+import sys, http.server, socketserver
+body = sys.argv[4].encode()
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200); self.send_header("Content-Type", "text/html")
+        self.end_headers(); self.wfile.write(body)
+    def log_message(self, *a): pass
+socketserver.TCPServer.allow_reuse_address = True
+with socketserver.TCPServer(("127.0.0.1", int(sys.argv[1])), H) as s:
+    s.serve_forever()
+"""
+
+
+def _standin_server(port, html):
+    """A tiny HTTP server whose command line reads '… uvicorn app.main:app …'
+    the way the real launch does, so run.sh's holder detection sees it. Never
+    the real app: nothing here touches the database."""
+    import shutil, socket, time
+    p = subprocess.Popen([sys.executable, "-c", _STANDIN, str(port), "uvicorn", "app.main:app", html],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(100):
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                return p
+        except OSError:
+            time.sleep(0.05)
+    p.kill()
+    raise RuntimeError("stand-in server did not start")
+
+
+@pytest.mark.parametrize("stamp, expect, absent", [
+    ("__here__", "That is this folder's build", "stop it and run ./run.sh again"),
+    ("2026.01.01-0000", "running build 2026.01.01-0000", "That is this folder's build"),
+    (None, "predates build stamps", "That is this folder's build"),
+])
+def test_run_sh_names_the_process_holding_the_port(stamp, expect, absent):
+    import shutil, socket
+    if not (shutil.which("lsof") and shutil.which("curl")):
+        pytest.skip("run.sh's port report needs lsof and curl")
+    root = pathlib.Path(__file__).resolve().parent.parent.parent
+    here = (root / "VERSION").read_text().strip()
+    if stamp == "__here__":
+        stamp = here
+    html = "<html><head>" + (f'<meta name="ql-build" content="{stamp}">' if stamp else "") + "</head></html>"
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]
+    p = _standin_server(port, html)
+    try:
+        r = subprocess.run(["bash", str(root / "run.sh")], cwd=root, capture_output=True, text=True,
+                           env=dict(os.environ, QUALILENS_PORT=str(port)), timeout=60)
+    finally:
+        p.kill(); p.wait()
+    assert r.returncode == 1, r.stderr
+    assert f"Port {port} is already in use." in r.stderr
+    assert expect in r.stderr, r.stderr
+    assert absent not in r.stderr, r.stderr
+    assert f"kill {p.pid}" in r.stderr, r.stderr
+    assert f"process {p.pid}" in r.stderr
+    assert "QualiLens running at" not in r.stdout    # it never tried to launch
+
+
+def test_run_sh_names_a_foreign_process_holding_the_port():
+    import shutil, socket, time
+    if not shutil.which("lsof"):
+        pytest.skip("run.sh's port report needs lsof")
+    root = pathlib.Path(__file__).resolve().parent.parent.parent
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]
+    p = subprocess.Popen([sys.executable, "-c",
+                          f"import socketserver,http.server; socketserver.TCPServer.allow_reuse_address=True; "
+                          f"socketserver.TCPServer(('127.0.0.1',{port}), http.server.BaseHTTPRequestHandler).serve_forever()"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(100):
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                    break
+            except OSError:
+                time.sleep(0.05)
+        r = subprocess.run(["bash", str(root / "run.sh")], cwd=root, capture_output=True, text=True,
+                           env=dict(os.environ, QUALILENS_PORT=str(port)), timeout=60)
+    finally:
+        p.kill(); p.wait()
+    assert r.returncode == 1
+    assert "Another program holds it" in r.stderr and f"process {p.pid}" in r.stderr
+    assert "QUALILENS_PORT" in r.stderr
 
 
 def test_frontend_fingerprint_matches_between_python_and_build():

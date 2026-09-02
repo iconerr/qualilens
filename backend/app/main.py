@@ -25,6 +25,7 @@ import os
 import re
 import secrets
 import threading
+import time
 from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import quote, urlsplit
@@ -33,7 +34,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import db, ingestion, llm, pipeline, report_docx, transcription, update
+from . import checkpoint_sheets, db, ingestion, llm, pipeline, report_docx, transcription, update
 from .methods import METHODS
 
 app = FastAPI(title="QualiLens")
@@ -48,6 +49,13 @@ SESSION_TOKEN = (os.environ.get("QUALILENS_TOKEN") or "").strip() or secrets.tok
 TOKEN_HEADER = "x-qualilens-token"
 TOKEN_COOKIE = "qualilens_token"
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+# The build this process loaded. A running server keeps the code it started
+# with, however the folder changes afterwards, so this is read once, here —
+# not from disk per request like /api/meta's "version", which is what the
+# updater compares against the release. It is stamped into index.html so
+# ./run.sh can name the build holding the port without a token.
+STARTED_BUILD = update._current_version()
 
 
 def _hostname(value: str) -> str:
@@ -127,7 +135,8 @@ def get_meta():
             for pid, info in llm.catalog().items()
         ],
         "ffmpeg": transcription.ffmpeg_available(),
-        "version": update._current_version(),
+        "version": update._current_version(),   # the folder, as the updater sees it
+        "running_build": STARTED_BUILD,          # this process
         "data_dir": str(db.DATA_DIR),
         "synced_folder": db.synced_folder_hint(),
     }
@@ -689,6 +698,111 @@ def resolve_cp(run_id: str, checkpoint_id: str, body: dict):
     return {"ok": True}
 
 
+# ---------------- a checkpoint as a spreadsheet ----------------
+
+def _pending_checkpoint(run_id: str, checkpoint_id: str) -> tuple:
+    conn = db.get_conn()
+    cp = conn.execute("SELECT * FROM checkpoints WHERE id=? AND run_id=?",
+                      (checkpoint_id, run_id)).fetchone()
+    if not cp:
+        _err(404, "Checkpoint not found")
+    if cp["status"] != "pending":
+        _err(400, "This checkpoint has already been resolved.")
+    payload = json.loads(cp["payload"] or "{}")
+    kind = payload.get("kind")
+    if kind not in checkpoint_sheets.SUPPORTED:
+        _err(400, "This checkpoint has no spreadsheet form.")
+    run = conn.execute("SELECT project_id FROM runs WHERE id=?", (run_id,)).fetchone()
+    project = conn.execute("SELECT name FROM projects WHERE id=?", (run["project_id"],)).fetchone()
+    return cp, payload, kind, (project["name"] if project else "")
+
+
+def _sheet_excerpts(run_id: str, payload: dict, kind: str) -> list:
+    """Reference rows for the read-only sheet: every excerpt behind the items
+    under review (for a grouping stage, the evidence sits on child codes)."""
+    conn = db.get_conn()
+    if kind == "code_review":
+        ids = [it["id"] for it in payload.get("items") or [] if it.get("id")]
+        if not ids:
+            return []
+        q = ",".join("?" * len(ids))
+        rows = conn.execute(
+            f"SELECT e.quote, e.memo, s.filename, c.name AS via, c.id AS cid, c.parent_id "
+            f"FROM excerpts e JOIN codes c ON c.id = e.code_id JOIN sources s ON s.id = e.source_id "
+            f"WHERE e.run_id=? AND c.status='active' AND (c.id IN ({q}) OR c.parent_id IN ({q})) "
+            f"ORDER BY c.name, s.filename",
+            (run_id, *ids, *ids)).fetchall()
+        names = {it["id"]: it.get("name", "") for it in payload.get("items") or []}
+        out = []
+        for r in rows:
+            top = r["cid"] if r["cid"] in names else r["parent_id"]
+            out.append({"code_id": top, "code": names.get(top, ""),
+                        "via": r["via"] if r["cid"] != top else "",
+                        "source": r["filename"], "quote": r["quote"], "memo": r["memo"]})
+        return out
+    # extraction_review: quotes per paper and field, from the extraction codes
+    rows = conn.execute(
+        "SELECT e.quote, e.memo, e.source_id, c.name AS field FROM excerpts e "
+        "JOIN codes c ON c.id = e.code_id WHERE e.run_id=? AND c.stage='extract_field' "
+        "ORDER BY e.source_id, c.name", (run_id,)).fetchall()
+    label = {r["source_id"]: r.get("label", "") for r in payload.get("rows") or []}
+    return [{"source_id": r["source_id"], "paper": label.get(r["source_id"], ""),
+             "field": r["field"], "quote": r["quote"], "memo": r["memo"]} for r in rows]
+
+
+@app.get("/api/runs/{run_id}/checkpoints/{checkpoint_id}/sheet.xlsx")
+def checkpoint_sheet(run_id: str, checkpoint_id: str):
+    """The pending checkpoint as an .xlsx workbook to edit anywhere and upload
+    again — see checkpoint_sheets for the rules."""
+    cp, payload, kind, project_name = _pending_checkpoint(run_id, checkpoint_id)
+    meta = {"project_name": project_name, "run_id": run_id, "checkpoint_id": checkpoint_id,
+            "title": cp["title"], "stage": cp["stage"],
+            "exported_at": time.strftime("%Y-%m-%d %H:%M")}
+    try:
+        data = checkpoint_sheets.export_workbook(kind, payload, meta,
+                                                excerpts=_sheet_excerpts(run_id, payload, kind))
+    except checkpoint_sheets.SheetError as e:
+        _err(400, str(e))
+    fname = checkpoint_sheets.safe_filename(project_name, cp["stage"], time.strftime("%Y-%m-%d"))
+    return Response(content=data,
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+@app.post("/api/runs/{run_id}/checkpoints/{checkpoint_id}/sheet")
+async def checkpoint_sheet_import(run_id: str, checkpoint_id: str, file: UploadFile = File(...)):
+    """Parse an edited workbook into the decisions the review screen stages.
+    Nothing is applied here: the screen loads them, the researcher checks
+    them, and Approve & continue resolves the checkpoint as always. The file
+    is kept beside the run's uploads and named in the audit trail."""
+    cp, payload, kind, _ = _pending_checkpoint(run_id, checkpoint_id)
+    data = bytearray()
+    while True:
+        chunk = await file.read(1 << 20)
+        if not chunk:
+            break
+        data.extend(chunk)
+        if len(data) > checkpoint_sheets.MAX_BYTES:
+            _err(413, "That file is larger than any checkpoint workbook; refusing.")
+    try:
+        parsed = checkpoint_sheets.parse_workbook(kind, payload, bytes(data), checkpoint_id)
+    except checkpoint_sheets.SheetError as e:
+        _err(400, str(e))
+    keep = db.UPLOADS_DIR / "checkpoints"
+    keep.mkdir(parents=True, exist_ok=True)
+    stored = keep / f"{checkpoint_id}-{parsed['sha256'][:8]}.xlsx"
+    stored.write_bytes(bytes(data))
+    original = re.sub(r"[^\w .()\-\[\]]+", "_", Path(file.filename or "sheet.xlsx").name)[:120]
+    summary = parsed["summary"]
+    db.log_event(run_id, "info",
+                 f"Spreadsheet '{original}' loaded for checkpoint '{cp['title']}': "
+                 + ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in summary.items() if v),
+                 {"checkpoint_id": checkpoint_id, "sha256": parsed["sha256"], "stored": stored.name,
+                  "summary": summary, "ignored": parsed["ignored"]})
+    parsed["imported_from"] = {"filename": original, "sha256": parsed["sha256"], "stored": stored.name}
+    return parsed
+
+
 @app.post("/api/runs/{run_id}/branch")
 def branch(run_id: str, body: dict):
     """Revisit a review: a new run carrying everything up to that checkpoint,
@@ -872,7 +986,8 @@ if FRONTEND_DIST.exists():
         restart (new token) is picked up by the next page load. The cookie
         lets plain <a href> downloads authenticate without a header."""
         html = (_DIST_BASE / "index.html").read_text(encoding="utf-8")
-        meta = f'<meta name="ql-token" content="{SESSION_TOKEN}">'
+        meta = (f'<meta name="ql-token" content="{SESSION_TOKEN}">'
+                f'<meta name="ql-build" content="{STARTED_BUILD}">')
         html = html.replace("</head>", meta + "</head>", 1) if "</head>" in html else meta + html
         resp = HTMLResponse(html, headers={"Cache-Control": "no-store"})
         resp.set_cookie(TOKEN_COOKIE, SESSION_TOKEN, httponly=True, samesite="strict", path="/")

@@ -356,7 +356,7 @@ export default function Wizard() {
       {step === 4 && estimate && method && (
         <div className="card">
           <h3>Ready to run: {name}</h3>
-          <p className="desc">{method.label} · {provider}/{model || providerMeta?.default_model} · {estimate.n_sources} sources
+          <p className="desc">{method.label} · <span className="mono">{provider}/{model || providerMeta?.default_model}</span> · {estimate.n_sources} sources
             ({Math.round(estimate.total_chars / 1000)}k characters)</p>
           <div className="info-box">
             Estimated cost: <b>${estimate.est_cost_usd}</b> (~{Math.round(estimate.est_input_tokens / 1000)}k input /

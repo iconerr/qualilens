@@ -25,7 +25,7 @@ jobs:
       - name: Build the manual
         run: python3 manual/build_manual.py
       - name: Unit and regression tests
-        run: cd backend && python -m pytest tests/test_fixes.py tests/test_hardening.py -q
+        run: cd backend && python -m pytest tests/test_fixes.py tests/test_hardening.py tests/test_sheets.py -q
       - name: Grounded theory end to end (mocked)
         run: cd backend && python tests/e2e_grounded_theory.py
       - name: All methods end to end (mocked)

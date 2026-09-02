@@ -391,6 +391,11 @@ def cp_extraction_apply(ctx, resolution):
                          f"Skipped extraction edit for unknown source {sid}", row)
             continue
         edited = set(ex.get("user_edited", []))
+        note = row.get("notes")
+        if isinstance(note, str) and note.strip():
+            db.log_event(ctx.run_id, "user_decision",
+                         f"Researcher note on {_label_of(ctx, sid)}: {note.strip()}",
+                         {"source_id": sid, "notes": note.strip()})
         for key in ("label", "citation", "cited_work", *FIELD_KEYS):
             if key in row and isinstance(row[key], str):
                 value = row[key]

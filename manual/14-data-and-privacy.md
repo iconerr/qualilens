@@ -54,6 +54,7 @@ The one thing QualiLens guarantees is that your data go to that provider and to 
 |---|---|---|
 | `backend/data/qualilens.db` | Every project, the full text of every source, every code, every excerpt with its quote, every checkpoint decision, every logged event, and every report | Holds your raw data in full |
 | `backend/data/uploads/` | The original documents and recordings you uploaded | Holds your raw data in full |
+| `backend/data/uploads/checkpoints/` | Spreadsheets you uploaded at checkpoints, one per upload, named by checkpoint and content hash | Holds your codebook decisions and notes as you wrote them |
 
 `backend/data` is the default; `QUALILENS_DATA_DIR` moves both to a folder of your choosing, and the Settings screen names the folder in use.
 

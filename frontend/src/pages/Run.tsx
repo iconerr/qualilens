@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, statusLabel, type Checkpoint, type Run } from '../api'
+import { api, statusLabel, type Checkpoint, type Run, type SheetImport } from '../api'
 
 const TERMINAL = new Set(['completed', 'cancelled', 'failed'])
 
@@ -185,15 +185,107 @@ export default function RunPage() {
 
 // ---------------- checkpoint review ----------------
 
-type Edits = { name?: string; definition?: string }
+type Edits = { name?: string; definition?: string; notes?: string }
 type Action = { kind: 'keep' | 'merge' | 'delete'; merge_into?: string }
+
+// What an uploaded spreadsheet left behind: shown above the list until the
+// checkpoint is approved, and sent with the resolution so the audit trail
+// names the worksheet the decisions came from.
+type Imported = { imported_from: SheetImport['imported_from']; summary: Record<string, number>;
+                  ignored: SheetImport['ignored'] }
+
+const SUMMARY_WORDS: Record<string, string> = {
+  renamed: 'renamed', redefined: 'redefined', merged: 'merged', deleted: 'deleted', added: 'added',
+  edited: 'papers edited', fields_edited: 'fields edited', excluded: 'excluded', reincluded: 're-included',
+  with_notes: 'with notes',
+}
+
+// A definition box that grows with its text: a single line for a short
+// definition, as many as it needs for a long one, never a scrollbar.
+function GrowingText({ value, onChange, placeholder, disabled }:
+  { value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean }) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
+  return (
+    <textarea ref={ref} value={value} disabled={disabled} placeholder={placeholder}
+      className="small growing" rows={1} onChange={ev => onChange(ev.target.value)} />
+  )
+}
+
+function summaryLine(s: Record<string, number>): string {
+  const parts = Object.entries(SUMMARY_WORDS)
+    .filter(([k]) => (s[k] ?? 0) > 0)
+    .map(([k, w]) => `${s[k]} ${w}`)
+  return parts.length ? parts.join(', ') : 'no changes'
+}
+
+/* The spreadsheet round trip: download the checkpoint as a workbook, edit it
+   anywhere that opens one, upload it. The upload only STAGES decisions into
+   this screen — the researcher reads them and presses Approve & continue as
+   always, so there is one apply path and one audit trail. */
+function SheetBar({ runId, cp, imported, onImport, onError, staged }:
+  { runId: string; cp: Checkpoint; imported: Imported | null;
+    onImport: (r: SheetImport) => void; onError: (m: string) => void; staged: boolean }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [showIgnored, setShowIgnored] = useState(false)
+  const pick = async (f: File | undefined) => {
+    if (!f) return
+    if (staged && !confirm('Decisions loaded from the spreadsheet replace the edits currently '
+      + 'staged on this screen. Continue?')) { if (fileRef.current) fileRef.current.value = ''; return }
+    setBusy(true)
+    try { onImport(await api.importSheet(runId, cp.id, f)) }
+    catch (e: any) { onError(String(e.message ?? e)) }
+    finally { setBusy(false); if (fileRef.current) fileRef.current.value = '' }
+  }
+  return (
+    <div className="sheetbar">
+      <div className="row" style={{ gap: 8 }}>
+        <a href={api.sheetUrl(runId, cp.id)} title="Every item under review as an .xlsx workbook, with the rules on its About sheet">
+          <button className="small">Download as spreadsheet</button></a>
+        <button className="small" disabled={busy} onClick={() => fileRef.current?.click()}
+          title="Upload the edited workbook; its decisions load here for you to check before approving">
+          {busy ? 'Reading…' : 'Upload spreadsheet'}
+        </button>
+        <input ref={fileRef} type="file" accept=".xlsx" style={{ display: 'none' }}
+          onChange={ev => pick(ev.target.files?.[0])} />
+        {imported && (
+          <span className="small muted">
+            Loaded from <span className="mono">{imported.imported_from.filename}</span>: {summaryLine(imported.summary)}
+            {imported.ignored.length > 0 && (
+              <> · {imported.ignored.length} row{imported.ignored.length === 1 ? '' : 's'} ignored{' '}
+                <a href="#" onClick={ev => { ev.preventDefault(); setShowIgnored(s => !s) }}>({showIgnored ? 'hide' : 'show'})</a></>
+            )}
+          </span>
+        )}
+      </div>
+      {imported && showIgnored && imported.ignored.length > 0 && (
+        <ul className="small muted" style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+          {imported.ignored.map((g, i) => (
+            <li key={i}>Row {g.row}{g.id ? <> (<span className="mono">{g.id}</span>)</> : null}: {g.reason}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
 
 function CheckpointPanel({ runId, cp, onError, onResolved }:
   { runId: string; cp: Checkpoint; onError: (m: string) => void; onResolved: () => void }) {
   const kind = cp.payload?.kind
   return (
     <div className="card" style={{ borderColor: 'var(--amber)' }}>
-      <h3>⏸ {cp.title}</h3>
+      <h3 className="row" style={{ gap: 8 }}>
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-label="waiting for your review"
+          style={{ flexShrink: 0 }}><rect x="2" y="1.5" width="3.5" height="11" rx="1" fill="var(--amber)" />
+          <rect x="8.5" y="1.5" width="3.5" height="11" rx="1" fill="var(--amber)" /></svg>
+        {cp.title}
+      </h3>
       <p className="desc">{cp.instructions}</p>
       {kind === 'core_review'
         ? <CoreReview key={cp.id} runId={runId} cp={cp} onError={onError} onResolved={onResolved} />
@@ -233,8 +325,9 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
   // undoing a merge never discards a rename made before it
   const [edits, setEdits] = useState<Record<string, Edits>>(stored.edits ?? {})
   const [actions, setActions] = useState<Record<string, Action>>(stored.actions ?? {})
-  const [additions, setAdditions] = useState<{ name: string; definition: string }[]>(stored.additions ?? [])
+  const [additions, setAdditions] = useState<{ name: string; definition: string; notes?: string }[]>(stored.additions ?? [])
   const [checked, setChecked] = useState<Set<string>>(new Set(stored.checked ?? []))
+  const [imported, setImported] = useState<Imported | null>(stored.imported ?? null)
   const [focusId, setFocusId] = useState('')
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<'count-desc' | 'count-asc' | 'name' | 'orig'>('count-desc')
@@ -246,13 +339,34 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
 
   useEffect(() => {
     sessionStorage.setItem(storeKey, JSON.stringify(
-      { edits, actions, additions, checked: [...checked] }))
-  }, [storeKey, edits, actions, additions, checked])
+      { edits, actions, additions, checked: [...checked], imported }))
+  }, [storeKey, edits, actions, additions, checked, imported])
 
   const act = (id: string): Action => actions[id] ?? { kind: 'keep' }
   const setEdit = (id: string, patch: Edits) =>
     setEdits(e => ({ ...e, [id]: { ...e[id], ...patch } }))
   const displayName = (it: any) => edits[it.id]?.name ?? it.name
+
+  // A spreadsheet's decisions replace whatever is staged: the file is the
+  // researcher's considered state, and mixing two sources would be a guess.
+  const loadSheet = (r: SheetImport) => {
+    const e: Record<string, Edits> = {}
+    const a: Record<string, Action> = {}
+    for (const d of r.decisions ?? []) {
+      if (d.action === 'merge' && d.merge_into) a[d.id] = { kind: 'merge', merge_into: d.merge_into }
+      else if (d.action === 'delete') a[d.id] = { kind: 'delete' }
+      const patch: Edits = {}
+      if (d.name !== undefined) patch.name = d.name
+      if (d.definition !== undefined) patch.definition = d.definition
+      if (d.notes) patch.notes = d.notes
+      if (Object.keys(patch).length) e[d.id] = patch
+    }
+    setEdits(e); setActions(a)
+    setAdditions((r.additions ?? []).map(x => ({ name: x.name, definition: x.definition ?? '', notes: x.notes })))
+    setChecked(new Set()); setMergeTarget('')
+    setImported({ imported_from: r.imported_from, summary: r.summary, ignored: r.ignored })
+  }
+  const anythingStaged = Object.keys(edits).length + Object.keys(actions).length + additions.length > 0
 
   // Marking codes deleted also drops them from the selection, clears them as
   // merge target, and un-stages any merges pointing INTO them — a delete must
@@ -311,8 +425,9 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
     for (const it of items) {
       const a = act(it.id)
       const e = edits[it.id] ?? {}
-      if (a.kind === 'merge') list.push({ id: it.id, action: 'merge', merge_into: a.merge_into })
-      else if (a.kind === 'delete') list.push({ id: it.id, action: 'delete' })
+      const notes = e.notes?.trim() ? { notes: e.notes.trim() } : {}
+      if (a.kind === 'merge') list.push({ id: it.id, action: 'merge', merge_into: a.merge_into, ...notes })
+      else if (a.kind === 'delete') list.push({ id: it.id, action: 'delete', ...notes })
       else {
         // only submit REAL edits: a typed-then-reverted value is not a rename,
         // and must not mark the code researcher-edited
@@ -321,13 +436,16 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
         if (nameChanged || defChanged)
           list.push({ id: it.id, action: 'rename',
                       name: nameChanged ? e.name : undefined,
-                      definition: defChanged ? e.definition : undefined })
+                      definition: defChanged ? e.definition : undefined, ...notes })
+        else if (e.notes?.trim())
+          list.push({ id: it.id, action: 'keep', ...notes })   // a considered keep, with its reason
       }
     }
     submit({
       decisions: list,
       additions: additions.filter(a => a.name.trim()),
       stage: cp.payload.stage,
+      ...(imported ? { imported_from: imported.imported_from } : {}),
     })
   }
 
@@ -355,6 +473,9 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
           </button>
         </span>
       </div>
+
+      <SheetBar runId={runId} cp={cp} imported={imported} onImport={loadSheet} onError={onError}
+        staged={anythingStaged} />
 
       {checked.size > 0 && (
         <div className="bulkbar">
@@ -388,10 +509,14 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
                       disabled={inactive}
                       onChange={ev => setEdit(it.id, { name: ev.target.value })}
                       style={{ fontWeight: 600, marginBottom: 4 }} />
-                    <input type="text" value={e.definition ?? it.definition}
-                      disabled={inactive}
-                      onChange={ev => setEdit(it.id, { definition: ev.target.value })}
-                      placeholder="definition" className="small" />
+                    <GrowingText value={e.definition ?? it.definition ?? ''} disabled={inactive}
+                      onChange={v => setEdit(it.id, { definition: v })}
+                      placeholder="definition" />
+                    {e.notes && (
+                      <p className="small muted" style={{ margin: '4px 0 0' }}>
+                        <b>Note:</b> {e.notes}
+                      </p>
+                    )}
                   </div>
                   <div className="row" style={{ alignItems: 'flex-start', flexShrink: 0 }}
                     onClick={ev => ev.stopPropagation()}>
@@ -445,8 +570,9 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
                   <input type="text" value={a.name} placeholder="new code name"
                     onChange={ev => setAdditions(x => x.map((y, j) => j === i ? { ...y, name: ev.target.value } : y))}
                     style={{ fontWeight: 600, marginBottom: 4 }} />
-                  <input type="text" value={a.definition} placeholder="definition" className="small"
-                    onChange={ev => setAdditions(x => x.map((y, j) => j === i ? { ...y, definition: ev.target.value } : y))} />
+                  <GrowingText value={a.definition} placeholder="definition"
+                    onChange={v => setAdditions(x => x.map((y, j) => j === i ? { ...y, definition: v } : y))} />
+                  {a.notes && <p className="small muted" style={{ margin: '4px 0 0' }}><b>Note:</b> {a.notes}</p>}
                 </div>
                 <button className="small danger"
                   onClick={() => setAdditions(x => x.filter((_, j) => j !== i))}>Remove</button>
@@ -525,6 +651,8 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
   }, [storeKey])
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>(stored.edits ?? {})
   const [excluded, setExcluded] = useState<Record<string, boolean>>(stored.excluded ?? {})
+  const [notes, setNotes] = useState<Record<string, string>>(stored.notes ?? {})
+  const [imported, setImported] = useState<Imported | null>(stored.imported ?? null)
   const [open, setOpen] = useState<string>(rows.length === 1 ? rows[0].source_id : '')
   const { busy, submit } = useSubmit(runId, cp, onError, () => {
     sessionStorage.removeItem(storeKey)
@@ -532,8 +660,23 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
   })
 
   useEffect(() => {
-    sessionStorage.setItem(storeKey, JSON.stringify({ edits, excluded }))
-  }, [storeKey, edits, excluded])
+    sessionStorage.setItem(storeKey, JSON.stringify({ edits, excluded, notes, imported }))
+  }, [storeKey, edits, excluded, notes, imported])
+
+  const loadSheet = (r: SheetImport) => {
+    const e: Record<string, Record<string, string>> = {}
+    const x: Record<string, boolean> = {}
+    const n: Record<string, string> = {}
+    for (const row of r.rows ?? []) {
+      const { source_id, exclude, notes: note, ...fields } = row
+      for (const [k, v] of Object.entries(fields)) if (typeof v === 'string') (e[source_id] ??= {})[k] = v
+      if (typeof exclude === 'boolean') x[source_id] = exclude
+      if (note) n[source_id] = note
+    }
+    setEdits(e); setExcluded(x); setNotes(n)
+    setImported({ imported_from: r.imported_from, summary: r.summary, ignored: r.ignored })
+  }
+  const anythingStaged = Object.keys(edits).length + Object.keys(excluded).length > 0
 
   const setEdit = (sid: string, key: string, value: string) =>
     setEdits(e => ({ ...e, [sid]: { ...e[sid], [key]: value } }))
@@ -571,9 +714,11 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
       for (const k of ['label', 'citation', 'cited_work', ...fieldKeys])
         if (isEdit(r, k)) patch[k] = current(r, k)
       if (isExcluded(r) !== !!r.excluded) patch.exclude = isExcluded(r)
+      if (notes[r.source_id]?.trim()) patch.notes = notes[r.source_id].trim()
       if (Object.keys(patch).length) out.push({ source_id: r.source_id, ...patch })
     }
-    submit({ rows: out, stage: cp.payload.stage })
+    submit({ rows: out, stage: cp.payload.stage,
+             ...(imported ? { imported_from: imported.imported_from } : {}) })
   }
 
   return (
@@ -585,6 +730,8 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
           {nExcluded > 0 && <> · {nExcluded} excluded from synthesis</>}
         </span>
       </div>
+      <SheetBar runId={runId} cp={cp} imported={imported} onImport={loadSheet} onError={onError}
+        staged={anythingStaged} />
       {rows.map(r => {
         const off = isExcluded(r)
         const isOpen = open === r.source_id
@@ -603,6 +750,9 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
                     — those cannot ground the synthesis</span>
                 )}
                 {off && <span className="muted small"> · excluded from synthesis</span>}
+                {notes[r.source_id] && (
+                  <p className="small muted" style={{ margin: '4px 0 0' }}><b>Note:</b> {notes[r.source_id]}</p>
+                )}
               </div>
               <div className="row" onClick={ev => ev.stopPropagation()}>
                 <Link to={`/runs/${runId}/sources/${r.source_id}`} target="_blank" rel="noopener">
