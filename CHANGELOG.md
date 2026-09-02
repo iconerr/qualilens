@@ -9,35 +9,44 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## Unreleased
+
+- The launcher checks the port before any other work and, when it is taken,
+  says what holds it: for a QualiLens server, the build it is running, when
+  it started, and the exact command to stop it. A server left running in a
+  forgotten terminal keeps serving the build it started with, so this is how
+  you learn that the app in your browser is older than the folder. The
+  served page and `/api/meta` now carry the running build.
+- Test runs no longer re-stamp the folder's `VERSION`.
+
 ## 1.5.0 — 2026-09-02
 
-Security and evidence-integrity release. **All users should update.**
+Security and evidence-integrity release. Updating is recommended.
 
 - Security hardening of the local server and of the in-app updater. Update
-  bundles are now signed, and the updater installs nothing else; an update is
+  bundles are now signed, and only signed bundles install; an update is
   refused while a run is executing or awaiting review. A tab left open across
   an app restart now asks you to reload the page.
-- Evidence you can trust on its face: an excerpt whose quote cannot be found
+- Excerpts state their own status: an excerpt whose quote cannot be found
   verbatim in its source is marked *unverified* in the report and listed
   outside quotation marks in the Word export; the audit appendix counts
   located and unverified excerpts. Quote location tolerates case, ligatures,
   soft hyphens, and PDF line-break hyphenation, and searches the segment the
   model was reading first, so a recurring phrase is highlighted where it was
-  coded — on a real 26-paper corpus this recovers a quarter of the quotes
+  coded — on a 26-paper corpus this recovered about a quarter of the quotes
   that were previously discarded.
 - Literature synthesis: the extractor now separates a paper's own findings
   from findings it attributes to other work (shown on the extraction review,
-  never offered to the synthesis) and skips reference lists; the citation
+  not offered to the synthesis) and skips reference lists; the citation
   guard recognises names in any script, ignores stopwords from filename
   labels, and requires the year to match.
-- Every report now carries the configuration the run was frozen with, the
-  models that answered, and a per-checkpoint summary of decisions; the
-  complete audit trail exports as JSON from the run screen. A run freezes
-  its provider, model, and setup answers at start, so a resumed or branched
-  run cannot silently change model.
+- Reports now carry the configuration the run was frozen with, the models
+  that answered, and a per-checkpoint summary of decisions; the audit trail
+  exports as JSON from the run screen. A run freezes its provider, model,
+  and setup answers at start, so a resumed or branched run keeps its model.
 - Thematic analysis defines and names themes before the theme review, so the
   names in the report are the ones you approved. Framework analysis charts a
-  promoted emergent code across every source before the matrix. Content
+  promoted emergent code across the sources before the matrix. Content
   analysis samples the opening, middle, and end of each source for the
   codebook, reports rates per 10,000 characters beside counts, and names the
   unit it counts. A confidence the model did not give is recorded as missing,
@@ -48,14 +57,14 @@ Security and evidence-integrity release. **All users should update.**
 - `QUALILENS_DATA_DIR` moves projects, uploads, and keys out of the app
   folder; the app warns at startup and in Settings when the data folder sits
   inside a cloud-synced directory. The write-ahead log is folded into the
-  database at every stage boundary and checkpoint.
+  database at stage boundaries and checkpoints.
 - Text ingestion no longer guesses UTF-16 without a byte-order mark, reads
   Word tables in document order with text boxes, refuses `.rtf`, and
   converts `.aac` for transcription when ffmpeg is present.
-- `package.sh` rebuilds the interface whenever its sources changed (a
+- `package.sh` rebuilds the interface when its sources have changed (a
   fingerprint is stamped into the build and checked at startup and in the
-  packaging test) and rebuilds the manual every time. Release 1.4.0 had
-  shipped an interface built before its latest sources.
+  packaging test) and rebuilds the manual as part of packaging. Release
+  1.4.0 had shipped an interface built before its latest sources.
 
 ## 1.4.0 — 2026-08-31
 
@@ -81,8 +90,8 @@ Initial public release.
   grounded theory, reflexive thematic analysis, qualitative content analysis,
   framework/deductive coding, and corpus-grounded literature synthesis.
 - Researcher-led by construction: runs pause at review checkpoints; your
-  edits are final and are never overwritten by later automated stages; every
-  decision is written to an audit trail the report reproduces.
+  edits are final and are not overwritten by later automated stages;
+  decisions are written to an audit trail the report reproduces.
 - Provenance-first evidence: verbatim quotes with character offsets, a
   coded-source reader that draws the coding over each document in place, and
   page anchors for PDF sources.
@@ -98,10 +107,10 @@ Initial public release.
   and its report untouched.
 - Four providers (Anthropic, OpenAI, Google, Mistral), an editable model
   catalog with a live model check, Whisper transcription for audio and
-  video, cost estimation before a run, resumable runs that never re-bill
+  video, cost estimation before a run, resumable runs that do not re-bill
   finished work, and honored cancellation.
-- Everything runs locally; data goes only to the provider you chose. In-place
+- The app runs locally; data goes only to the provider you chose. In-place
   updates from a downloaded bundle or, pull-only and on demand, from this
-  repository's releases — your projects, keys, and uploads are untouchable
-  by the updater's allowlist.
+  repository's releases — the updater's allowlist leaves your projects,
+  keys, and uploads untouched.
 - A fifteen-plus-chapter user manual, shipped in the app.
