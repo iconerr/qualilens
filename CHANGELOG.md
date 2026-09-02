@@ -9,6 +9,13 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.6.2 — 2026-09-02
+
+- The manual now shares the interface's register and type: the same ground,
+  ink, and spacing, Inter for headings and navigation, JetBrains Mono for
+  commands, a serif for the text. The typefaces ship with the app under
+  `frontend/public/fonts/` with their licence (SIL OFL 1.1), noted in NOTICE.
+
 ## 1.6.1 — 2026-09-02
 
 - Settings: "Where your data live".

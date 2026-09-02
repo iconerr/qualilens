@@ -11,3 +11,9 @@ of the License.
 Analyses, codes, and reports produced BY this software belong entirely to
 the researchers who create them; the authors of QualiLens claim no rights
 over any output of the tool.
+
+Bundled typefaces. The interface and the manual ship the Inter typeface
+(Copyright 2016 The Inter Project Authors) and the JetBrains Mono typeface
+(Copyright 2020 The JetBrains Mono Project Authors), both unmodified and
+both licensed under the SIL Open Font License, Version 1.1. The licence
+text is in frontend/public/fonts/OFL.txt.
