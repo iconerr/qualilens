@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # 7. Framework and Deductive Coding
 
-Framework analysis in QualiLens charts your data against a framework you already hold. The pipeline loads your codebook and works through every source, assigning the single best-fitting code to each relevant passage. It then stops so you can inspect what the AI coder was least sure about, and builds a matrix whose rows are sources and whose columns are codes. The matrix is the output that distinguishes this method. It lets you read one case across every code, or one code across every case.
+Framework analysis in QualiLens charts your data against a framework you already hold. The pipeline loads your codebook and works through every source, assigning the single best-fitting code to each relevant passage. It then stops so you can inspect what the AI coder was least sure about, charts any emergent code you promoted across every source, and builds a matrix whose rows are sources and whose columns are codes. The matrix is the output that distinguishes this method. It lets you read one case across every code, or one code across every case.
 
 There is no familiarization stage, and the codebook is never derived. This method assumes you brought the framework with you.
 
@@ -43,11 +43,11 @@ A Yes or No toggle, defaulting to Yes.
 
 Turn the toggle on in three other situations. Turn it on when the framework is yours to revise, when you are extending an established framework into a new setting where you expect it to be incomplete, or when the absence of a category would itself be a finding. The emergent candidates then serve as evidence about where your framework fails. That is often the most interesting result a deductive analysis can produce.
 
-**What happens to candidates.** Every candidate is presented to you at the review checkpoint with its proposed name, definition, and sample quotes. Each one carries two buttons. Promoting a candidate moves the code into your framework, where it joins the codebook, appears as a column in the matrix, and keeps its excerpts. Discarding a candidate removes it along with its evidence.
+**What happens to candidates.** Every candidate is presented to you at the review checkpoint with its proposed name, definition, and sample quotes. Each one carries two buttons. Promoting a candidate moves the code into your framework, where it joins the codebook and keeps its excerpts; a stage that runs after the checkpoint then charts the promoted codes across every segment of every source, so the promoted column in the matrix holds everything that fits the code, not only the passages the model happened to flag while it was still a candidate. Discarding a candidate removes it along with its evidence.
 
 The default is discard. A candidate you neither promote nor discard is discarded when you approve the checkpoint. Nothing is promoted by inattention, and nothing survives inattention either. Promote a candidate at the checkpoint if it looks interesting, because you cannot recover it afterward.
 
-Emergent excerpts carry no confidence score. The AI model proposed the code rather than rating a fit against a given definition. Presenting a number there would be fabrication, so the field is left empty rather than filled with a default.
+Emergent excerpts carry no confidence score. The AI model proposed the code rather than rating a fit against a given definition. Presenting a number there would be fabrication, so the field is left empty rather than filled with a default. The same rule applies to a framework assignment the model returns without a confidence: it is stored as missing, shown as "no confidence given", and listed for review.
 
 ## What each stage does
 
@@ -59,7 +59,7 @@ Your codebook is parsed and stored. This stage makes no model calls.
 
 Each source is split into segments of twenty-four thousand characters at paragraph boundaries, and each segment is charted in one call against the full framework. For every relevant passage the AI coder returns the single best-fitting framework code, a verbatim quote, a confidence between zero and one, and a one-sentence memo justifying the assignment. Out-of-framework passages come back separately when emergent codes are allowed, with a proposed code name, a definition, and a quote.
 
-Quotes are located in the source by exact position, so your report can highlight them in place. Code names are matched to the framework after normalizing case and surrounding punctuation, and an assignment whose code name matches nothing in the framework is dropped. That drop is silent in this method. Consider whether a code's name is long or unusual enough to have been paraphrased back by the AI model if that code is empty across every source, and shorten the name.
+Quotes are located in the source, exactly or with tolerance for typography, case, and line-break hyphenation, so your report can highlight them in place. Code names are matched to the framework after normalizing case and surrounding punctuation, and an assignment whose code name matches nothing in the framework is dropped; each drop is written to the audit log with the offending name and the quote, and a summary at the end of the stage says how many. Consider whether a code's name is long or unusual enough to have been paraphrased back by the AI model if that code is empty across every source, and shorten the name.
 
 ### Review charting
 
@@ -67,13 +67,17 @@ The pipeline stops and shows you two lists. Either list may be empty.
 
 The **emergent code candidates** list carries each proposed code with its definition, its excerpt count, and its sample quotes, with buttons to promote or discard.
 
-The **low-confidence assignments** list carries the assignments the AI model was least sure of, specifically those with a confidence below sixty percent. They are ordered from least confident upward and capped at the sixty weakest. Each row shows the code, the confidence, the source, the quote, and the memo, with a checkbox. Ticking a row deletes that assignment.
+The **low-confidence assignments** list carries the assignments the AI model was least sure of, specifically those with a confidence below sixty percent, and any assignment that came back with no confidence at all, which are listed first as "no confidence given". They are ordered from least confident upward and capped at the sixty weakest; the panel says how many are below the threshold in total when it shows fewer. Each row shows the code, the confidence, the source, the quote, and the memo, with a checkbox. Ticking a row deletes that assignment.
 
 The panel tells you when neither list has anything in it. That means every assignment was confident and within your framework.
 
 Deleted assignments are written to the audit trail with their quote before they are removed, so your record shows what you rejected as well as what you kept.
 
 **What this checkpoint does not show you.** It shows the weakest sixty assignments and the out-of-framework proposals. It does not show the confident assignments, which are the overwhelming majority of the coding, and it offers no way to browse them. Approving this checkpoint means you accept the confident assignments unread. Know that now rather than discovering it later.
+
+### Chart promoted codes
+
+This stage runs only when you promoted at least one emergent candidate. Each promoted code is applied to every segment of every source in one call per segment, with the same coding rules as the charting stage. Passages the emergent pass had already attached are not duplicated. The stage is resumable per segment, and the audit log records how many codes were charted.
 
 Check those assignments after the run in [the coded-source reader](10-coded-source-reader.md), which is reachable from every source listed at the head of your report. Charting is the method where the reader matters most, because a framework applied to a transcript leaves visible gaps. Those gaps are either passages your framework has no language for, or passages the coder skipped. The reader is the only screen that distinguishes the two.
 
@@ -93,9 +97,11 @@ Read down a column to see how a single construct was spoken about across cases. 
 
 The exported Word document renders the matrix source by source rather than as a grid, listing each source as a heading with its non-empty cells beneath. A wide table does not survive a page break.
 
+A column for a promoted code was filled by the stage described above, so it is comparable with the others.
+
 ## What the report contains
 
-The evidence tree is flat. It lists each framework code with its excerpts directly beneath it, including any codes you promoted from the emergent candidates. Each excerpt carries its memo, its confidence percentage, and a link that opens the source with the quoted span highlighted.
+The evidence tree is flat. It lists each framework code with its excerpts directly beneath it, including any codes you promoted from the emergent candidates. Each excerpt carries its memo, its confidence percentage where the model gave one, and a link that opens the source with the quoted span highlighted; an excerpt whose quote could not be located is marked unverified rather than quoted.
 
 There is no source summaries appendix and no frequency table, because this method has no familiarization stage and does not count.
 

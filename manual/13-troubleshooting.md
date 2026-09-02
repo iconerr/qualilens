@@ -22,6 +22,16 @@ Every failure QualiLens can show you is listed here, with its cause and its reme
 
 The launcher checks for the built artifacts rather than the folders. A first run that failed part way therefore retries cleanly on the next launch, rather than skipping the step that failed.
 
+A line reading `NOTICE: the data folder … appears to sit inside a cloud-synced directory` is information, not an error: it says the sync service holds your database and keys as well, and points to `QUALILENS_DATA_DIR` in [Getting Started](01-getting-started.md#moving-the-data-folder). A line reading `WARNING: frontend/dist was built from different sources than frontend/src` means the interface on disk is older than its source; run `cd frontend && npm run build` or `./package.sh`.
+
+## The page refuses to talk to the app
+
+| Message | Cause | Remedy |
+|---|---|---|
+| `Missing or stale session token — reload the QualiLens page` | The app was restarted while this tab stayed open, so the tab carries the previous launch's token; or the request did not come from a page QualiLens served | Reload the page. Your staged checkpoint decisions survive a reload |
+| `QualiLens answers only to 127.0.0.1 or localhost` | The address bar names the machine some other way (its LAN address, a hostname), or something on the machine forwarded the request | Open `http://127.0.0.1:8765` |
+| `Cross-site request refused` | A page from another site tried to use the app, or a browser extension rewrote the request's origin | Use the app from its own tab; the refusal is the protection working |
+
 ## Uploading documents
 
 | Message | Cause | Remedy |
@@ -30,7 +40,9 @@ The launcher checks for the built artifacts rather than the folders. A first run
 | `Could not extract text from <file>` | The file is corrupt, password-protected, or not the format its extension claims | Open it in its own application, save a clean copy, and upload that |
 | `<file> contains no extractable text` | Most often a scanned PDF that holds page images and no text layer | Run the file through optical character recognition, or supply the transcript as text |
 
-An `.rtf` file uploads without complaint, and it is then read as plain text rather than parsed. Your analysis would see RTF control codes alongside the words. Convert to `.docx` or `.txt` before you upload.
+`RTF is not supported — save the document as .docx or .txt first.` is the refusal for an `.rtf` upload; RTF is markup, and reading it as text would feed control codes to the analysis.
+
+`The upload carries no filename.` means the browser sent the file without a name; save it with a name and upload again.
 
 ## Transcribing audio and video
 
@@ -39,6 +51,7 @@ An `.rtf` file uploads without complaint, and it is then read as plain text rath
 | `Audio/video transcription requires an OpenAI API key (used for Whisper). Add one in Settings.` | No OpenAI key is saved, whichever provider runs the analysis | Save an OpenAI key in Settings, then press Retry on the source |
 | `ffmpeg is required to extract audio from video files.` | A video was uploaded and ffmpeg is not installed | Install ffmpeg, then Retry. Settings shows whether the app can see it |
 | `This audio file exceeds the transcription API's size limit and ffmpeg is not available to split it.` | The recording is over roughly 24 MB and cannot be chunked | Install ffmpeg and Retry, or compress the audio yourself before uploading |
+| `The transcription service does not accept .aac files and ffmpeg is not available to convert it.` | An `.aac` recording needs re-encoding first | Install ffmpeg and Retry, or convert the recording to `.mp3` or `.m4a` and upload that |
 | `ffmpeg failed` | ffmpeg rejected the file, usually a corrupt or unusual container | Re-export the recording to `.mp3` or `.mp4` and upload again |
 | `Transcription failed for <file>: API error 401` | The OpenAI key is invalid or the account cannot reach the transcription service | Test the key in Settings, replace it, then Retry |
 | `Transcription failed for <file>: API error 429` | Rate limited, after the app had already retried several times with increasing delays | Wait, then Retry. If it persists, transcribe fewer files at once |
@@ -59,6 +72,8 @@ Two messages may meet you if you press Retry at the wrong moment. `Transcription
 | `Method cannot be changed once runs exist — create a new project.` | You went back and changed the method after a run had been created | Create a new project for the other method |
 | `A run is in progress — wait for it or cancel it before editing the project configuration.` | A run is executing or waiting at a checkpoint | Finish or cancel the run first |
 | `A run is in progress for this project — cancel it or wait before deleting sources.` | You tried to remove a source under a live run | Finish or cancel the run first |
+| `A run is in progress for this project — wait for it or cancel it before adding sources.` | You tried to upload under a live run; a source added now would skip the stages that already ran | Finish or cancel the run first |
+| `N completed run(s) cite this source. Deleting it would strip their evidence…` | The source is evidence in a finished analysis | Delete the project to remove everything; or, if you accept losing that evidence, repeat the request with `?force=true` |
 
 ## Starting a run
 
@@ -76,6 +91,12 @@ Two messages may meet you if you press Retry at the wrong moment. `Transcription
 | `Checkpoint already resolved` | The same checkpoint was submitted twice, from a double click or a second tab | Nothing. The first submission was applied, and the run has moved on. Reload the page |
 | `Run is <status>; nothing awaits review.` | The run is no longer waiting, usually because it was resolved elsewhere or cancelled | Reload the page |
 | `Applying checkpoint '<title>' failed; checkpoint reopened` | Something went wrong while applying your decisions | Submit again. Decisions already applied re-apply harmlessly |
+| `Decision refers to code <id>, which is not part of this run.` | A stale tab or a hand-built request named a code from another run | Reload the checkpoint and submit again |
+| `Merge target '<name>' is no longer active; choose a kept code.` | The code you chose to merge into was merged or deleted at an earlier review | Pick a code that is still kept |
+| `Cannot merge '<a>' (<kind>) into '<b>' (<kind>): different kinds of code.` | An open code was aimed at a theme or category, or the reverse | Merge like into like |
+| `Two papers would share the label '<label>' — give each paper its own label.` | Two extraction rows would cite by the same label | Edit one of the labels |
+| `Every paper is excluded — re-include at least one paper before approving, or cancel the run.` | The extraction review excluded every paper | Re-include one, or cancel |
+| `Only review checkpoints can be revisited.` / `The run never reached this review.` / `The run is waiting at this review right now — open it instead of branching.` | Revisit was asked for a stage that is not a passed review | Choose a review the run has passed |
 
 ## Model and provider errors
 
@@ -119,6 +140,19 @@ These are QualiLens refusing output it cannot trust, rather than the provider fa
 
 `No report for this run yet` means the run has not reached its final stage. Check the run's status.
 
+## Updating the app
+
+| Message | Cause | Remedy |
+|---|---|---|
+| `This bundle is not signed (no MANIFEST.sha256 / MANIFEST.sig)…` | The zip was built without the release key, or is a repository download rather than a release | Download the release's `QualiLens.zip`, or ask the sender for a signed bundle |
+| `The bundle's signature does not verify against the QualiLens release key…` | The zip was signed with another key, or changed after signing | Do not install it. Download the release again |
+| `The bundle contains files not covered by its signature` / `is missing signed files` / `does not match its signed hash` | The zip was altered after signing | Do not install it. Download the release again |
+| `N run(s) are executing or awaiting review. Finish or cancel them before you update…` | An update stops the server, and would interrupt the run | Finish or cancel the runs, then update |
+| `That file is larger than any QualiLens bundle; refusing.` | The chosen file is not a QualiLens bundle | Choose the release's `QualiLens.zip` |
+| `The download was redirected away from GitHub; refusing.` | The release asset resolved to a host that is not GitHub's | Do not install it; check the repository's releases page |
+
+After an update, `Your edited models.json differed from the update's; the outgoing copy was saved to …` tells you where your model-catalog edits went so you can reapply them.
+
 ## The coded-source reader
 
 `Source not found in this run's project` means the source was deleted after the run completed. The excerpt and its quoted text remain in your stored report, and the document they came from is gone, so there is nothing to highlight.
@@ -131,15 +165,19 @@ A reader may open and show no highlights at all, with the code panel reading tha
 
 Five failures produce no error message. Check for them yourself.
 
-**Near-duplicate codes.** The AI coder is shown the codes already in use so that it can reuse them, and that listing is capped at one hundred and twenty codes. The cap is passed on a large corpus, later segments stop seeing the earliest codes, and synonyms appear. Merge them at your first checkpoint.
+**Near-duplicate codes.** The AI coder is shown the codes already in use so that it can reuse them, and that listing is capped at three hundred codes. The cap is passed only on a very large corpus; when it is, later segments stop seeing the earliest codes, synonyms appear, and the audit log records that the cap was reached. Merge them at your first checkpoint.
 
 **Dropped assignments in content analysis.** The assignment is discarded rather than guessed at when the AI model names a code that does not match your codebook. The audit log records each drop, along with a summary at the end of the stage warning that your counts may undercount. Read the audit log if your totals look low. Short, distinctive code names attract fewer drops than long ones.
 
-**Silently dropped assignments in framework analysis.** The same mismatch occurs in framework charting, and there the assignment is dropped without a log entry. A framework code that is empty across every source is the symptom, and a shorter code name is usually the cure.
+**Dropped assignments in framework analysis.** The same mismatch occurs in framework charting, and each drop is now logged with the name the model used and the quote, with a summary at the end of the stage. A framework code that is empty across every source is the symptom, and a shorter code name is usually the cure.
 
 **Short highlights in the coded document.** The opening of a quote is located instead when the quote cannot be matched exactly or after normalizing typography, and the highlight then covers less than the quote. The passage is present, and the highlight is partial.
 
-**Excerpts that never reach the document.** A quote that cannot be located at all is a different matter. It means the AI model did not copy the passage verbatim, which the coding instructions forbid. Those excerpts are gathered under **Not located in the text** in the reader, and its heading gives you the count for that document. A handful is ordinary. A long list means the coder is paraphrasing. Check any quotation you intend to publish from that document against the transcript by hand before you print it.
+**Excerpts that never reach the document.** A quote that cannot be located at all is a different matter. It means the AI model did not copy the passage verbatim, which the coding instructions forbid. Those excerpts are gathered under **Not located in the text** in the reader, its heading gives you the count for that document, and the report marks each of them *not located verbatim* instead of quoting it. A handful is ordinary. A long list means the coder is paraphrasing. Check any quotation you intend to publish from that document against the transcript by hand before you print it.
+
+**Familiarization that read the opening only.** A source longer than sixty thousand characters is summarized from its first sixty thousand, and the audit log says so for each such source. Coding covers the whole source; the memo that primes it does not.
+
+**Guard notes in the narrative.** A Limitations section that ends with `Citation guard:` or `Quote guard:` is the report telling you that generated prose contained a citation or a quotation matching nothing in the corpus. Treat the sentences named as unverified.
 
 ## When nothing here fits
 

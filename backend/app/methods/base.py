@@ -198,9 +198,14 @@ class RunContext:
         return cid
 
     def add_excerpt(self, code_id: str, source_id: str, quote: str,
-                    memo: str = "", confidence: float | None = None) -> str:
+                    memo: str = "", confidence: float | None = None,
+                    window: tuple | None = None) -> str:
+        """Store one excerpt with its located span. `window` is the (start,
+        end) of the segment the model was reading, so a phrase that recurs
+        in the document is located where it was actually coded rather than
+        at its first occurrence."""
         src = next((s for s in self.sources if s["id"] == source_id), None)
-        start, end = locate_quote(src["text"] if src else "", quote)
+        start, end = locate_quote(src["text"] if src else "", quote, window=window)
         eid = db.new_id()
         conn = db.get_conn()
         conn.execute(
@@ -239,14 +244,15 @@ class RunContext:
 
     def segments(self, source: dict) -> list:
         """Split source text at paragraph boundaries into LLM-sized segments.
-        Returns [(seg_index, text), ...]."""
+        Returns [(seg_index, text, start_offset), ...]; the segments are
+        contiguous slices, so text[start:start+len(seg)] == seg."""
         return segment_text(source["text"], self.SEGMENT_CHARS)
 
 
 def segment_text(text: str, max_chars: int) -> list:
     if len(text) <= max_chars:
-        return [(0, text)]
-    paras = re.split(r"(\n\s*\n)", text)  # keep separators to preserve offsets roughly
+        return [(0, text, 0)]
+    paras = re.split(r"(\n\s*\n)", text)  # keep separators: pieces concatenate to text
     segs, buf = [], ""
     for piece in paras:
         if len(buf) + len(piece) > max_chars and buf.strip():
@@ -263,7 +269,12 @@ def segment_text(text: str, max_chars: int) -> list:
             out.append(s[:max_chars])
             s = s[max_chars:]
         out.append(s)
-    return list(enumerate(out))
+    # offsets: the pieces are contiguous prefixes of the original text
+    result, pos = [], 0
+    for i, s in enumerate(out):
+        result.append((i, s, pos))
+        pos += len(s)
+    return result
 
 
 # Models routinely normalize typographic characters when echoing quotes;
@@ -276,37 +287,122 @@ _CHAR_FOLD = str.maketrans({
 })
 
 
-def locate_quote(text: str, quote: str) -> tuple:
-    """Find quote offsets in source text: exact match, then punctuation- and
-    whitespace-normalized regex search, then a partial head match (which may
-    span less than the full quote). Returns (start, end) or (None, None)."""
+def _normalize_for_match(s: str) -> tuple:
+    """Canonical form of a text for tolerant matching, with a map from every
+    canonical index back to the original index. The canonical form folds
+    typographic characters, case (casefold), NFKC compatibility forms
+    (ligatures), drops soft hyphens, joins words hyphenated across a line
+    break ("counter-\\nintuitive" -> "counterintuitive"), and collapses any
+    whitespace run to one space. Offsets are code points of the original."""
+    import unicodedata
+    from array import array
+    out, idx = [], array("i")
+    n = len(s)
+    i = 0
+    prev_space = False
+    while i < n:
+        ch = s[i]
+        if ch == "\u00ad":                 # soft hyphen: never visible
+            i += 1
+            continue
+        if ch == "-" and i + 1 < n and s[i + 1] in "\r\n":
+            # a hyphen at a line end joins the word across the break
+            j = i + 1
+            while j < n and s[j] in " \t\r\n":
+                j += 1
+            i = j
+            continue
+        if ch.isspace():
+            if not prev_space:
+                out.append(" ")
+                idx.append(i)
+                prev_space = True
+            i += 1
+            continue
+        prev_space = False
+        folded = unicodedata.normalize("NFKC", ch.translate(_CHAR_FOLD)).casefold()
+        for c in folded or ch:
+            out.append(c)
+            idx.append(i)
+        i += 1
+    return "".join(out), idx
+
+
+_NORM_CACHE: dict = {}
+_NORM_CACHE_MAX = 32
+
+
+def _normalized_text(text: str) -> tuple:
+    """Cached _normalize_for_match for source texts (the same document is
+    matched thousands of times per run)."""
+    key = (len(text), hash(text))
+    hit = _NORM_CACHE.get(key)
+    if hit is not None and (hit[0] is text or hit[0] == text):
+        return hit[1], hit[2]
+    norm, idx = _normalize_for_match(text)
+    if len(_NORM_CACHE) >= _NORM_CACHE_MAX:
+        _NORM_CACHE.pop(next(iter(_NORM_CACHE)))
+    _NORM_CACHE[key] = (text, norm, idx)
+    return norm, idx
+
+
+def _find_in_window(text: str, needle: str, window: tuple | None) -> int:
+    """text.find that prefers a hit inside the window, then anywhere."""
+    if window:
+        lo, hi = max(0, int(window[0])), min(len(text), int(window[1]))
+        # a quote may straddle the segment edge by a little; widen the search
+        # end so a match starting inside the window is still found
+        i = text.find(needle, lo, min(len(text), hi + len(needle)))
+        if i != -1:
+            return i
+    return text.find(needle)
+
+
+def locate_quote(text: str, quote: str, window: tuple | None = None) -> tuple:
+    """Find quote offsets in source text. In order: exact match; a match that
+    folds typography, case, ligatures, soft hyphens, line-end hyphenation,
+    and whitespace; then a partial head match (which may span less than the
+    full quote). `window` is the segment the model was reading, searched
+    first so a recurring phrase is located where it was coded. Returns
+    (start, end) code-point offsets or (None, None)."""
     if not text or not quote:
         return None, None
     q = quote.strip()
-    idx = text.find(q)
+    if not q:
+        return None, None
+    idx = _find_in_window(text, q, window)
     if idx != -1:
         return idx, idx + len(q)
-    # normalized: fold typographic characters, treat any whitespace/quote/dash
-    # variant as equivalent, and search the original text positionally
-    folded = q.translate(_CHAR_FOLD)
-    pattern = re.escape(folded)
-    pattern = re.sub(r"\\\s+|\\ ", r"\\s+", pattern)
-    # re.escape (3.7+) leaves quote characters unescaped and escapes '-'
-    pattern = (pattern.replace("'", "['‘’]")
-                      .replace('"', '["“”]')
-                      .replace("\\-", "[-–—]"))
-    try:
-        m = re.search(pattern, text)
-        if m:
-            return m.start(), m.end()
-    except re.error:
-        pass
+    # tolerant: canonical forms on both sides, offsets mapped back
+    nq, _ = _normalize_for_match(q)
+    nq = nq.strip()
+    if nq:
+        nt, imap = _normalized_text(text)
+        hit = -1
+        if window:
+            import bisect
+            lo = max(0, int(window[0]))
+            hi = min(len(text), int(window[1]))
+            clo = bisect.bisect_left(imap, lo)
+            chi = bisect.bisect_left(imap, hi)
+            hit = nt.find(nq, clo, min(len(nt), chi + len(nq)))
+        if hit == -1:
+            hit = nt.find(nq)
+        if hit != -1:
+            return imap[hit], imap[hit + len(nq) - 1] + 1
     # last resort: locate the head of the quote (partial span — better than
     # nothing for "view in source", though shorter than the full quote)
     head = q[:80]
-    idx = text.find(head)
+    idx = _find_in_window(text, head, window)
     if idx != -1:
         return idx, idx + len(head)
+    nh, _ = _normalize_for_match(head)
+    nh = nh.strip()
+    if len(nh) >= 20:
+        nt, imap = _normalized_text(text)
+        hit = nt.find(nh)
+        if hit != -1:
+            return imap[hit], imap[hit + len(nh) - 1] + 1
     return None, None
 
 
@@ -344,8 +440,37 @@ def apply_code_review_resolution(ctx: RunContext, resolution: dict) -> None:
     same submission can never strand evidence on an inactive code.
     """
     conn = db.get_conn()
-    decisions = resolution.get("decisions", [])
+    decisions = [d for d in resolution.get("decisions", []) if isinstance(d, dict)]
     action_of = {d.get("id"): d for d in decisions if d.get("id")}
+
+    # Every id in a resolution must belong to THIS run: a decision that names
+    # another run's code (a stale tab, a hand-built request) must not edit
+    # that run. Merge targets must also be active codes of this run at the
+    # stage under review, else evidence would be stranded on an inactive or
+    # foreign code. Validation runs before any mutation, so a refusal reopens
+    # the checkpoint cleanly.
+    own = {r["id"]: dict(r) for r in conn.execute(
+        "SELECT id, name, definition, stage, status FROM codes WHERE run_id=?",
+        (ctx.run_id,)).fetchall()}
+    stage_under_review = resolution.get("stage")
+    for d in decisions:
+        cid = d.get("id")
+        if cid and cid not in own:
+            raise ValueError(f"Decision refers to code {cid}, which is not part of this run.")
+        if d.get("action") == "merge" and d.get("merge_into"):
+            tgt = own.get(d["merge_into"])
+            if tgt is None:
+                raise ValueError(f"Merge target {d['merge_into']} is not a code of this run.")
+            if tgt["status"] != "active" and d["merge_into"] not in action_of:
+                raise ValueError(f"Merge target '{tgt['name']}' is no longer active; "
+                                 "choose a kept code.")
+            src_stage = own.get(cid, {}).get("stage")
+            if src_stage and tgt["stage"] != src_stage:
+                raise ValueError(f"Cannot merge '{own[cid]['name']}' ({src_stage}) into "
+                                 f"'{tgt['name']}' ({tgt['stage']}): different kinds of code.")
+        if stage_under_review and cid in own and own[cid]["stage"] != stage_under_review:
+            raise ValueError(f"Decision on '{own[cid]['name']}' ({own[cid]['stage']}) does "
+                             f"not belong to the {stage_under_review} review.")
 
     # Cycles in the declared merges (A->B, B->A; or A->A) canonicalize on the
     # first revisited node, which is then forced to stay kept — its own merge
@@ -377,8 +502,8 @@ def apply_code_review_resolution(ctx: RunContext, resolution: dict) -> None:
     for d in decisions:
         cid = d.get("id")
         action = d.get("action", "keep")
-        row = conn.execute("SELECT name, definition, stage FROM codes WHERE id=?",
-                           (cid,)).fetchone()
+        row = conn.execute("SELECT name, definition, stage FROM codes WHERE id=? AND run_id=?",
+                           (cid, ctx.run_id)).fetchone()
         if not row:
             db.log_event(ctx.run_id, "info",
                          f"Skipped decision for unknown code {cid}", d)
@@ -393,11 +518,12 @@ def apply_code_review_resolution(ctx: RunContext, resolution: dict) -> None:
                         if isinstance(raw_name, str) and str(raw_name).strip()
                         else row["name"])
             new_def = str(raw_def) if isinstance(raw_def, str) else row["definition"]
-            meta_row = conn.execute("SELECT meta FROM codes WHERE id=?", (cid,)).fetchone()
+            meta_row = conn.execute("SELECT meta FROM codes WHERE id=? AND run_id=?",
+                                    (cid, ctx.run_id)).fetchone()
             meta = json.loads(meta_row["meta"]) if meta_row and meta_row["meta"] else {}
             meta["user_edited"] = True   # later automated stages must not overwrite
-            conn.execute("UPDATE codes SET name=?, definition=?, meta=? WHERE id=?",
-                         (new_name.strip(), new_def.strip(), json.dumps(meta), cid))
+            conn.execute("UPDATE codes SET name=?, definition=?, meta=? WHERE id=? AND run_id=?",
+                         (new_name.strip(), new_def.strip(), json.dumps(meta), cid, ctx.run_id))
             db.log_event(ctx.run_id, "user_decision",
                          f"Researcher edited code '{row['name']}' -> '{new_name}'", d)
         elif action == "merge" and d.get("merge_into"):
@@ -414,8 +540,10 @@ def apply_code_review_resolution(ctx: RunContext, resolution: dict) -> None:
                 continue
             if target is None:
                 # chain ends in a deletion: treat as delete
-                conn.execute("UPDATE codes SET status='deleted' WHERE id=?", (cid,))
-                conn.execute("UPDATE codes SET parent_id=NULL WHERE parent_id=?", (cid,))
+                conn.execute("UPDATE codes SET status='deleted' WHERE id=? AND run_id=?",
+                             (cid, ctx.run_id))
+                conn.execute("UPDATE codes SET parent_id=NULL WHERE parent_id=? AND run_id=?",
+                             (cid, ctx.run_id))
                 db.log_event(ctx.run_id, "user_decision",
                              f"Researcher merged code {cid} into a deleted code; "
                              "treated as delete", d)
@@ -424,16 +552,19 @@ def apply_code_review_resolution(ctx: RunContext, resolution: dict) -> None:
                          (target, cid, ctx.run_id))
             # grouping codes: hand children to the merge target so their
             # evidence stays in the report
-            conn.execute("UPDATE codes SET parent_id=? WHERE parent_id=?", (target, cid))
-            conn.execute("UPDATE codes SET status='merged', merged_into=? WHERE id=?",
-                         (target, cid))
+            conn.execute("UPDATE codes SET parent_id=? WHERE parent_id=? AND run_id=?",
+                         (target, cid, ctx.run_id))
+            conn.execute("UPDATE codes SET status='merged', merged_into=? WHERE id=? AND run_id=?",
+                         (target, cid, ctx.run_id))
             db.log_event(ctx.run_id, "user_decision",
                          f"Researcher merged code '{row['name']}' ({cid}) into {target}", d)
         elif action == "delete":
-            conn.execute("UPDATE codes SET status='deleted' WHERE id=?", (cid,))
+            conn.execute("UPDATE codes SET status='deleted' WHERE id=? AND run_id=?",
+                         (cid, ctx.run_id))
             # orphan children explicitly; the report sweeps them into an
             # "Uncategorized" bucket rather than losing their evidence
-            conn.execute("UPDATE codes SET parent_id=NULL WHERE parent_id=?", (cid,))
+            conn.execute("UPDATE codes SET parent_id=NULL WHERE parent_id=? AND run_id=?",
+                         (cid, ctx.run_id))
             db.log_event(ctx.run_id, "user_decision",
                          f"Researcher deleted code '{row['name']}' ({cid})", d)
     for a in resolution.get("additions", []):

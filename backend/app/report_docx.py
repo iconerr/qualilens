@@ -12,6 +12,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 ACCENT = RGBColor(0x1F, 0x3A, 0x5F)
 MUTED = RGBColor(0x66, 0x66, 0x66)
+AMBER_TEXT = RGBColor(0x92, 0x60, 0x0A)
 
 
 def build_docx(payload: dict) -> bytes:
@@ -35,10 +36,27 @@ def build_docx(payload: dict) -> bytes:
     meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
     when = time.strftime("%B %d, %Y", time.localtime(payload.get("generated_at", time.time())))
     r = meta.add_run(
-        f"Method: {payload.get('method', '')}  ·  Generated {when} with QualiLens  ·  "
+        f"Method: {payload.get('method_label') or payload.get('method', '')}  ·  "
+        f"Generated {when} with QualiLens  ·  "
         f"Model: {payload.get('provider', '')}/{payload.get('model', '')}")
     r.font.size = Pt(9)
     r.font.color.rgb = MUTED
+
+    # Method configuration: every setup answer as recorded, verbatim — the
+    # option text carries the methodological commitment
+    config = payload.get("config") or {}
+    if config:
+        doc.add_heading("Method Configuration", level=1)
+        labels = payload.get("config_labels") or {}
+        for key, value in config.items():
+            text = str(value if value is not None else "").strip()
+            p = doc.add_paragraph()
+            rr = p.add_run(f"{labels.get(key, key)}: ")
+            rr.bold = True
+            p.add_run(text if text else "(blank)")
+        p = doc.add_paragraph()
+        rr = p.add_run(f"Provider and model: {payload.get('provider', '')}/{payload.get('model', '')}")
+        rr.bold = True
 
     # Sources
     doc.add_heading("Data Sources", level=1)
@@ -76,23 +94,42 @@ def build_docx(payload: dict) -> bytes:
     stats = payload.get("stats") or {}
     if stats.get("kind") == "content_frequencies" and stats.get("rows"):
         doc.add_heading("Code Frequency Table", level=1)
+        if stats.get("unit"):
+            p = doc.add_paragraph()
+            rr = p.add_run(f"Unit counted: {stats['unit']}. Rates are per 10,000 characters "
+                           "of source text and correct for unequal source and group sizes.")
+            rr.font.size = Pt(9)
+            rr.font.color.rgb = MUTED
         groups = stats.get("groups", [])
-        cols = 3 + len(groups)
+        has_rate = any("per_10k_chars" in r for r in stats["rows"])
+        cols = 4 + (1 if has_rate else 0) + len(groups) * (2 if has_rate else 1)
         table = doc.add_table(rows=1, cols=cols)
         table.style = "Light Grid Accent 1"
         hdr = table.rows[0].cells
-        hdr[0].text = "Code"
-        hdr[1].text = "Count"
-        hdr[2].text = "%"
-        for i, g in enumerate(groups):
-            hdr[3 + i].text = g
+        col = 0
+        hdr[col].text = "Code"; col += 1
+        hdr[col].text = "Count"; col += 1
+        hdr[col].text = "%"; col += 1
+        hdr[col].text = "Sources"; col += 1
+        if has_rate:
+            hdr[col].text = "per 10k chars"; col += 1
+        for g in groups:
+            hdr[col].text = g; col += 1
+            if has_rate:
+                hdr[col].text = f"{g} per 10k"; col += 1
         for row in stats["rows"]:
             cells = table.add_row().cells
-            cells[0].text = row["code"]
-            cells[1].text = str(row["count"])
-            cells[2].text = f"{row['pct']}%"
-            for i, g in enumerate(groups):
-                cells[3 + i].text = str(row.get("by_group", {}).get(g, 0))
+            col = 0
+            cells[col].text = row["code"]; col += 1
+            cells[col].text = str(row["count"]); col += 1
+            cells[col].text = f"{row['pct']}%"; col += 1
+            cells[col].text = str(row.get("sources", "")); col += 1
+            if has_rate:
+                cells[col].text = str(row.get("per_10k_chars", "")); col += 1
+            for g in groups:
+                cells[col].text = str(row.get("by_group", {}).get(g, 0)); col += 1
+                if has_rate:
+                    cells[col].text = str(row.get("by_group_per_10k", {}).get(g, "")); col += 1
 
     # Framework matrix
     if stats.get("kind") == "framework_matrix" and stats.get("rows"):
@@ -159,6 +196,14 @@ def build_docx(payload: dict) -> bytes:
                     r = p.add_run(f"{field_labels.get(key, key)}: ")
                     r.bold = True
                     p.add_run(text)
+            if row.get("cited_work"):
+                p = doc.add_paragraph()
+                r = p.add_run("Findings the paper attributes to other work (not used in the synthesis): ")
+                r.bold = True
+                r.font.size = Pt(9)
+                r2 = p.add_run(row["cited_work"])
+                r2.font.size = Pt(9)
+                r2.font.color.rgb = MUTED
 
     # Familiarization appendix
     summaries = [s for s in payload.get("source_summaries", []) if s.get("summary")]
@@ -177,7 +222,9 @@ def build_docx(payload: dict) -> bytes:
     doc.add_heading("Appendix: Audit Trail", level=1)
     audit = payload.get("audit", {})
     doc.add_paragraph(
-        f"This analysis logged {audit.get('events', 0)} events. Researcher checkpoints:")
+        f"This analysis logged {audit.get('events', 0)} events. The complete log — every "
+        "model call, every researcher decision with its parameters, and every checkpoint "
+        "payload — is exportable from the run screen as a JSON file. Researcher checkpoints:")
     for cp in audit.get("checkpoints", []):
         when_cp = ""
         if cp.get("resolved_at"):
@@ -185,12 +232,32 @@ def build_docx(payload: dict) -> bytes:
                 "%Y-%m-%d %H:%M", time.localtime(cp["resolved_at"]))
         doc.add_paragraph(f"{cp.get('title', cp.get('stage'))} ({cp.get('status')}){when_cp}",
                           style="List Bullet")
+        summ = cp.get("summary") or {}
+        if summ:
+            p = doc.add_paragraph()
+            p.paragraph_format.left_indent = Inches(0.4)
+            rr = p.add_run(_summary_line(summ))
+            rr.font.size = Pt(9)
+            rr.font.color.rgb = MUTED
+    if audit.get("branched_from"):
+        doc.add_paragraph(
+            f"This run was branched from run {audit['branched_from']} at "
+            f"'{audit.get('branched_at')}'; the work before that review was carried over.")
     usage = audit.get("usage", {})
     if usage:
         doc.add_paragraph(
             f"Model usage: {usage.get('calls', 0)} calls, "
             f"{usage.get('input_tokens', 0):,} input tokens, "
             f"{usage.get('output_tokens', 0):,} output tokens.")
+    models_used = audit.get("models_used") or {}
+    if models_used:
+        doc.add_paragraph("Models that answered, by call: " + ", ".join(
+            f"{k} ({v})" for k, v in sorted(models_used.items(), key=lambda kv: -kv[1])) + ".")
+    if "excerpts_located" in audit:
+        doc.add_paragraph(
+            f"Evidence: {audit.get('excerpts_located', 0):,} excerpts located verbatim in their "
+            f"sources; {audit.get('excerpts_unlocated', 0):,} could not be located and are "
+            "listed as unverified rather than quoted.")
 
     # Colophon: provenance and a suggested software citation — deliberately
     # NOT a copyright notice, since the report's content belongs entirely to
@@ -210,8 +277,40 @@ def build_docx(payload: dict) -> bytes:
     return buf.getvalue()
 
 
+def _is_located(e: dict) -> bool:
+    if "located" in e:
+        return bool(e["located"])
+    if "start_char" not in e and "end_char" not in e:
+        return True        # a payload from before the flag existed: no verdict, quote it
+    return e.get("start_char") is not None and e.get("end_char") is not None
+
+
+def _summary_line(summ: dict) -> str:
+    bits = []
+    acts = summ.get("decisions") or {}
+    if acts:
+        bits.append("decisions: " + ", ".join(f"{k} {v}" for k, v in sorted(acts.items())))
+    if summ.get("renamed_to"):
+        bits.append("renamed to: " + "; ".join(str(x) for x in summ["renamed_to"][:12])
+                    + ("…" if len(summ["renamed_to"]) > 12 else ""))
+    if summ.get("added"):
+        bits.append("added: " + "; ".join(str(x) for x in summ["added"][:12]))
+    if summ.get("excerpts_removed"):
+        bits.append(f"excerpts removed: {summ['excerpts_removed']}")
+    if summ.get("extraction_rows_edited"):
+        bits.append(f"extraction rows edited: {summ['extraction_rows_edited']}")
+    if summ.get("papers_excluded"):
+        bits.append(f"papers excluded: {summ['papers_excluded']}")
+    return " · ".join(bits) if bits else "approved without changes"
+
+
 def _write_excerpts(doc, excerpts: list, limit: int = 12) -> None:
-    for e in excerpts[:limit]:
+    """Located excerpts are quoted; excerpts whose quote could not be found
+    verbatim in the source are listed afterwards as UNVERIFIED, in a
+    different register, never inside quotation marks."""
+    located = [e for e in excerpts if _is_located(e)]
+    unlocated = [e for e in excerpts if not _is_located(e)]
+    for e in located[:limit]:
         p = doc.add_paragraph()
         p.paragraph_format.left_indent = Inches(0.4)
         r = p.add_run(f"“{e['quote']}”")
@@ -228,9 +327,34 @@ def _write_excerpts(doc, excerpts: list, limit: int = 12) -> None:
             mr = m.add_run(f"Memo: {e['memo']}")
             mr.font.size = Pt(9)
             mr.font.color.rgb = MUTED
-    if len(excerpts) > limit:
+    if len(located) > limit:
         p = doc.add_paragraph()
         p.paragraph_format.left_indent = Inches(0.4)
-        r = p.add_run(f"(+{len(excerpts) - limit} further excerpts in the project database)")
+        r = p.add_run(f"(+{len(located) - limit} further located excerpts in the project database)")
         r.font.size = Pt(9)
         r.font.color.rgb = MUTED
+    if unlocated:
+        p = doc.add_paragraph()
+        p.paragraph_format.left_indent = Inches(0.4)
+        r = p.add_run(f"Unverified ({len(unlocated)}): the model returned text under this code "
+                      "that could not be found verbatim in the source — likely paraphrase. "
+                      "Not quoted; check against the document before use.")
+        r.font.size = Pt(9)
+        r.font.color.rgb = AMBER_TEXT
+        for e in unlocated[:limit]:
+            q = doc.add_paragraph()
+            q.paragraph_format.left_indent = Inches(0.6)
+            t = str(e.get("quote", ""))
+            rr = q.add_run("[not located verbatim] " + (t[:300] + ("…" if len(t) > 300 else "")))
+            rr.font.size = Pt(9)
+            rr.italic = True
+            rr.font.color.rgb = MUTED
+            w = q.add_run(f"  — {e.get('source', '')}")
+            w.font.size = Pt(9)
+            w.font.color.rgb = MUTED
+        if len(unlocated) > limit:
+            q = doc.add_paragraph()
+            q.paragraph_format.left_indent = Inches(0.6)
+            rr = q.add_run(f"(+{len(unlocated) - limit} further unverified excerpts in the project database)")
+            rr.font.size = Pt(9)
+            rr.font.color.rgb = MUTED

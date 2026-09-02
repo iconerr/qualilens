@@ -1,9 +1,14 @@
 # Copyright 2026 Ashita Aggarwal and Suraj Commuri
 # SPDX-License-Identifier: Apache-2.0
 
-"""Reflexive thematic analysis after Braun & Clarke's six phases:
-familiarization -> initial coding -> (review) -> theme construction ->
-theme review against the dataset -> (review) -> define & name -> report."""
+"""Thematic analysis after Braun & Clarke's six phases (the reflexive
+tradition): familiarization -> initial coding -> (review) -> theme
+construction -> theme review against the extracts -> define & name ->
+(review) -> report.
+
+Phase 5 (defining and naming) runs BEFORE the researcher's theme review, so
+the names and definitions that reach the report are the ones the researcher
+saw and approved; a theme the researcher edits at that review is final."""
 
 import functools
 import json
@@ -106,22 +111,25 @@ def stage_theme_review(ctx):
 def cp_theme_payload(ctx):
     title, instructions, payload = build_code_review_payload(
         ctx, stage="theme", title="Review themes",
-        instructions="The model's Phase-4 critique of each candidate theme is shown. "
-                     "Rename, merge, or discard themes; edits here define the final "
-                     "structure of the report.")
+        instructions="These are the final theme names and definitions (Phase 5) with "
+                     "the model's Phase-4 critique of each candidate. Rename, merge, or "
+                     "discard themes; what you approve here is what the report carries.")
     for item in payload["items"]:
-        row = db.get_conn().execute("SELECT meta FROM codes WHERE id=?",
-                                    (item["id"],)).fetchone()
+        row = db.get_conn().execute("SELECT meta FROM codes WHERE id=? AND run_id=?",
+                                    (item["id"], ctx.run_id)).fetchone()
         meta = json.loads(row["meta"]) if row else {}
         item["review"] = meta.get("phase4_review")
         item["rationale"] = meta.get("rationale", "")
+        item["candidate_name"] = meta.get("candidate_name")
     return title, instructions, payload
 
 
 def stage_define_name(ctx):
-    """Phase 5: definitive names and definitions — but ONLY for themes the
-    researcher did not rename at the review checkpoint. A researcher's manual
-    edit is final; the model never overwrites it."""
+    """Phase 5: definitive names and definitions, written before the theme
+    review so the researcher approves the final wording. Themes carrying a
+    researcher edit (a branch can reopen the review) are never touched: a
+    researcher's manual edit is final. The candidate name is kept in meta so
+    the review panel can show what Phase 5 renamed."""
     themes = ctx.codes(stage="theme")
     untouched = [t for t in themes if not t.get("meta", {}).get("user_edited")]
     if not untouched:
@@ -144,12 +152,18 @@ def stage_define_name(ctx):
         '"final_definition": "3-4 sentences: central concept, scope, boundary"}]}',
         purpose="define_name", max_tokens=4000)
     conn = db.get_conn()
-    allowed = {t["id"] for t in untouched}
+    by_id = {t["id"]: t for t in untouched}
     for t in out.get("themes", []) if isinstance(out, dict) else []:
-        if t.get("theme_id") in allowed:
-            conn.execute("UPDATE codes SET name=?, definition=? WHERE id=?",
-                         (str(t.get("final_name", "")).strip() or "Unnamed",
-                          str(t.get("final_definition", "")).strip(), t["theme_id"]))
+        if not isinstance(t, dict) or t.get("theme_id") not in by_id:
+            continue
+        cur = by_id[t["theme_id"]]
+        meta = dict(cur.get("meta") or {})
+        meta["candidate_name"] = cur["name"]
+        meta["candidate_definition"] = cur["definition"]
+        conn.execute("UPDATE codes SET name=?, definition=?, meta=? WHERE id=? AND run_id=?",
+                     (str(t.get("final_name", "")).strip() or cur["name"],
+                      str(t.get("final_definition", "")).strip() or cur["definition"],
+                      json.dumps(meta), t["theme_id"], ctx.run_id))
     conn.commit()
     ctx.progress(1, 1, "Themes defined")
 
@@ -165,8 +179,9 @@ def stage_report(ctx):
 METHOD = Method(
     id="thematic",
     label="Thematic Analysis",
-    description="Reflexive thematic analysis following Braun & Clarke's six phases, "
-                "with checkpoints after initial coding and after theme review.",
+    description="Thematic analysis following Braun & Clarke's six phases (reflexive "
+                "tradition), with checkpoints after initial coding and after the themes "
+                "are reviewed, defined, and named.",
     questions=QUESTIONS,
     stages=[
         Stage("familiarize", "Familiarization", run=common.stage_familiarize),
@@ -180,10 +195,10 @@ METHOD = Method(
               apply_resolution=apply_code_review_resolution),
         Stage("theme_construction", "Constructing themes", run=stage_theme_construction),
         Stage("theme_review", "Reviewing themes against data", run=stage_theme_review),
+        Stage("define_name", "Defining & naming themes", run=stage_define_name),
         Stage("review_themes", "Review themes", kind="checkpoint",
               build_payload=cp_theme_payload,
               apply_resolution=apply_code_review_resolution),
-        Stage("define_name", "Defining & naming themes", run=stage_define_name),
         Stage("report", "Report", run=stage_report),
     ],
 )

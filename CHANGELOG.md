@@ -9,6 +9,70 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.5.0 — 2026-09-02
+
+Security and evidence-integrity release. **All users should update.**
+
+- Security hardening of the local server and of the in-app updater. Update
+  bundles are now signed, and the updater installs nothing else; an update is
+  refused while a run is executing or awaiting review. A tab left open across
+  an app restart now asks you to reload the page.
+- Evidence you can trust on its face: an excerpt whose quote cannot be found
+  verbatim in its source is marked *unverified* in the report and listed
+  outside quotation marks in the Word export; the audit appendix counts
+  located and unverified excerpts. Quote location tolerates case, ligatures,
+  soft hyphens, and PDF line-break hyphenation, and searches the segment the
+  model was reading first, so a recurring phrase is highlighted where it was
+  coded — on a real 26-paper corpus this recovers a quarter of the quotes
+  that were previously discarded.
+- Literature synthesis: the extractor now separates a paper's own findings
+  from findings it attributes to other work (shown on the extraction review,
+  never offered to the synthesis) and skips reference lists; the citation
+  guard recognises names in any script, ignores stopwords from filename
+  labels, and requires the year to match.
+- Every report now carries the configuration the run was frozen with, the
+  models that answered, and a per-checkpoint summary of decisions; the
+  complete audit trail exports as JSON from the run screen. A run freezes
+  its provider, model, and setup answers at start, so a resumed or branched
+  run cannot silently change model.
+- Thematic analysis defines and names themes before the theme review, so the
+  names in the report are the ones you approved. Framework analysis charts a
+  promoted emergent code across every source before the matrix. Content
+  analysis samples the opening, middle, and end of each source for the
+  codebook, reports rates per 10,000 characters beside counts, and names the
+  unit it counts. A confidence the model did not give is recorded as missing,
+  not as 0.8. Findings narratives pass a quote guard.
+- Grouping of very large code sets runs in chunks and consolidates, instead
+  of failing on the output limit. The coder is shown up to 300 codes for
+  reuse (was 120).
+- `QUALILENS_DATA_DIR` moves projects, uploads, and keys out of the app
+  folder; the app warns at startup and in Settings when the data folder sits
+  inside a cloud-synced directory. The write-ahead log is folded into the
+  database at every stage boundary and checkpoint.
+- Text ingestion no longer guesses UTF-16 without a byte-order mark, reads
+  Word tables in document order with text boxes, refuses `.rtf`, and
+  converts `.aac` for transcription when ffmpeg is present.
+- `package.sh` rebuilds the interface whenever its sources changed (a
+  fingerprint is stamped into the build and checked at startup and in the
+  packaging test) and rebuilds the manual every time. Release 1.4.0 had
+  shipped an interface built before its latest sources.
+
+## 1.4.0 — 2026-08-31
+
+- After a successful update, Settings shows a full-screen confirmation page
+  instead of a small notice that was easy to miss.
+- The launcher (`run.sh`) now checks disk space, verifies Node 18+, shows
+  npm output during first-time setup, and detects a port already in use.
+- The QualiLens chevron logo now appears in the app's navigation bar.
+- Bug fixes and internal improvements.
+
+## 1.3.0 — 2026-08-30
+
+- The launcher checks disk space and Node 18+, shows npm output on first run,
+  and detects a port already in use. Chevron logo. Manual updates; the
+  release ZIP needs only Python. (Entry reconstructed from the working log;
+  1.1 and 1.2 were never published.)
+
 ## 1.0.0 — 2026-08-27
 
 Initial public release.

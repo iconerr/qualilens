@@ -5,7 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # 5. Thematic Analysis
 
-Thematic analysis in QualiLens follows the six phases of reflexive thematic analysis. The pipeline familiarizes itself with each source, codes systematically across the corpus, and constructs candidate themes from the codes. It then reviews those candidates against the coded extracts, and defines and names what survives. You review twice, once after initial coding and once after the candidate themes have been criticized.
+Thematic analysis in QualiLens follows the six phases of thematic analysis as Braun and Clarke set them out, in the reflexive tradition. The pipeline familiarizes itself with each source, codes systematically across the corpus, and constructs candidate themes from the codes. It then reviews those candidates against sample extracts, defines and names what survives, and stops. You review twice, once after initial coding and once after the themes have been criticized, defined, and named — so the names and definitions you approve are the ones the report carries.
+
+A word on the name. Braun and Clarke's *reflexive* thematic analysis treats themes as the analyst's construction, made through their engagement with the data, and sets itself against approaches that treat themes as things a procedure finds. A pipeline in which a language model proposes the candidate themes is in tension with that, and a reviewer versed in the tradition may say so. QualiLens does not claim to perform the reflexive part. It performs the procedural moves of the six phases and hands you every structural decision at the checkpoints; the reflexivity — your position, your reading, your reasons for what you kept and cut — remains yours to supply and to write up. Describe the method in a paper as thematic analysis following Braun and Clarke's six phases with LLM-generated candidate codes and themes, reviewed and revised by the researcher at recorded checkpoints, rather than as reflexive thematic analysis without qualification.
 
 ## Setup options
 
@@ -71,7 +73,7 @@ Familiarization reads the first sixty thousand characters of each source. The me
 
 Each source is split into segments of twenty-four thousand characters at paragraph boundaries, and each segment is coded in one call. The AI coder is instructed to code systematically across the entire extract, giving a code to every segment relevant to your research question. Each code is a concise label capturing one analytically interesting feature of the data. The orientation and level instructions are appended.
 
-Every excerpt is copied verbatim and carries a one-sentence memo explaining the fit. Codes are reused across sources by exact name match, and the coder is shown the codes already in use, capped at one hundred and twenty. Above that cap, later segments no longer see the earliest codes and near-duplicates appear. That is what the merge control at your first checkpoint is for.
+Every excerpt is copied verbatim and carries a one-sentence memo explaining the fit. Codes are reused across sources by exact name match, and the coder is shown the codes already in use, capped at three hundred. Above that cap, later segments no longer see the earliest codes, near-duplicates appear, and the audit log says so. That is what the merge control at your first checkpoint is for.
 
 ### Review initial codes
 
@@ -79,41 +81,39 @@ The pipeline stops. Every code appears with its excerpt count. You can search an
 
 ### Constructing themes
 
-One call receives every surviving code with its definition, its excerpt count, and up to two sample quotes. It returns candidate themes. The instruction is explicit about what a theme is, which is a pattern of shared meaning organized around a central concept. It is equally explicit about what a theme is not, which is a topic summary, a data domain, or an interview question. The AI model is told to prefer fewer and richer themes over many thin ones, and to build each theme from codes drawn from more than one part of your dataset where possible.
+One call receives every surviving code with its definition, its excerpt count, and up to two sample quotes, and returns candidate themes (above one hundred and twenty codes, the grouping runs in chunks and a second call consolidates the result). The instruction is explicit about what a theme is, which is a pattern of shared meaning organized around a central concept. It is equally explicit about what a theme is not, which is a topic summary, a data domain, or an interview question. The AI model is told to prefer fewer and richer themes over many thin ones, and to build each theme from codes drawn from more than one part of your dataset where possible.
 
 Every code must land in exactly one theme, and codes that fit nowhere are placed in a theme named `Uncategorized`.
 
 ### Reviewing themes against data
 
-This stage is phase four. It is the AI model criticizing its own themes. For each candidate theme the model receives sample extracts drawn from that theme's codes. It judges internal coherence, asking whether the extracts form a meaningful pattern around one central concept. It judges external distinctness, asking whether the theme is clearly separate from the others. It returns a rating of strong, adequate, or weak on each, a recommendation of keep, revise, merge, split, or discard, and a specific critique. It is instructed to be willing to be critical.
+This stage is phase four. It is the AI model criticizing its own themes, and it is a much smaller thing than Braun and Clarke's phase four, which re-reads the whole dataset against the candidate themes. Here the model receives, for each candidate theme, up to sixteen sample extracts drawn from that theme's codes, each cut to one hundred and sixty characters. It judges internal coherence, asking whether the extracts form a meaningful pattern around one central concept. It judges external distinctness, asking whether the theme is clearly separate from the others. It returns a rating of strong, adequate, or weak on each, a recommendation of keep, revise, merge, split, or discard, and a specific critique. It is instructed to be willing to be critical.
 
 Nothing is acted on automatically. The critique is stored and shown to you at the next checkpoint.
 
+### Defining and naming themes
+
+This stage is phase five, and it runs before your review. The AI model writes a definitive name and a definition of three to four sentences for each theme, stating its central organizing concept, its scope, and its boundaries. The candidate name it replaced is kept, and the review panel shows it beneath the final name so you can see what phase five changed. A theme that already carries a researcher edit — possible when a branch reopens this review — is left exactly as you wrote it.
+
 ### Review themes
 
-You see every candidate theme with its excerpt count and the phase-four critique rendered beneath it, in the form `coherence adequate, distinctness weak — recommends merge`, followed by the model's notes. Clicking a theme opens all of its evidence beside the list, with each excerpt labeled by the initial code it came from, so you can see which of a theme's codes is actually carrying it.
+You see every theme with its final name and definition, its excerpt count, the candidate name phase five started from, and the phase-four critique rendered beneath it, in the form `coherence adequate, distinctness weak — recommends merge`, followed by the model's notes. Clicking a theme opens all of its evidence beside the list, with each excerpt labeled by the initial code it came from, so you can see which of a theme's codes is actually carrying it. What you approve here is what the report carries; nothing renames a theme after this point.
 
 Treat the critique as a second opinion rather than an instruction. The same AI model that built the themes produced it, from a sample of extracts rather than the full evidence. Use it to find the themes worth looking at closely. Do not let it substitute for looking.
 
 **One recommendation you cannot execute.** The checkpoint offers rename, merge, delete, and add. It does not offer split. When the critique recommends splitting a theme, you have two options. You can leave the theme whole and split it in your own writing. Or you can delete it, which orphans its codes and sweeps them with their evidence into an `Uncategorized` block in the report. A code you add by hand carries no excerpts and cannot be given any, so you cannot build the two halves manually. Deleting a theme in order to split it usually costs more than it gains.
 
-### Defining and naming themes
-
-This stage is phase five, and it carries one rule you should know before you use the previous checkpoint. The AI model writes a definitive name and a definition of three to four sentences, stating each theme's central organizing concept, its scope, and its boundaries. It does this **only for themes you did not edit at the review checkpoint**. Any theme whose name or definition you changed by hand is left exactly as you wrote it.
-
-This is the mechanism that makes your analysis researcher-led, and it has a practical consequence. Rename every theme at the checkpoint, and this stage does nothing at all, and the run records that all themes were researcher-named. Rename none, and every theme is renamed here, so the names you approved at the checkpoint are not the names in your report. Edit exactly the two you care about if you want the model's phase-five naming for most themes and your own wording for those two.
-
 ### Report
 
-The narrative is generated from the final structure and assembled into your report.
+The narrative is generated from the final structure and assembled into your report. Quotations in the narrative are checked against the coded excerpts and the sources; any that match neither are named in the Limitations section as unverified.
 
 ## What the report contains
 
-Themes in the evidence tree are the themes, and their children are the initial codes. Each excerpt carries its memo and a link that opens the source with the quoted span highlighted. Excerpts carry no confidence score in this method, because the coder was not asked to rate its own fit. The familiarization summaries appear as an appendix, and the audit trail records every checkpoint and every edit.
+Themes in the evidence tree are the themes, and their children are the initial codes. Each excerpt carries its memo and a link that opens the source with the quoted span highlighted; an excerpt whose quote could not be located is marked unverified rather than quoted. Excerpts carry no confidence score in this method, because the coder was not asked to rate its own fit. The report opens with the configuration the run was frozen with, the familiarization summaries appear as an appendix, and the audit appendix summarizes each checkpoint's decisions; the complete record exports from the run screen.
 
 ## Limits to state plainly in a methods section
 
-Reflexivity is yours to supply. The pipeline performs the procedural moves of the six phases. Reflexive thematic analysis also asks for an account of the analyst's position and its bearing on the reading, and no automated stage produces that.
+Reflexivity is yours to supply. The pipeline performs the procedural moves of the six phases with a language model generating the candidates. Reflexive thematic analysis also asks for an account of the analyst's position and its bearing on the reading, and no automated stage produces that. Say plainly that candidate codes and themes were model-generated and researcher-reviewed.
 
 The coder is one AI model. No intercoder reliability is modeled, and a second run over the same data with the same settings will not reproduce the first exactly.
 

@@ -19,6 +19,10 @@ import httpx
 MAX_UPLOAD_BYTES = 24 * 1024 * 1024
 CHUNK_SECONDS = 600  # 10-minute chunks when splitting
 TRANSCRIBE_MODEL = "whisper-1"
+# containers the transcription API does not accept as-is; ffmpeg re-encodes
+# them to mp3 first (the uploader accepts them so a phone recording is not
+# refused at the door)
+NEEDS_TRANSCODE = {".aac"}
 
 
 class TranscriptionError(Exception):
@@ -42,6 +46,15 @@ def transcribe(path: Path, kind: str, openai_key: str,
         if kind == "video":
             if not ffmpeg_available():
                 raise TranscriptionError("ffmpeg is required to extract audio from video files.")
+            audio_path = tmp / "audio.mp3"
+            _run_ffmpeg(["-i", str(path), "-vn", "-acodec", "libmp3lame",
+                         "-b:a", "64k", str(audio_path)])
+        elif path.suffix.lower() in NEEDS_TRANSCODE:
+            if not ffmpeg_available():
+                raise TranscriptionError(
+                    f"The transcription service does not accept {path.suffix} files and "
+                    "ffmpeg is not available to convert it. Install ffmpeg, or convert the "
+                    "recording to .mp3 or .m4a and upload that.")
             audio_path = tmp / "audio.mp3"
             _run_ffmpeg(["-i", str(path), "-vn", "-acodec", "libmp3lame",
                          "-b:a", "64k", str(audio_path)])

@@ -15,7 +15,7 @@ The **Pipeline** card lists every stage in order, with a marker showing which st
 
 The **Progress** card shows a bar and a detail line while a stage is running, for example `Coding interview_04.docx (7/23)`. It also shows the running total of model usage in calls and tokens, a **Cancel run** button, and the audit log.
 
-The **audit log** streams the run's events as they happen, each with a timestamp. Stage boundaries, individual model calls with their purpose, your checkpoint decisions, dropped assignments, and errors all appear there. The screen keeps the recent history rather than the whole log. The complete record is kept in the database and summarized in your report's audit appendix.
+The **audit log** streams the run's events as they happen, each with a timestamp. Stage boundaries, individual model calls with their purpose and sampling settings, your checkpoint decisions, dropped assignments, and errors all appear there. The screen keeps the recent history rather than the whole log. **Export as JSON**, beside the log's heading and again on the completed-run card, downloads the complete record — the configuration the run was frozen with, every event with its payload, and every checkpoint with the payload you saw and the resolution you submitted. That file is the audit trail to give a reviewer; the report's appendix summarizes it.
 
 The screen refreshes itself while the run is live, and it stops refreshing once the run reaches a final state. A completed run does not keep polling in the background.
 
@@ -78,7 +78,7 @@ The instruction is the same in all three cases. Open the run or the source, and 
 
 The project page lists every run as a clickable row — click anywhere on it to open that run's screen. Each row carries the run's date, a line saying what it is doing or waiting for, and its status badge, and completed runs carry **Open report** and **Word** buttons right on the row, so a finished analysis is one click from its findings. **New run** starts a fresh one from the first stage.
 
-A new run reuses your project's method, setup answers, provider, model, and sources. It starts from the first stage, with nothing carried over from previous runs. Codes, excerpts, checkpoints, and reports belong to the run that produced them. A project with three runs therefore holds three independent analyses of the same data, and you can compare them.
+A new run reuses your project's method, setup answers, provider, model, and sources, and freezes a copy of them at its start. Whatever the project row says later, a run resumes and branches with the configuration it began with, and its report names the model that actually answered. It starts from the first stage, with nothing carried over from previous runs. Codes, excerpts, checkpoints, and reports belong to the run that produced them. A project with three runs therefore holds three independent analyses of the same data, and you can compare them.
 
 That comparison is the most useful thing a second run offers you. Run the same configuration twice and read the two theme sets against each other. This is the closest QualiLens comes to a stability check, and it costs a second full run to obtain.
 
@@ -98,7 +98,9 @@ Branching is how you explore an alternative reading without destroying the one y
 
 Your method is fixed once any run exists for the project. QualiLens refuses to change it, because the change would leave you with a project whose history no longer matches its configuration.
 
-You cannot delete sources while a run is executing or waiting at a checkpoint. QualiLens says so rather than removing evidence from underneath a live analysis. Cancel or finish the run first.
+You cannot delete sources while a run is executing or waiting at a checkpoint. QualiLens says so rather than removing evidence from underneath a live analysis. Cancel or finish the run first. A source that a completed run cites is refused as well, because deleting it would strip that run's evidence and break its coded-document links; delete the project to remove everything, which is what a withdrawal request calls for.
+
+You cannot update the app while a run is executing or waiting at a checkpoint, because an update stops the server.
 
 The setup answers, provider, and model have no edit screen after the wizard. The project page shows them as a read-only table. Create a new project and upload the sources again to analyze the same data under different settings.
 

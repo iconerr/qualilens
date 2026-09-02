@@ -82,17 +82,17 @@ Upload your sources here. Drop files onto the upload area, or press it to browse
 
 | Category | Extensions | How QualiLens reads it |
 |---|---|---|
-| Plain text | `.txt`, `.md`, `.text` | Decoded directly, trying UTF-8, then UTF-16, then Latin-1 |
-| Word | `.docx` | Paragraph text is extracted in order, and table rows are flattened into pipe-separated lines |
-| PDF | `.pdf` | Text layer is extracted page by page |
-| Audio | `.mp3`, `.m4a`, `.wav`, `.flac`, `.ogg`, `.webm`, `.aac`, `.mpga` | Sent for transcription |
+| Plain text | `.txt`, `.md`, `.markdown`, `.text` | A byte-order mark decides UTF-8, UTF-16, or UTF-32; otherwise strict UTF-8, then Windows-1252 (which also covers Latin-1). UTF-16 is never guessed without its mark, because a Windows file of even length would decode into nonsense |
+| Word | `.docx` | Body text in document order — paragraphs and tables interleaved as they appear, table rows flattened into pipe-separated lines, text boxes included with the paragraph that anchors them. Headers, footers, and footnotes are not read |
+| PDF | `.pdf` | Text layer is extracted page by page, and the page of every quote is recorded |
+| Audio | `.mp3`, `.m4a`, `.wav`, `.flac`, `.ogg`, `.webm`, `.mpga`, `.aac` | Sent for transcription; `.aac` is converted with ffmpeg first, because the transcription service does not accept it |
 | Video | `.mp4`, `.mov`, `.avi`, `.mkv`, `.mpeg`, `.wmv` | Audio track extracted with ffmpeg, then transcribed |
 
 Three limits on this table are worth knowing before you upload.
 
 PDF extraction reads the text layer and performs no optical character recognition. A scanned PDF that holds page images rather than text therefore yields nothing, and the upload is rejected with a message saying the file contains no extractable text. Run such files through an OCR tool first, or supply the transcript as text.
 
-RTF files are accepted by the uploader, but they are decoded as plain text rather than parsed. Your analysis would then see the RTF control codes along with the words. Convert `.rtf` to `.docx` or `.txt` before you upload.
+RTF files are refused at upload, with a message saying to save the document as `.docx` or `.txt` first. RTF is markup, and reading it as plain text would feed control codes to the analysis.
 
 Any other extension is refused at upload with a message naming the unsupported type.
 
@@ -153,7 +153,7 @@ The character count of all ready sources is converted to tokens at four characte
 | Google | $1.25 | $10.00 |
 | Mistral | $2.00 | $6.00 |
 
-Four things the estimate does not know are worth holding in mind. It uses the built-in price table rather than the price your account actually pays, so a discounted or a premium rate will move the real figure. It assumes one pass through the pipeline, so a run you resume after a failure, or a second run over the same project, costs again for the stages that repeat. It does not model reasoning tokens, which several current AI models spend internally and bill as output. And it cannot know how verbose your chosen model will be.
+Four things the estimate does not know are worth holding in mind. It uses the built-in price table rather than the price your account actually pays, so a discounted or a premium rate will move the real figure; the table prices each provider as a whole unless `backend/app/models.json` lists a price for the model you chose, and the estimate box says which of the two it used. It assumes one pass through the pipeline, so a run you resume after a failure, or a second run over the same project, costs again for the stages that repeat. It does not model reasoning tokens, which several current AI models spend internally and bill as output. And it cannot know how verbose your chosen model will be.
 
 Treat the estimate as an order of magnitude. The Run screen shows you actual token usage as the analysis proceeds, and the report's audit appendix records the final totals, so you can always recover the true cost afterward.
 

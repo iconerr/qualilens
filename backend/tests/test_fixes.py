@@ -17,11 +17,14 @@ from starlette.testclient import TestClient
 import app.db as db
 import app.llm as llm
 import app.pipeline as pipeline
-from app.main import app
+from app.main import app, SESSION_TOKEN
 from app.methods.base import RunContext, apply_code_review_resolution, locate_quote
 from app.methods import common
 
-client = TestClient(app)
+# every request must look like it comes from the app itself: a local Host
+# and the per-launch session token (see main.local_only_guard)
+AUTH = {"X-QualiLens-Token": SESSION_TOKEN}
+client = TestClient(app, base_url="http://127.0.0.1", headers=AUTH)
 
 DOC_A = "We chose the vendor because the price was transparent. Support was responsive."
 DOC_B = "The onboarding was slow at first. The transparent pricing convinced finance."
@@ -323,8 +326,12 @@ def test_delete_source_with_excerpts(mock_llm):
                 json={"decisions": []})
     wait_run(run_id, "completed")
     assert excerpt_count(run_id) > 0
+    # a completed run cites this source: refused unless forced, so a report
+    # never silently loses the documents it quotes
     r = client.delete(f'/api/sources/{sids[0]}')
-    assert r.status_code == 200, "source deletion must not 500 on FK constraints"
+    assert r.status_code == 409 and "completed run" in r.json()["detail"]
+    r = client.delete(f'/api/sources/{sids[0]}?force=true')
+    assert r.status_code == 200, "forced source deletion must not 500 on FK constraints"
     conn = db.get_conn()
     assert conn.execute("SELECT COUNT(*) c FROM sources WHERE id=?", (sids[0],)).fetchone()["c"] == 0
     assert conn.execute("SELECT COUNT(*) c FROM excerpts WHERE source_id=?", (sids[0],)).fetchone()["c"] == 0
@@ -427,7 +434,8 @@ def test_failed_resolution_reopens_checkpoint(mock_llm, monkeypatch):
     def boom(ctx, resolution):
         raise RuntimeError("induced apply failure")
     monkeypatch.setattr(stage, "apply_resolution", boom)
-    quiet = TestClient(app, raise_server_exceptions=False)
+    quiet = TestClient(app, base_url="http://127.0.0.1", headers=AUTH,
+                       raise_server_exceptions=False)
     r = quiet.post(f'/api/runs/{run_id}/checkpoints/{cp["id"]}/resolve',
                    json={"decisions": []})
     assert r.status_code >= 500
@@ -904,7 +912,18 @@ def test_mistral_invalid_model_gets_diagnosis(monkeypatch):
 
 # ---------- in-place app update ----------
 
-def _make_bundle(tmp_path, extra=None, notice=True, version="9999.01.01"):
+# a throwaway release key for the tests; the real one never ships
+from app import signing as _signing
+_TEST_SEED = bytes(range(32))
+TEST_PUBLIC_HEX = _signing.public_hex_from_seed(_TEST_SEED)
+
+
+def _make_bundle(tmp_path, extra=None, notice=True, version="9999.01.01",
+                 sign=True, seed=_TEST_SEED, tamper_after_sign=None):
+    """A minimal bundle. Signed with the test key by default (the updater is
+    monkeypatched to trust it); sign=False yields an unsigned bundle,
+    tamper_after_sign={member: content} alters files after signing."""
+    import hashlib as _hl
     import zipfile as _zf
     zpath = tmp_path / "bundle.zip"
     files = {
@@ -916,6 +935,15 @@ def _make_bundle(tmp_path, extra=None, notice=True, version="9999.01.01"):
     if notice:
         files["QualiLens/NOTICE"] = "QualiLens\nCopyright 2026 Ashita Aggarwal and Suraj Commuri\n"
     files.update(extra or {})
+    if sign:
+        lines = []
+        for name in sorted(files):
+            data = files[name].encode() if isinstance(files[name], str) else files[name]
+            lines.append(f"{_hl.sha256(data).hexdigest()}  {name[len('QualiLens/'):]}")
+        manifest = "\n".join(lines) + "\n"
+        files["QualiLens/MANIFEST.sha256"] = manifest
+        files["QualiLens/MANIFEST.sig"] = _signing.sign_bytes(manifest.encode(), seed) + "\n"
+    files.update(tamper_after_sign or {})
     with _zf.ZipFile(zpath, "w") as z:
         for name, content in files.items():
             z.writestr(name, content)
@@ -936,6 +964,7 @@ def _fake_app_root(tmp_path, monkeypatch):
     (root / "VERSION").write_text("1111.01.01")
     monkeypatch.setattr(update, "APP_ROOT", root)
     monkeypatch.setattr(update, "BACKUP_DIR", root / ".update-backup")
+    monkeypatch.setattr(update, "PUBLIC_KEY_HEX", TEST_PUBLIC_HEX)
     return root
 
 
@@ -983,9 +1012,18 @@ def test_update_refuses_foreign_bundles(tmp_path, monkeypatch):
         update.apply_update(not_zip)
 
 
+def _quiesce_runs():
+    """Updates are refused while any run is live; earlier tests leave scratch
+    runs in 'running'. Park them so update tests exercise the updater."""
+    conn = db.get_conn()
+    conn.execute("UPDATE runs SET status='cancelled' WHERE status IN ('running','awaiting_review')")
+    conn.commit()
+
+
 def test_update_endpoint_applies_and_reports(tmp_path, monkeypatch):
     from app import update
     root = _fake_app_root(tmp_path, monkeypatch)
+    _quiesce_runs()
     bundle = _make_bundle(tmp_path)
     with open(bundle, "rb") as f:
         r = client.post('/api/settings/update',
@@ -1323,6 +1361,7 @@ def test_install_update_pulls_release_and_applies(tmp_path, monkeypatch):
     by the same allowlist; the release is resolved server-side only."""
     from app import update
     root = _fake_app_root(tmp_path, monkeypatch)
+    _quiesce_runs()
     bundle = _make_bundle(tmp_path)
     monkeypatch.setattr(update, "download_latest_bundle", lambda dest_dir: bundle)
     r = client.post('/api/settings/install_update')

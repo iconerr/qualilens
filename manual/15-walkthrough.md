@@ -29,7 +29,7 @@ Read the pipeline printed on the card before you click. It tells you the run wil
 
 ```
 Pipeline: Familiarization → Initial coding → Review initial codes → Constructing
-themes → Reviewing themes against data → Review themes → Defining & naming
+themes → Reviewing themes against data → Defining & naming themes → Review
 themes → Report
 ```
 
@@ -87,7 +87,7 @@ Press **Continue**.
 
 The summary line reads `Thematic Analysis · anthropic/claude-sonnet-5 · 8 sources (304k characters)`.
 
-The estimate box shows roughly `$1.06`, from about `202k` input tokens and `30k` output tokens. Follow the arithmetic in [The Wizard](02-the-wizard.md#how-the-estimate-is-calculated). Three hundred and four thousand characters becomes seventy-six thousand tokens. That figure is multiplied by the thematic factor of 2.4 and increased by twenty thousand for prompt overhead, with output assumed at fifteen percent.
+The estimate box shows roughly `$1.06`, from about `202k` input tokens and `30k` output tokens, and says it used the Anthropic default price because the catalog lists none for this model. Follow the arithmetic in [The Wizard](02-the-wizard.md#how-the-estimate-is-calculated). Three hundred and four thousand characters becomes seventy-six thousand tokens. That figure is multiplied by the thematic factor of 2.4 and increased by twenty thousand for prompt overhead, with output assumed at fifteen percent.
 
 Beneath the estimate the checkpoints are named. They are the review of initial codes and the review of themes.
 
@@ -111,7 +111,7 @@ The run status changes to `awaiting review`, and an amber panel appears carrying
 
 Work through them in four passes.
 
-**The merge pass comes first.** Sixty-one codes on eight transcripts is more than your data hold. The surplus is duplication rather than richness, because the AI coder sees at most one hundred and twenty existing codes when coding each segment, and near-synonyms accumulate.
+**The merge pass comes first.** Sixty-one codes on eight transcripts is more than your data hold. The surplus is duplication rather than richness: the coder reuses a code only when it repeats its name exactly, and near-synonyms accumulate.
 
 Set the sort to **Fewest excerpts first (merge candidates)**. The thin end of the list rises to the top, and the duplicates are mostly there. Pairs such as `worrying about overstepping` and `fearing overreach into prescribing` name the same thing, and so do three separate codes about the prescriber's authority. Tick all three, choose the best-named of them from **merge all into…**, and press **Merge**. Each merged row dims and prints where it is going, and its excerpts will move to the target.
 
@@ -133,18 +133,19 @@ Press **Approve and continue**. The run resumes.
 
 ## Between the checkpoints
 
-Theme construction runs as a single call over the fifty-three surviving codes, and returns six candidate themes. The theme review stage then runs a second call in which the AI model criticizes its own themes against sample extracts, rating coherence and distinctness and recommending an action for each.
+Theme construction runs as a single call over the fifty-three surviving codes, and returns six candidate themes. The theme review stage then runs a second call in which the AI model criticizes its own themes against sample extracts, rating coherence and distinctness and recommending an action for each. The defining and naming stage runs a third call that writes each theme's final name and definition, keeping the candidate name for you to see.
 
-Two calls, a minute or two, and the panel reappears.
+Three calls, a minute or two, and the panel reappears.
 
 ---
 
 ## Checkpoint two: review themes
 
-Six candidate themes appear, each with its definition, its excerpt count, and the phase-four critique beneath it. Clicking a theme opens all of its evidence beside the list, with each excerpt labeled by the initial code it came from.
+Six themes appear with their final names and definitions, each with its excerpt count, the candidate name phase five started from, and the phase-four critique beneath it. Clicking a theme opens all of its evidence beside the list, with each excerpt labeled by the initial code it came from.
 
 ```
 Guarding the relationship with the prescriber            [ 47 excerpts ]
+Named in Phase 5 from the candidate "Prescriber relationship".
 Model's own critique: coherence strong, distinctness strong —
 recommends keep.
 
@@ -160,7 +161,7 @@ The critique is right about the overlap here. Opening both themes shows the same
 
 A fourth theme carries a recommendation to split, and the panel offers no split control. Leave the theme whole. Deleting it in order to split it would orphan its codes into an `Uncategorized` block. You can draw the two halves out in your own writing, where the evidence is all still visible under one heading.
 
-Now decide about naming, because this checkpoint governs the next stage. The phase-five stage rewrites the name and definition of every theme you leave untouched, and leaves untouched every theme you edit. Two of the five remaining themes carry names that already say what you want. Edit those two now to lock them, and leave the other three for the AI model to name.
+Now read the names, because they are the names your report will carry. Two of the five remaining themes read as you want them. A third, `Time as the limiting condition`, is now merged away. The other two need your wording: rewrite them here, and they are final.
 
 Press **Approve and continue**.
 
@@ -168,9 +169,9 @@ Press **Approve and continue**.
 
 ## The report
 
-Defining and naming runs, the narrative is written, and the run reaches `completed`. A green card offers **Open report** and **Download .docx**.
+The narrative is written, and the run reaches `completed`. A green card offers **Open report**, **Download .docx**, and **Export audit log**.
 
-Your report opens with a **Sources** section listing all eight transcripts as buttons, each carrying the number of excerpts drawn from it. Read those counts before anything else. Seven transcripts contributed between thirty and fifty excerpts. `pharmacist_06.docx` contributed nine, which is worth a look.
+Your report opens with **Method configuration** — the question, the orientation, and the level exactly as you set them — and then a **Sources** section listing all eight transcripts as buttons, each carrying the number of excerpts drawn from it. Read those counts before anything else. Seven transcripts contributed between thirty and fifty excerpts. `pharmacist_06.docx` contributed nine, which is worth a look.
 
 Below that come the four narrative sections. Read them as a draft grounded in the structure you approved, rather than as a findings section. The writing is generated, and the analysis is yours.
 
@@ -192,7 +193,7 @@ Open two or three of the deeper amber passages, where more than one code overlap
 
 Isolate the theme's most important code in the panel, and step through every one of its passages with **next ›**. Eleven passages, read in the order the pharmacist said them, will tell you whether the code holds together.
 
-Finally, check the **Not located in the text** panel. Two excerpts sit there for this document, which is ordinary. Read both. Find the real sentence in the transcript and quote that instead, if either excerpt is a quotation you intend to publish.
+Finally, check the **Not located in the text** panel. Two excerpts sit there for this document, which is ordinary. Read both. The report already marks them *not located verbatim* and the Word export lists them outside quotation marks; if either is a quotation you intend to publish, find the real sentence in the transcript and quote that instead.
 
 Fifteen minutes across two transcripts is the difference between a reviewed coding and an unreviewed one. The reader logs none of it, so write down what you did.
 
@@ -200,17 +201,17 @@ Fifteen minutes across two transcripts is the difference between a reviewed codi
 
 ## The audit trail
 
-The **Audit Trail** section at the foot of your report records the number of logged events, the two checkpoints and their resolution, and the model usage. That usage figure is what was actually billed. Compare it against the estimate of a dollar and six cents to calibrate your expectations for the next study.
+The **Audit Trail** section at the foot of your report records the number of logged events, the two checkpoints with a summary of what you decided at each — nine merges and a rename and an addition at the first, a merge and two renames at the second — the models that answered, the count of located and unverified excerpts, and the model usage. That usage figure is what was actually billed. Compare it against the estimate of a dollar and six cents to calibrate your expectations for the next study. **Export audit log** saves the complete record as a JSON file; keep it with the project.
 
 ---
 
 ## What to write down while it is fresh
 
-Your report records that checkpoints were resolved, and the event log records each individual edit. Neither records why. The reader records nothing at all.
+Your report summarizes what you decided at each checkpoint, and the exported audit log records each individual edit with its parameters. Neither records why. The reader records nothing at all.
 
 Note six things before you close the browser. Note the nine merges you made at the first checkpoint and why you made them. Note the code you added and what you saw that prompted it. Note the theme merge you made at the second checkpoint, and the split recommendation you declined. Note which documents you read in the reader and what the uncoded stretches showed. Note the overlapping codes you found there. And note how many excerpts you checked in place, along with the two that could not be located.
 
-Those notes, plus the configuration table on your project page, plus the audit appendix, are your methods section.
+Those notes, plus the Method configuration section of the report, plus the audit appendix and the exported log, are your methods section.
 
 ---
 

@@ -11,7 +11,10 @@ transcription.py); video has its audio track extracted with ffmpeg first.
 
 from pathlib import Path
 
-TEXT_EXTS = {".txt", ".md", ".text", ".rtf"}
+# .rtf is deliberately absent: an RTF file is markup, and reading it as
+# plain text would feed control codes to the analysis. Convert it first.
+TEXT_EXTS = {".txt", ".md", ".text", ".markdown"}
+REFUSED_EXTS = {".rtf": "RTF is not supported — save the document as .docx or .txt first."}
 DOCX_EXTS = {".docx"}
 PDF_EXTS = {".pdf"}
 AUDIO_EXTS = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".webm", ".aac", ".mpga"}
@@ -20,6 +23,8 @@ VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".mpeg", ".wmv"}
 
 def classify(filename: str) -> str:
     ext = Path(filename).suffix.lower()
+    if ext in REFUSED_EXTS:
+        raise ValueError(REFUSED_EXTS[ext])
     if ext in TEXT_EXTS | DOCX_EXTS | PDF_EXTS:
         return "text"
     if ext in AUDIO_EXTS:
@@ -44,14 +49,29 @@ def extract_text_with_pages(path: Path) -> tuple:
         return _extract_docx(path), None
     if ext in PDF_EXTS:
         return _extract_pdf(path)
-    # plain text; try common encodings
-    raw = path.read_bytes()
-    for enc in ("utf-8", "utf-16", "latin-1"):
+    return decode_text(path.read_bytes()), None
+
+
+def decode_text(raw: bytes) -> str:
+    """Decode a plain-text upload. A byte-order mark decides UTF-8/UTF-16/
+    UTF-32 outright; otherwise strict UTF-8, then Windows-1252 (which also
+    covers Latin-1's printable range and is what most non-UTF-8 files
+    actually are). UTF-16 is never guessed without its BOM: a Windows-1252
+    file of even length decodes "successfully" as UTF-16 into CJK garbage."""
+    for bom, enc in ((b"\xef\xbb\xbf", "utf-8-sig"),
+                     (b"\xff\xfe\x00\x00", "utf-32"), (b"\x00\x00\xfe\xff", "utf-32"),
+                     (b"\xff\xfe", "utf-16"), (b"\xfe\xff", "utf-16")):
+        if raw.startswith(bom):
+            try:
+                return raw.decode(enc)
+            except (UnicodeDecodeError, UnicodeError):
+                break
+    for enc in ("utf-8", "cp1252"):
         try:
-            return raw.decode(enc), None
+            return raw.decode(enc)
         except (UnicodeDecodeError, UnicodeError):
             continue
-    return raw.decode("utf-8", errors="replace"), None
+    return raw.decode("latin-1")
 
 
 def page_for_offset(pages: list, offset) -> int | None:
@@ -70,17 +90,42 @@ def page_for_offset(pages: list, offset) -> int | None:
 
 
 def _extract_docx(path: Path) -> str:
+    """Body text in DOCUMENT ORDER: paragraphs and tables interleaved as they
+    appear (a transcript laid out as a speaker/utterance table stays where
+    it was), table rows flattened to pipe-separated lines, and text boxes
+    included with the paragraph that anchors them. Headers, footers, and
+    footnotes are not read; the manual says so."""
     import docx  # python-docx
+    from docx.oxml.ns import qn
     d = docx.Document(str(path))
     parts = []
-    for para in d.paragraphs:
-        if para.text.strip():
-            parts.append(para.text)
-    for table in d.tables:
-        for row in table.rows:
-            cells = [c.text.strip() for c in row.cells if c.text.strip()]
-            if cells:
-                parts.append(" | ".join(cells))
+
+    def para_text(p_el) -> str:
+        # every w:t beneath the paragraph, including runs inside text boxes
+        return "".join(t.text or "" for t in p_el.iter(qn("w:t")))
+
+    def walk(container) -> None:
+        for el in container.iterchildren():
+            tag = el.tag
+            if tag == qn("w:p"):
+                t = para_text(el)
+                if t.strip():
+                    parts.append(t)
+            elif tag == qn("w:tbl"):
+                for tr in el.iter(qn("w:tr")):
+                    cells = []
+                    for tc in tr.iter(qn("w:tc")):
+                        ct = "\n".join(para_text(p) for p in tc.iter(qn("w:p")))
+                        ct = " ".join(ct.split())
+                        if ct:
+                            cells.append(ct)
+                    if cells:
+                        parts.append(" | ".join(cells))
+            elif tag == qn("w:sdt"):
+                content = el.find(qn("w:sdtContent"))
+                if content is not None:
+                    walk(content)
+    walk(d.element.body)
     return "\n\n".join(parts)
 
 

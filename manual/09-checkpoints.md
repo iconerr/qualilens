@@ -54,7 +54,7 @@ Each code appears as a row carrying a checkbox, an editable name, an editable de
 
 **The name and the definition** are text boxes, and typing in them edits the code directly. There is no separate edit mode and no save button on the row. Everything is submitted together when you approve the checkpoint.
 
-An edit you make by hand is permanent in a specific sense. The code is flagged as researcher-edited, and later automated stages will not overwrite it. This matters most in thematic analysis. The phase-five naming stage there rewrites the name and definition of every theme you did not touch, and leaves untouched every theme you did. Editing a theme's name at the checkpoint is therefore how you keep your wording in the final report.
+An edit you make by hand is permanent in a specific sense. The code is flagged as researcher-edited, and later automated stages will not overwrite it. In thematic analysis the phase-five naming stage runs before the theme review, so what you see at that checkpoint is already the final wording, and what you approve is what the report carries; a branch that reopens the review still leaves every theme you edited exactly as you wrote it.
 
 Two details govern what counts as an edit. A value you type and then change back to what it was is not a rename, and it does not flag the code. A name you blank out is refused and the previous name is kept, because a code with no name cannot appear in a report. A definition you blank out is honored, because clearing a definition is a decision you might reasonably make.
 
@@ -83,6 +83,8 @@ The checkbox on each row adds that code to a selection. A bar appears above the 
 | **Clear selection** | Empties the selection without staging anything |
 
 Bulk merging is how you clean a code list. Tick the four codes that all name the same idea, choose the one whose name you prefer as the target, and press Merge. The target must be a code you are keeping. A target you subsequently delete is dropped rather than left stale.
+
+Approval checks every decision before it applies any: a decision that names a code from another run, a merge into a code that is no longer active, or a merge across kinds of code (an open code into a theme) is refused with a message, and the checkpoint stays open for you to correct it. Nothing is half-applied.
 
 Merging is available only through this bar. There is no per-row merge control, so merging two codes means ticking the one to absorb and choosing the other as the target.
 
@@ -140,7 +142,7 @@ This panel appears once, in grounded theory, after selective coding.
 
 Three fields are editable. They are the **core category** name, its **definition**, and the **storyline**, which is the one-to-two-paragraph integrative account the AI model produced. Beneath them, the relationships the model proposed between each category and the core are listed for your information. You cannot edit those here.
 
-The storyline is the spine of your final report, and the report's opening section reproduces it. This is therefore the checkpoint where your own analytic voice enters the report most directly. Rewriting the storyline is expected rather than exceptional.
+The storyline is the spine of your final report, and the report's opening section reproduces it. This is therefore the checkpoint where your own analytic voice enters the report most directly. Rewriting the storyline is expected rather than exceptional. The audit trail records which fields you changed; approving the three fields untouched is recorded as an unchanged approval, not as an edit.
 
 The panel tells you when selective coding produced no core category. There is then nothing to approve.
 
@@ -150,11 +152,11 @@ The panel tells you when selective coding produced no core category. There is th
 
 This panel appears once, in framework analysis, and it carries two lists.
 
-**Emergent code candidates** appear only when you allowed emergent codes. Each candidate shows its proposed name, definition, excerpt count, and sample quotes, with **Promote to framework** and **Discard**. Promoting moves the code into your framework, where it keeps its excerpts and becomes a column in the matrix. Discarding removes the code and its evidence.
+**Emergent code candidates** appear only when you allowed emergent codes. Each candidate shows its proposed name, definition, excerpt count, and sample quotes, with **Promote to framework** and **Discard**. Promoting moves the code into your framework, where it keeps its excerpts, is charted across every source by the stage that follows, and becomes a column in the matrix. Discarding removes the code and its evidence.
 
 The default is discard. A candidate you leave untouched is discarded on approval, and you cannot recover it afterward.
 
-**Low-confidence assignments** lists the sixty assignments the AI coder was least sure about, meaning those below sixty percent confidence, ordered from least confident upward. Each row carries a checkbox, and ticking it deletes that assignment. Deleted assignments are written to the audit trail with their quote before removal.
+**Low-confidence assignments** lists the sixty assignments the AI coder was least sure about, meaning those below sixty percent confidence, ordered from least confident upward; an assignment that came back with no confidence at all is listed first as "no confidence given". When more than sixty fall below the threshold the panel says how many, and the rest are accepted on approval. Each row carries a checkbox, and ticking it deletes that assignment. Deleted assignments are written to the audit trail with their quote before removal.
 
 The panel tells you when both lists are empty. That means every assignment was confident and inside your framework.
 
@@ -164,7 +166,7 @@ This panel shows you the weakest coding and the out-of-framework proposals, and 
 
 ## The extraction review panel
 
-This panel appears once, in literature synthesis, after every paper has been extracted. It shows one collapsible row per paper: the label the synthesis will cite it by, its citation line, and a count of the located verbatim quotes behind its extraction — quotes that could not be located in the paper are counted separately, and those never ground the synthesis. **Review** opens the row's editable fields — the label, the citation, and the five extraction summaries, each with its own quote count. **Open coded paper** opens the paper in [the coded-source reader](10-coded-source-reader.md) with every extraction quote highlighted, which is how you check a summary against its source without leaving your staged edits behind.
+This panel appears once, in literature synthesis, after every paper has been extracted. It shows one collapsible row per paper: the label the synthesis will cite it by, its citation line, and a count of the located verbatim quotes behind its extraction — quotes that could not be located in the paper are counted separately, and those never ground the synthesis. **Review** opens the row's editable fields — the label, the citation, the five extraction summaries, each with its own quote count, and the *cited work* note, which holds findings the paper attributes to other work and is never offered to the synthesis. **Open coded paper** opens the paper in [the coded-source reader](10-coded-source-reader.md) with every extraction quote highlighted, which is how you check a summary against its source without leaving your staged edits behind.
 
 Everything you type is a researcher edit in the same sense as a rename in the code review. A value you type and then change back is not an edit. A label you blank out is refused and the previous label kept, and a label that would duplicate another paper's is refused at approval, because the label is how the matrix and the narrative cite the paper. A field summary you blank out is honored.
 

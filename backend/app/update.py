@@ -8,9 +8,11 @@ Safety model, in order of importance:
    works from an ALLOWLIST of application paths and refuses everything else,
    so user data survives by construction, not by care.
 2. Every archive member is validated against zip-slip (absolute paths, `..`,
-   symlinks) before a single byte is written.
-3. The bundle must prove it is QualiLens (marker files, authors' NOTICE)
-   before anything happens.
+   symlinks) and against size bounds before a single byte is written.
+3. The bundle must carry a valid Ed25519 signature from the QualiLens
+   release key (PUBLIC_KEY_HEX below) over a manifest that names and hashes
+   every file in it. An unsigned, foreign, or altered bundle is refused —
+   this, not the marker files, is what proves a bundle is QualiLens.
 4. The previous application files are backed up first; any failure during
    extraction restores them automatically.
 
@@ -27,13 +29,24 @@ import time
 import zipfile
 from pathlib import Path
 
+from . import signing
+
+# The Ed25519 public key every installable bundle must be signed with. The
+# matching private seed is held by the authors and is never part of any
+# bundle or repository; package.sh signs each bundle with it. Rotating the
+# key means shipping one release signed by the old key that carries the new
+# key here.
+PUBLIC_KEY_HEX = "3bc9834cefa5c6e86df2000816ddd814077d04163c86edc1ffe62261d3d42464"
+
 # Where releases are published. The check compares the release's "build"
 # stamp (in its title or notes, e.g. "build 2026.08.27-1950") against the
 # local VERSION file; the human-facing tag may be semver (v1.0.0).
 UPDATE_REPO = "iconerr/qualilens"
 RELEASES_URL = f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest"
 BUNDLE_ASSET_NAME = "QualiLens.zip"
-MAX_BUNDLE_BYTES = 200 * 1024 * 1024
+MAX_BUNDLE_BYTES = 200 * 1024 * 1024          # the zip itself, either path
+MAX_UNPACKED_BYTES = 600 * 1024 * 1024        # sum of members' declared sizes
+MAX_MEMBER_COUNT = 20000
 _BUILD_RE = re.compile(r"build\s+(\d{4}\.\d{2}\.\d{2}-\d{4})")
 
 APP_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -77,6 +90,11 @@ def _member_paths(zf: zipfile.ZipFile) -> list:
     names = [m.filename for m in zf.infolist() if not m.is_dir()]
     if not names:
         raise UpdateError("The archive is empty.")
+    if len(names) > MAX_MEMBER_COUNT:
+        raise UpdateError("The archive holds implausibly many files; refusing.")
+    declared = sum(max(0, m.file_size) for m in zf.infolist())
+    if declared > MAX_UNPACKED_BYTES:
+        raise UpdateError("The archive would unpack to an implausible size; refusing.")
     prefix = ""
     first = names[0].split("/", 1)[0]
     if first and all(n.startswith(first + "/") for n in names):
@@ -112,6 +130,12 @@ def _validate_is_qualilens(zf: zipfile.ZipFile, members: list) -> None:
     notice = zf.read(notice_member).decode("utf-8", errors="replace")
     if "Ashita Aggarwal and Suraj Commuri" not in notice:
         raise UpdateError("The bundle's NOTICE does not identify QualiLens.")
+    # the marker checks above are a cheap sanity filter; authenticity is the
+    # signature over the full manifest, verified here before anything else
+    try:
+        signing.verify_zip_members(zf, members, PUBLIC_KEY_HEX)
+    except signing.SignatureError as e:
+        raise UpdateError(str(e))
 
 
 # ---------- pull-only release check ----------
@@ -193,6 +217,12 @@ def download_latest_bundle(dest_dir: Path) -> Path:
                           headers={"User-Agent": "QualiLens-updater"}) as r:
             if r.status_code != 200:
                 raise UpdateError(f"Downloading the bundle failed (HTTP {r.status_code}).")
+            # the prefix check above covered the first hop only; the final
+            # host after redirects must still be GitHub's own storage
+            final_host = (r.url.host or "").lower()
+            if not (final_host == "github.com" or final_host.endswith(".github.com")
+                    or final_host.endswith(".githubusercontent.com")):
+                raise UpdateError("The download was redirected away from GitHub; refusing.")
             written = 0
             with open(dest, "wb") as f:
                 for chunk in r.iter_bytes():
@@ -213,16 +243,40 @@ def apply_update(zip_path: Path) -> dict:
     the previous files on any mid-flight failure."""
     from_version = _current_version()
     try:
+        if Path(zip_path).stat().st_size > MAX_BUNDLE_BYTES:
+            raise UpdateError("That file is larger than any QualiLens bundle; refusing.")
+    except OSError:
+        raise UpdateError("The bundle file could not be read.")
+    try:
         zf = zipfile.ZipFile(zip_path)
     except zipfile.BadZipFile:
         raise UpdateError("That file is not a zip archive.")
     with zf:
         members = _member_paths(zf)
         _validate_is_qualilens(zf, members)
+        manifest_files = (signing.MANIFEST_NAME, signing.SIGNATURE_NAME)
         to_install = [(m, rel) for m, rel in members if _is_allowed(rel)]
-        skipped = [rel for _, rel in members if not _is_allowed(rel)]
+        skipped = [rel for _, rel in members
+                   if not _is_allowed(rel) and rel not in manifest_files]
         if not to_install:
             raise UpdateError("The bundle contains no installable application files.")
+        # a maintainer's local model-catalog edits must not vanish silently
+        # when backend/app is replaced wholesale: keep the outgoing copy
+        # beside the data (never inside the replaced tree) when it differs
+        catalog_note = None
+        local_catalog = APP_ROOT / "backend" / "app" / "models.json"
+        incoming = next((m for m, rel in to_install if rel == "backend/app/models.json"), None)
+        if incoming is not None and local_catalog.exists():
+            try:
+                if local_catalog.read_bytes() != zf.read(incoming):
+                    from . import db
+                    keep = db.DATA_DIR / "models.json.previous"
+                    keep.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(local_catalog, keep)
+                    catalog_note = (f"Your edited models.json differed from the update's; "
+                                    f"the outgoing copy was saved to {keep}.")
+            except OSError:
+                pass
 
         # read the incoming version before touching anything
         to_version = "unknown"
@@ -276,7 +330,7 @@ def apply_update(zip_path: Path) -> dict:
             raise UpdateError(
                 f"Extraction failed and the previous version was restored: {e}")
 
-    return {
+    out = {
         "ok": True,
         "from_version": from_version,
         "to_version": to_version,
@@ -284,4 +338,8 @@ def apply_update(zip_path: Path) -> dict:
         "files_refused": skipped,
         "backup": str(backup),
         "data_untouched": True,
+        "signature": "verified",
     }
+    if catalog_note:
+        out["note"] = catalog_note
+    return out

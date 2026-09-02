@@ -3,13 +3,15 @@
 
 """Framework (deductive) analysis: load the researcher's codebook -> apply it
 across sources (optionally flagging emergent candidates) -> (review, focused
-on low-confidence and emergent assignments) -> framework matrix -> report."""
+on low-confidence and emergent assignments) -> chart promoted emergent codes
+across the whole corpus -> framework matrix -> report."""
 
 import json
 from collections import defaultdict
 
 from .. import db
 from .base import Method, Question, Stage, apply_code_review_resolution
+from .base import locate_quote as base_locate
 from . import common
 from .content_analysis import parse_codebook
 
@@ -57,12 +59,14 @@ def stage_apply(ctx):
     system = APPLY_SYSTEM.format(emergent=EMERGENT_ON if allow_emergent else EMERGENT_OFF)
     total_units = sum(len(ctx.segments(s)) for s in ctx.sources)
     done = 0
+    dropped = 0
     for src in ctx.sources:
-        for seg_i, seg_text in ctx.segments(src):
+        for seg_i, seg_text, seg_start in ctx.segments(src):
             unit = f"chart:{src['id']}:{seg_i}"
             if ctx.unit_done(unit):     # resumable: segment already charted
                 done += 1
                 continue
+            window = (seg_start, seg_start + len(seg_text))
             ctx.progress(done, total_units, f"Charting {src['filename']}"
                          + (f" (part {seg_i + 1})" if seg_i else ""))
             schema = ('{"assignments": [{"code": "exact framework code name", '
@@ -79,15 +83,23 @@ def stage_apply(ctx):
                 purpose=f"chart:{src['filename']}:{seg_i}", max_tokens=8000)
             if isinstance(out, dict):
                 for a in out.get("assignments", []):
+                    if not isinstance(a, dict):
+                        continue
                     cid = by_name.get(_match_key(str(a.get("code", ""))))
                     q = str(a.get("quote", "")).strip()
                     if cid and q:
-                        try:
-                            conf = float(a.get("confidence", 0.8))
-                        except (TypeError, ValueError):
-                            conf = 0.8
                         ctx.add_excerpt(cid, src["id"], q,
-                                        memo=str(a.get("memo", "")), confidence=conf)
+                                        memo=str(a.get("memo", "")),
+                                        confidence=_confidence_or_none(a),
+                                        window=window)
+                    elif q:
+                        # the same mismatch content analysis logs; silence here
+                        # made an empty column impossible to diagnose
+                        dropped += 1
+                        db.log_event(ctx.run_id, "info",
+                                     f"Dropped assignment: model used code name "
+                                     f"'{a.get('code')}' not in the framework",
+                                     {"source": src["filename"], "quote": q[:200]})
                 for em in out.get("emergent", []) if allow_emergent else []:
                     name = str(em.get("proposed_code", "")).strip()
                     q = str(em.get("quote", "")).strip()
@@ -100,20 +112,49 @@ def stage_apply(ctx):
                         emergent_index[_match_key(name)] = cid
                     # no confidence: the model proposed this code, it did not
                     # rate the fit — presenting a number would be fabrication
-                    ctx.add_excerpt(cid, src["id"], q)
+                    ctx.add_excerpt(cid, src["id"], q, window=window)
             ctx.mark_unit(unit)
             done += 1
     ctx.progress(total_units, total_units, "Charting complete")
+    if dropped:
+        db.log_event(ctx.run_id, "info",
+                     f"{dropped} assignment(s) dropped for unmatched framework code names — "
+                     "a code empty across every source may be the symptom; see earlier events")
+
+
+def _confidence_or_none(a: dict):
+    """The model's stated confidence, or None when it gave none. A missing
+    number is recorded as missing — substituting a default would present a
+    rating the model never made, and would also hide the assignment from
+    the low-confidence review."""
+    v = a.get("confidence")
+    if v is None or v == "":
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f != f:                         # NaN
+        return None
+    return max(0.0, min(1.0, f))
 
 
 def cp_review_payload(ctx):
     """Focus the researcher on what needs judgment: low-confidence assignments
     and emergent code candidates."""
     low_conf = []
-    rows = db.get_conn().execute(
+    conn = db.get_conn()
+    # assignments with no stated confidence are reviewable too — they are
+    # listed first, since nothing vouches for them
+    where = ("WHERE e.run_id=? AND c.stage='codebook' AND c.status='active' "
+             "AND (e.confidence IS NULL OR e.confidence < 0.6)")
+    total_low = conn.execute(
+        "SELECT COUNT(*) c FROM excerpts e JOIN codes c ON c.id=e.code_id " + where,
+        (ctx.run_id,)).fetchone()["c"]
+    rows = conn.execute(
         "SELECT e.*, c.name AS code_name FROM excerpts e JOIN codes c ON c.id=e.code_id "
-        "WHERE e.run_id=? AND c.stage='codebook' AND e.confidence < 0.6 "
-        "ORDER BY e.confidence ASC LIMIT 60", (ctx.run_id,)).fetchall()
+        + where + " ORDER BY (e.confidence IS NOT NULL), e.confidence ASC LIMIT 60",
+        (ctx.run_id,)).fetchall()
     src_name = {s["id"]: s["filename"] for s in ctx.sources}
     for r in rows:
         low_conf.append({"excerpt_id": r["id"], "code": r["code_name"],
@@ -130,13 +171,28 @@ def cp_review_payload(ctx):
     return ("Review charting",
             "Low-confidence assignments are listed for spot-checking (delete any that are "
             "wrong). Emergent code candidates can be promoted into the framework or "
-            "discarded.",
+            "discarded; a promoted code is then charted across every source before the "
+            "matrix is built.",
             {"kind": "framework_review", "low_confidence": low_conf,
+             "low_confidence_total": total_low, "low_confidence_shown": len(low_conf),
              "items": emergent, "stage": "emergent"})
 
 
 def cp_review_apply(ctx, resolution):
     conn = db.get_conn()
+    own = {r["id"]: dict(r) for r in conn.execute(
+        "SELECT id, name, stage, status FROM codes WHERE run_id=?", (ctx.run_id,)).fetchall()}
+    # validate before mutating, so a refusal reopens the checkpoint cleanly
+    for d in resolution.get("decisions", []):
+        if not isinstance(d, dict):
+            continue
+        if d.get("id") and d["id"] not in own:
+            raise ValueError(f"Decision refers to code {d['id']}, which is not part of this run.")
+        if d.get("action") == "merge" and d.get("merge_into"):
+            tgt = own.get(d["merge_into"])
+            if tgt is None or tgt["status"] != "active":
+                raise ValueError("Merge target is not an active code of this run.")
+    promoted = list(ctx.state.get("promoted_codes", []))
     for ex in resolution.get("excerpt_deletions", []):
         row = conn.execute("SELECT quote, source_id, code_id FROM excerpts "
                            "WHERE id=? AND run_id=?", (ex, ctx.run_id)).fetchone()
@@ -151,30 +207,117 @@ def cp_review_apply(ctx, resolution):
     conn.commit()
     # decisions on emergent codes: keep => promote to codebook; delete => drop
     for d in resolution.get("decisions", []):
-        row = conn.execute("SELECT name, definition FROM codes WHERE id=?",
-                           (d.get("id"),)).fetchone()
+        if not isinstance(d, dict):
+            continue
+        row = conn.execute("SELECT name, definition FROM codes WHERE id=? AND run_id=?",
+                           (d.get("id"), ctx.run_id)).fetchone()
         if not row:
             db.log_event(ctx.run_id, "info",
                          f"Skipped decision for unknown emergent code {d.get('id')}", d)
             continue
         if d.get("action") in ("keep", "rename"):
-            conn.execute("UPDATE codes SET stage='codebook', name=?, definition=? WHERE id=?",
+            meta_row = conn.execute("SELECT meta FROM codes WHERE id=? AND run_id=?",
+                                    (d["id"], ctx.run_id)).fetchone()
+            try:
+                meta = json.loads(meta_row["meta"] or "{}") if meta_row else {}
+            except ValueError:
+                meta = {}
+            meta["promoted"] = True
+            conn.execute("UPDATE codes SET stage='codebook', name=?, definition=?, meta=? "
+                         "WHERE id=? AND run_id=?",
                          (d.get("name") or row["name"],
-                          d.get("definition") or row["definition"], d["id"]))
+                          d.get("definition") or row["definition"], json.dumps(meta),
+                          d["id"], ctx.run_id))
+            if d["id"] not in promoted:
+                promoted.append(d["id"])
             db.log_event(ctx.run_id, "user_decision",
-                         f"Researcher promoted emergent code '{row['name']}' into framework", d)
+                         f"Researcher promoted emergent code '{row['name']}' into framework; "
+                         "it will be charted across every source before the matrix", d)
         elif d.get("action") == "delete":
-            conn.execute("UPDATE codes SET status='deleted' WHERE id=?", (d["id"],))
+            conn.execute("UPDATE codes SET status='deleted' WHERE id=? AND run_id=?",
+                         (d["id"], ctx.run_id))
             db.log_event(ctx.run_id, "user_decision",
                          f"Researcher discarded emergent code '{row['name']}'", d)
         elif d.get("action") == "merge" and d.get("merge_into"):
             conn.execute("UPDATE excerpts SET code_id=? WHERE code_id=? AND run_id=?",
                          (d["merge_into"], d["id"], ctx.run_id))
-            conn.execute("UPDATE codes SET status='merged', merged_into=? WHERE id=?",
-                         (d["merge_into"], d["id"]))
+            conn.execute("UPDATE codes SET status='merged', merged_into=? WHERE id=? AND run_id=?",
+                         (d["merge_into"], d["id"], ctx.run_id))
             db.log_event(ctx.run_id, "user_decision",
                          f"Researcher merged emergent code '{row['name']}' into {d['merge_into']}", d)
     conn.commit()
+    ctx.state["promoted_codes"] = promoted
+    ctx.persist_state()
+
+
+def stage_chart_promoted(ctx):
+    """A code promoted from the emergent candidates entered the framework
+    with only the passages the model happened to flag. Chart the promoted
+    codes across every segment of every source (one call per segment, all
+    promoted codes together) so their matrix columns mean what the other
+    columns mean. Resumable per segment; a no-op when nothing was promoted."""
+    from .content_analysis import _match_key
+    promoted_ids = [c for c in ctx.state.get("promoted_codes", [])]
+    codes = [c for c in ctx.codes(stage="codebook") if c["id"] in promoted_ids]
+    if not codes:
+        ctx.progress(1, 1, "No promoted codes to chart")
+        return
+    listing = "\n".join(f"- {c['name']}: {c['definition']}" for c in codes)
+    by_name = {_match_key(c["name"]): c["id"] for c in codes}
+    # the passages already on these codes (from the emergent pass) must not
+    # be duplicated: skip a quote that locates inside an existing span
+    existing = {}
+    for c in codes:
+        existing[c["id"]] = [(e["source_id"], e["start_char"], e["end_char"], e["quote"])
+                             for e in ctx.excerpts_for(c["id"])]
+    total_units = sum(len(ctx.segments(s)) for s in ctx.sources)
+    done = 0
+    for src in ctx.sources:
+        for seg_i, seg_text, seg_start in ctx.segments(src):
+            unit = f"rechart:{src['id']}:{seg_i}"
+            if ctx.unit_done(unit):
+                done += 1
+                continue
+            ctx.progress(done, total_units, f"Charting promoted codes: {src['filename']}"
+                         + (f" (part {seg_i + 1})" if seg_i else ""))
+            out = ctx.llm_json(
+                APPLY_SYSTEM.format(emergent=EMERGENT_OFF) + "\n\n" + common.CODER_RULES,
+                f"FRAMEWORK (only these codes):\n{listing}\n\nSource: {src['filename']}\n---\n"
+                f"{seg_text}\n---\nReturn JSON: {{\"assignments\": [{{\"code\": \"exact "
+                f"framework code name\", \"quote\": \"verbatim passage\", \"confidence\": 0.0, "
+                f"\"memo\": \"1-sentence justification\"}}]}}",
+                purpose=f"rechart:{src['filename']}:{seg_i}", max_tokens=8000)
+            window = (seg_start, seg_start + len(seg_text))
+            for a in out.get("assignments", []) if isinstance(out, dict) else []:
+                if not isinstance(a, dict):
+                    continue
+                cid = by_name.get(_match_key(str(a.get("code", ""))))
+                q = str(a.get("quote", "")).strip()
+                if not (cid and q):
+                    continue
+                span = base_locate(src["text"], q, window)
+                dup = False
+                for (sid, st, en, oq) in existing.get(cid, []):
+                    if sid != src["id"]:
+                        continue
+                    if span[0] is not None and st is not None and en is not None \
+                            and st <= span[0] < en:
+                        dup = True
+                        break
+                    if oq.strip() == q:
+                        dup = True
+                        break
+                if dup:
+                    continue
+                eid = ctx.add_excerpt(cid, src["id"], q, memo=str(a.get("memo", "")),
+                                      confidence=_confidence_or_none(a), window=window)
+                existing.setdefault(cid, []).append((src["id"], span[0], span[1], q))
+                del eid
+            ctx.mark_unit(unit)
+            done += 1
+    ctx.progress(total_units, total_units, "Promoted codes charted")
+    db.log_event(ctx.run_id, "stage",
+                 f"Charted {len(codes)} promoted code(s) across the corpus")
 
 
 def stage_matrix_report(ctx):
@@ -254,6 +397,8 @@ METHOD = Method(
               reset_units=("chart",), reset_excerpt_stages=("codebook", "emergent")),
         Stage("review_charting", "Review charting", kind="checkpoint",
               build_payload=cp_review_payload, apply_resolution=cp_review_apply),
+        Stage("chart_promoted", "Chart promoted codes", run=stage_chart_promoted,
+              resets=("promoted_codes",), reset_units=("rechart",)),
         Stage("matrix_report", "Framework matrix & report", run=stage_matrix_report,
               resets=("matrix_rows",)),
     ],

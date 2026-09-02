@@ -80,14 +80,41 @@ def _load_catalog() -> dict:
         default = entry.get("default_model")
         if not isinstance(default, str) or default not in models:
             default = models[0]
-        pricing = entry.get("pricing_usd_per_mtok")
-        if (not isinstance(pricing, list) or len(pricing) != 2
-                or not all(isinstance(x, (int, float)) for x in pricing)):
+        # pricing_usd_per_mtok is either [input, output] for the provider or
+        # {"default": [in, out], "<model id>": [in, out], ...}; the estimate
+        # prices the model the project actually chose when it is listed
+        raw_pricing = entry.get("pricing_usd_per_mtok")
+        per_model = {}
+        pricing = None
+        if isinstance(raw_pricing, dict):
+            for key, val in raw_pricing.items():
+                if _valid_pair(val):
+                    if key == "default":
+                        pricing = tuple(val)
+                    else:
+                        per_model[str(key)] = tuple(val)
+        elif _valid_pair(raw_pricing):
+            pricing = tuple(raw_pricing)
+        if pricing is None:
             pricing = fb["pricing"]
         out[pid] = {"label": entry.get("label") or fb["label"],
                     "default_model": default, "models": models,
-                    "pricing": tuple(pricing)}
+                    "pricing": pricing, "pricing_by_model": per_model}
     return out
+
+
+def _valid_pair(val) -> bool:
+    return (isinstance(val, list) and len(val) == 2
+            and all(isinstance(x, (int, float)) and x >= 0 for x in val))
+
+
+def price_for(provider: str, model: str, catalog_now: dict | None = None) -> tuple:
+    """(input, output) USD per million tokens for a model: its own entry when
+    the catalog lists one, else the provider default."""
+    cat = catalog_now or catalog()
+    info = cat.get(provider) or {}
+    return tuple(info.get("pricing_by_model", {}).get((model or "").strip(),
+                                                      info.get("pricing", (3.0, 15.0))))
 
 
 PROVIDERS = _load_catalog()
@@ -171,7 +198,11 @@ def _post_with_retry(url: str, headers: dict, payload: dict,
             with httpx.Client(timeout=TIMEOUT) as client:
                 resp = client.post(url, headers=headers, json=payload)
             if resp.status_code == 200:
-                return resp.json()
+                try:
+                    return resp.json()
+                except ValueError as e:
+                    raise LLMError(f"The provider answered 200 with a body that is not "
+                                   f"JSON: {resp.text[:200]!r}") from e
             # retry on rate limit / overload / transient server errors
             if resp.status_code in (408, 429, 500, 502, 503, 504, 529) and attempt < retries:
                 time.sleep(_retry_delay(resp, attempt))
@@ -190,9 +221,14 @@ def _post_with_retry(url: str, headers: dict, payload: dict,
     raise LLMError(f"Exhausted retries: {last_err}")
 
 
-def _finalize(text: str, usage: dict, stop_reason: str, provider: str, model: str) -> tuple[str, dict]:
-    """Common post-checks: refuse empty output and surface truncation."""
+def _finalize(text: str, usage: dict, stop_reason: str, provider: str, model: str,
+              sampling: dict | None = None) -> tuple[str, dict]:
+    """Common post-checks: refuse empty output and surface truncation. The
+    effective sampling settings ride along in usage so the audit trail can
+    record them per call (they differ by provider and are otherwise invisible)."""
     usage["stop_reason"] = stop_reason
+    if sampling is not None:
+        usage["sampling"] = sampling
     if not text.strip():
         err = LLMError(
             f"{provider}/{model} returned no text (stop reason: {stop_reason}). "
@@ -252,7 +288,9 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         stop = TRUNCATED if stop == "max_tokens" else stop
         return _finalize(text, {"input_tokens": u.get("input_tokens", 0),
                                 "output_tokens": u.get("output_tokens", 0)},
-                         stop, provider, model)
+                         stop, provider, model,
+                         sampling={"temperature": "provider default",
+                                   "max_tokens": max_tokens + 8000})
 
     if provider == "openai":
         payload = {"model": model,
@@ -261,10 +299,13 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         if model.startswith(("gpt-4", "gpt-3")):
             payload["max_tokens"] = max_tokens
             payload["temperature"] = temperature
+            sampling = {"temperature": temperature, "max_tokens": max_tokens}
         else:
             # reasoning-capable models reject max_tokens/temperature overrides;
             # give them headroom for internal reasoning tokens
             payload["max_completion_tokens"] = max_tokens + 8000
+            sampling = {"temperature": "provider default",
+                        "max_tokens": max_tokens + 8000}
         data = _post_with_retry(
             "https://api.openai.com/v1/chat/completions",
             {"Authorization": f"Bearer {api_key}", "content-type": "application/json"},
@@ -277,7 +318,7 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         stop = TRUNCATED if stop == "length" else stop
         return _finalize(text, {"input_tokens": u.get("prompt_tokens", 0),
                                 "output_tokens": u.get("completion_tokens", 0)},
-                         stop, provider, model)
+                         stop, provider, model, sampling=sampling)
 
     if provider == "google":
         data = _post_with_retry(
@@ -303,7 +344,9 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         stop = TRUNCATED if stop == "MAX_TOKENS" else stop
         return _finalize(text, {"input_tokens": u.get("promptTokenCount", 0),
                                 "output_tokens": u.get("candidatesTokenCount", 0)},
-                         stop, provider, model)
+                         stop, provider, model,
+                         sampling={"temperature": temperature,
+                                   "max_tokens": max_tokens + 16384})
 
     if provider == "mistral":
         data = _post_with_retry(
@@ -321,7 +364,8 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         stop = TRUNCATED if stop == "length" else stop
         return _finalize(text, {"input_tokens": u.get("prompt_tokens", 0),
                                 "output_tokens": u.get("completion_tokens", 0)},
-                         stop, provider, model)
+                         stop, provider, model,
+                         sampling={"temperature": temperature, "max_tokens": max_tokens})
 
     raise LLMError(f"Unknown provider '{provider}'.")
 
@@ -366,6 +410,8 @@ def chat_json(provider: str, model: str, api_key: str, system: str, user: str,
         merged = {k: usage.get(k, 0) + usage2.get(k, 0)
                   for k in ("input_tokens", "output_tokens")}
         merged["stop_reason"] = usage2.get("stop_reason", "")
+        merged["sampling"] = usage.get("sampling")
+        merged["repair_call"] = True
         return _extract_json(repair), merged
 
 

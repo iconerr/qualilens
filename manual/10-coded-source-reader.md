@@ -82,9 +82,9 @@ Close the inspector with its Close button, or click another passage to replace i
 
 Sometimes the AI model returns a quote that does not appear verbatim in the source. That quote cannot be drawn over the text. Those excerpts are collected in a panel headed **Not located in the text**.
 
-Each entry shows the beginning of the quote and the code it belongs to. These excerpts still count as evidence in the report. They appear in the evidence tree and in the Word export exactly like any other excerpt. What they lack is a position in the document, so you cannot check them in place.
+Each entry shows the beginning of the quote and the code it belongs to. These excerpts are kept, but the report treats them as unverified: they appear in the evidence tree with a *not located verbatim* marker instead of quotation marks, the Word export lists them after the located excerpts under an "Unverified" note rather than quoting them, the audit appendix counts them, and the synthesis stage never builds on them. What they lack is a position in the document, so you cannot check them in place.
 
-The coding instructions require quotes to be copied verbatim. This list therefore measures how far the AI model departed from that instruction on this document. A handful of entries is ordinary, because a model will occasionally normalize a dash or drop a stray character. A long list is a warning, because it means the coder is paraphrasing. Do not print a paraphrased quote as a quotation. Find the sentence in the transcript first and quote what the participant actually said.
+The coding instructions require quotes to be copied verbatim. This list therefore measures how far the AI model departed from that instruction on this document. Locating already tolerates what a model routinely changes — typographic quotes and dashes, case, ligatures, soft hyphens, the hyphen a PDF puts at a line end, runs of whitespace — so an entry here is a real departure, usually a paraphrase or a quote assembled from two places. A handful is ordinary. A long list is a warning, because it means the coder is paraphrasing. Do not print a paraphrased quote as a quotation. Find the sentence in the transcript first and quote what the participant actually said.
 
 ## What the reader does not show
 

@@ -10,32 +10,75 @@
     "some vendors serve alias ids (e.g. '-latest') that work in chat but may",
     "not appear in their list endpoint; a working model marked ✗ may simply",
     "be an alias — confirm with the Test button before removing it.",
-    "pricing_usd_per_mtok is [input, output] per million tokens and feeds",
-    "only the pre-run cost estimate. If this file is missing or invalid,",
-    "the app falls back to defaults compiled into backend/app/llm.py."
+    "pricing_usd_per_mtok feeds only the pre-run cost estimate. It is either",
+    "[input, output] per million tokens for the whole provider, or an object",
+    "{\"default\": [in, out], \"<model id>\": [in, out], ...} so the estimate",
+    "can price the model the project chose; a model with no entry uses the",
+    "default. Prices are the authors' reading of public list prices at the",
+    "time of editing and are not guaranteed — check the provider's page.",
+    "If this file is missing or invalid, the app falls back to defaults",
+    "compiled into backend/app/llm.py. An in-app update replaces this file;",
+    "an edited copy is saved as <data folder>/models.json.previous so your",
+    "edits can be reapplied."
   ],
   "anthropic": {
     "label": "Anthropic (Claude)",
     "default_model": "claude-sonnet-5",
-    "models": ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001"],
-    "pricing_usd_per_mtok": [3.0, 15.0]
+    "models": [
+      "claude-sonnet-5",
+      "claude-opus-5",
+      "claude-haiku-4-5-20251001"
+    ],
+    "pricing_usd_per_mtok": {
+      "default": [
+        3.0,
+        15.0
+      ]
+    }
   },
   "openai": {
     "label": "OpenAI (GPT)",
     "default_model": "gpt-5.1",
-    "models": ["gpt-5.1", "gpt-5", "gpt-4.1", "gpt-4o"],
-    "pricing_usd_per_mtok": [2.5, 10.0]
+    "models": [
+      "gpt-5.1",
+      "gpt-5",
+      "gpt-4.1",
+      "gpt-4o"
+    ],
+    "pricing_usd_per_mtok": {
+      "default": [
+        2.5,
+        10.0
+      ]
+    }
   },
   "google": {
     "label": "Google (Gemini)",
     "default_model": "gemini-2.5-pro",
-    "models": ["gemini-2.5-pro", "gemini-2.5-flash"],
-    "pricing_usd_per_mtok": [1.25, 10.0]
+    "models": [
+      "gemini-2.5-pro",
+      "gemini-2.5-flash"
+    ],
+    "pricing_usd_per_mtok": {
+      "default": [
+        1.25,
+        10.0
+      ]
+    }
   },
   "mistral": {
     "label": "Mistral",
     "default_model": "mistral-large-latest",
-    "models": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"],
-    "pricing_usd_per_mtok": [2.0, 6.0]
+    "models": [
+      "mistral-large-latest",
+      "mistral-medium-latest",
+      "mistral-small-latest"
+    ],
+    "pricing_usd_per_mtok": {
+      "default": [
+        2.0,
+        6.0
+      ]
+    }
   }
 }

@@ -6,8 +6,3 @@ __pycache__/
 *.pyc
 .DS_Store
 
-# Private files — not for the public repo
-FINGERPRINT.md
-Publication-Routes-for-QualiLens.md
-Sample Data/
-devnotes/

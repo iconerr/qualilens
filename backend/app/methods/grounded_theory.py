@@ -117,19 +117,47 @@ def cp_core_payload(ctx):
 
 
 def cp_core_apply(ctx, resolution):
+    """Apply the researcher's edits to the core category. Only a real change
+    is written and logged — the panel submits every field whether or not it
+    was touched, and an audit trail must not record edits that never
+    happened. Decisions are scoped to this run's codes."""
     import json as _json
     conn = db.get_conn()
     for d in resolution.get("decisions", []):
-        row = conn.execute("SELECT * FROM codes WHERE id=?", (d.get("id"),)).fetchone()
+        if not isinstance(d, dict):
+            continue
+        row = conn.execute("SELECT * FROM codes WHERE id=? AND run_id=? AND stage='core'",
+                           (d.get("id"), ctx.run_id)).fetchone()
         if not row:
+            db.log_event(ctx.run_id, "info",
+                         f"Skipped core-category decision for unknown code {d.get('id')}")
             continue
         meta = db.row_to_dict(row, ("meta",))["meta"]
-        if d.get("storyline") is not None:
-            meta["storyline"] = d["storyline"]
-        conn.execute("UPDATE codes SET name=?, definition=?, meta=? WHERE id=?",
-                     (d.get("name") or row["name"], d.get("definition") or row["definition"],
-                      _json.dumps(meta), d["id"]))
-        db.log_event(ctx.run_id, "user_decision", "Researcher edited core category", d)
+        new_name = (str(d["name"]).strip() if isinstance(d.get("name"), str)
+                    and str(d["name"]).strip() else row["name"])
+        new_def = (str(d["definition"]).strip() if isinstance(d.get("definition"), str)
+                   else row["definition"])
+        new_story = (str(d["storyline"]).strip() if isinstance(d.get("storyline"), str)
+                     else str(meta.get("storyline", "")))
+        changed = []
+        if new_name != row["name"]:
+            changed.append("name")
+        if new_def != row["definition"]:
+            changed.append("definition")
+        if new_story != str(meta.get("storyline", "")):
+            changed.append("storyline")
+        if not changed:
+            db.log_event(ctx.run_id, "user_decision",
+                         "Researcher approved the core category unchanged", {"id": d.get("id")})
+            continue
+        meta["storyline"] = new_story
+        meta["user_edited"] = True
+        conn.execute("UPDATE codes SET name=?, definition=?, meta=? WHERE id=? AND run_id=?",
+                     (new_name, new_def, _json.dumps(meta), d["id"], ctx.run_id))
+        db.log_event(ctx.run_id, "user_decision",
+                     f"Researcher edited the core category ({', '.join(changed)})",
+                     {"id": d.get("id"), "changed": changed,
+                      "name": new_name if "name" in changed else None})
     conn.commit()
 
 

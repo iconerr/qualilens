@@ -6,17 +6,31 @@
 FastAPI backend: serves the JSON API and, in production, the built frontend.
 Everything runs on the researcher's machine; API keys live in the local
 SQLite database and calls go straight to the chosen provider.
+
+Binding to 127.0.0.1 keeps the network out, not the browser: any web page
+the researcher has open can send requests to this port. Three guards close
+that door, applied to every request by the middleware below —
+  * the Host header must name this machine (defeats DNS rebinding),
+  * an Origin header, when a browser sends one, must be this app's own
+    origin (defeats cross-site requests of every shape), and
+  * every /api call must carry the per-launch session token, either in the
+    X-QualiLens-Token header (the interface adds it to every fetch) or in
+    the SameSite=Strict cookie set with index.html (used by plain download
+    links). The token is minted at startup and injected into index.html, so
+    nothing outside this app ever learns it.
 """
 
 import json
+import os
 import re
+import secrets
 import threading
 from dataclasses import asdict
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.responses import FileResponse, Response
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import db, ingestion, llm, pipeline, report_docx, transcription, update
@@ -26,9 +40,74 @@ app = FastAPI(title="QualiLens")
 db.init_db()
 pipeline.reconcile_on_startup()
 
+# ---------------- local-only guard ----------------
+
+# QUALILENS_TOKEN pins the token (development against the Vite dev server);
+# otherwise a fresh random token per launch.
+SESSION_TOKEN = (os.environ.get("QUALILENS_TOKEN") or "").strip() or secrets.token_urlsafe(32)
+TOKEN_HEADER = "x-qualilens-token"
+TOKEN_COOKIE = "qualilens_token"
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _hostname(value: str) -> str:
+    """Bare hostname from a Host header or an Origin URL ('[::1]:8765' -> '::1')."""
+    v = (value or "").strip().lower()
+    if "://" in v:
+        v = urlsplit(v).netloc
+    if v.startswith("["):
+        return v[1:].split("]", 1)[0]
+    return v.rsplit(":", 1)[0] if v.count(":") == 1 else v
+
+
+def _token_ok(request: Request) -> bool:
+    supplied = request.headers.get(TOKEN_HEADER) or request.cookies.get(TOKEN_COOKIE) or ""
+    return bool(supplied) and secrets.compare_digest(supplied, SESSION_TOKEN)
+
+
+@app.middleware("http")
+async def local_only_guard(request: Request, call_next):
+    host = _hostname(request.headers.get("host", ""))
+    if host not in LOCAL_HOSTS:
+        return JSONResponse({"detail": "QualiLens answers only to 127.0.0.1 or localhost."},
+                            status_code=421)
+    origin = request.headers.get("origin")
+    if origin is not None and (origin.strip().lower() == "null"
+                               or _hostname(origin) not in LOCAL_HOSTS):
+        return JSONResponse({"detail": "Cross-site request refused."}, status_code=403)
+    path = request.url.path
+    if path == "/api" or path.startswith("/api/"):
+        if not _token_ok(request):
+            return JSONResponse(
+                {"detail": "Missing or stale session token — reload the QualiLens page "
+                           "(the app was restarted, or this request did not come from it)."},
+                status_code=401)
+    return await call_next(request)
+
 
 def _err(status: int, msg: str):
     raise HTTPException(status_code=status, detail=msg)
+
+
+def _s(body: dict, key: str) -> str:
+    """A string field from a JSON body, whatever the client sent."""
+    v = body.get(key) if isinstance(body, dict) else None
+    return v.strip() if isinstance(v, str) else ("" if v is None else str(v).strip())
+
+
+def _dict(body: dict, key: str) -> dict:
+    v = body.get(key) if isinstance(body, dict) else None
+    return v if isinstance(v, dict) else {}
+
+
+def _refuse_if_runs_active(action: str) -> None:
+    """Updates stop the server; they must not interrupt a run that is
+    executing or waiting on the researcher."""
+    busy = db.get_conn().execute(
+        "SELECT COUNT(*) c FROM runs WHERE status IN ('running','awaiting_review')").fetchone()["c"]
+    if busy:
+        _err(409, f"{busy} run(s) are executing or awaiting review. Finish or cancel them "
+                  f"before you {action} — an update stops the server.")
 
 
 # ---------------- meta ----------------
@@ -49,6 +128,8 @@ def get_meta():
         ],
         "ffmpeg": transcription.ffmpeg_available(),
         "version": update._current_version(),
+        "data_dir": str(db.DATA_DIR),
+        "synced_folder": db.synced_folder_hint(),
     }
 
 
@@ -66,27 +147,27 @@ def get_settings():
 
 @app.put("/api/settings/keys")
 def put_keys(body: dict):
-    for pid, key in body.items():
-        if pid not in llm.PROVIDERS:
+    for pid, key in (body.items() if isinstance(body, dict) else []):
+        if pid not in llm.PROVIDERS or not isinstance(key, str):
             continue
         if key == "__clear__":
             db.set_setting(f"api_key_{pid}", "")
-        elif key:
+        elif key.strip():
             db.set_setting(f"api_key_{pid}", key.strip())
     return get_settings()
 
 
 @app.post("/api/settings/test_key")
 def test_key(body: dict):
-    pid = body.get("provider")
+    pid = _s(body, "provider")
     if pid not in llm.PROVIDERS:
         _err(400, "Unknown provider")
     # an explicitly supplied key is tested WITHOUT being saved, so trying a
     # new key never clobbers a saved working one
-    key = (body.get("key") or "").strip() or db.get_setting(f"api_key_{pid}")
+    key = _s(body, "key") or db.get_setting(f"api_key_{pid}")
     if not key:
         _err(400, "No key saved for this provider")
-    model = body.get("model") or llm.PROVIDERS[pid]["default_model"]
+    model = _s(body, "model") or llm.catalog()[pid]["default_model"]
     try:
         text, usage = llm.chat(pid, model, key, "Reply with the single word: ok",
                                "Say ok.", max_tokens=1000, temperature=0.0, retries=1)
@@ -101,7 +182,7 @@ def check_models(body: dict):
     (their free list-models endpoint, called with the user's own key). This is
     how a maintainer learns a catalog entry has been retired — no telemetry,
     no token spend."""
-    only = body.get("provider")
+    only = _s(body, "provider")
     if only and only not in llm.PROVIDERS:
         _err(400, f"Unknown provider '{only}'")
     out = {}
@@ -148,12 +229,24 @@ def _finish_update(result: dict) -> dict:
 @app.post("/api/settings/update")
 async def apply_app_update(file: UploadFile = File(...)):
     """Update the application in place from a downloaded QualiLens bundle.
-    Projects, keys, and uploads are untouchable by design (allowlist). On
-    success the server stops itself so ./run.sh relaunches the new version."""
+    Projects, keys, and uploads are untouchable by design (allowlist); the
+    bundle must be signed by the release key. On success the server stops
+    itself so ./run.sh relaunches the new version."""
     import tempfile
+    _refuse_if_runs_active("update the app")
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-        tmp.write(await file.read())
         tmp_path = Path(tmp.name)
+        written = 0
+        while True:
+            chunk = await file.read(1 << 20)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > update.MAX_BUNDLE_BYTES:
+                tmp.close()
+                tmp_path.unlink(missing_ok=True)
+                _err(413, "That file is larger than any QualiLens bundle; refusing.")
+            tmp.write(chunk)
     try:
         result = update.apply_update(tmp_path)
     except update.UpdateError as e:
@@ -181,6 +274,7 @@ def install_update():
     no URL is accepted from the client — and user data is untouchable by the
     updater's allowlist, as ever."""
     import tempfile
+    _refuse_if_runs_active("install an update")
     with tempfile.TemporaryDirectory() as td:
         try:
             bundle = update.download_latest_bundle(Path(td))
@@ -211,13 +305,13 @@ def list_projects():
 
 @app.post("/api/projects")
 def create_project(body: dict):
-    name = (body.get("name") or "").strip()
-    method = body.get("method")
+    name = _s(body, "name")
+    method = _s(body, "method")
     if not name:
         _err(400, "Project name is required")
     if method not in METHODS:
         _err(400, f"Unknown method '{method}'")
-    config = body.get("config") or {}
+    config = _dict(body, "config")
     # validate required method questions
     for q in METHODS[method].questions:
         if q.required and not str(config.get(q.key, "")).strip():
@@ -273,9 +367,9 @@ def update_project(project_id: str, body: dict):
     existing = conn.execute("SELECT method FROM projects WHERE id=?", (project_id,)).fetchone()
     if not existing:
         _err(404, "Project not found")
-    name = (body.get("name") or "").strip()
-    method = body.get("method")
-    config = body.get("config") or {}
+    name = _s(body, "name")
+    method = _s(body, "method")
+    config = _dict(body, "config")
     has_runs = conn.execute("SELECT 1 FROM runs WHERE project_id=? LIMIT 1",
                             (project_id,)).fetchone()
     if has_runs and method != existing["method"]:
@@ -337,12 +431,15 @@ async def upload_source(project_id: str, file: UploadFile = File(...),
         # through the stages and checkpoints that already ran
         _err(409, "A run is in progress for this project — wait for it or cancel "
                   "it before adding sources.")
+    filename = Path(file.filename or "").name
+    if not filename:
+        _err(400, "The upload carries no filename.")
     try:
-        kind = ingestion.classify(file.filename)
+        kind = ingestion.classify(filename)
     except ValueError as e:
         _err(400, str(e))
     sid = db.new_id()
-    dest = db.UPLOADS_DIR / f"{sid}_{Path(file.filename).name}"
+    dest = db.UPLOADS_DIR / f"{sid}_{filename}"
     content = await file.read()
     dest.write_bytes(content)
 
@@ -351,24 +448,24 @@ async def upload_source(project_id: str, file: UploadFile = File(...),
             text, pages = ingestion.extract_text_with_pages(dest)
         except Exception as e:  # noqa: BLE001
             dest.unlink(missing_ok=True)
-            _err(400, f"Could not extract text from {file.filename}: {e}")
+            _err(400, f"Could not extract text from {filename}: {e}")
         if not text.strip():
             dest.unlink(missing_ok=True)
-            _err(400, f"{file.filename} contains no extractable text.")
+            _err(400, f"{filename} contains no extractable text.")
         meta = {"bytes": len(content)}
         if pages:
             meta["pages"] = pages   # PDF page map: char offsets -> page numbers
         conn.execute(
             "INSERT INTO sources(id,project_id,filename,kind,status,grp,text,meta,created_at) "
             "VALUES(?,?,?,?,?,?,?,?,?)",
-            (sid, project_id, file.filename, kind, "ready", grp or None, text,
+            (sid, project_id, filename, kind, "ready", grp or None, text,
              json.dumps(meta), db.now()))
         conn.commit()
     else:
         conn.execute(
             "INSERT INTO sources(id,project_id,filename,kind,status,grp,meta,created_at) "
             "VALUES(?,?,?,?,?,?,?,?)",
-            (sid, project_id, file.filename, kind, "transcribing", grp or None,
+            (sid, project_id, filename, kind, "transcribing", grp or None,
              json.dumps({"bytes": len(content), "path": str(dest)}), db.now()))
         conn.commit()
         threading.Thread(target=_transcribe_source, args=(sid, dest, kind),
@@ -414,7 +511,7 @@ def source_text(source_id: str):
 
 
 @app.delete("/api/sources/{source_id}")
-def delete_source(source_id: str):
+def delete_source(source_id: str, force: bool = False):
     conn = db.get_conn()
     row = conn.execute("SELECT project_id FROM sources WHERE id=?", (source_id,)).fetchone()
     if not row:
@@ -426,6 +523,18 @@ def delete_source(source_id: str):
     if busy:
         _err(409, "A run is in progress for this project — cancel it or wait "
                   "before deleting sources.")
+    # a completed run's evidence points at this source; deleting it would
+    # leave the run's report citing documents that no longer exist. Refuse
+    # unless the caller says so explicitly (a withdrawal is served by
+    # deleting the project, which removes the reports too).
+    cited = conn.execute(
+        "SELECT COUNT(DISTINCT r.id) c FROM excerpts e JOIN runs r ON r.id=e.run_id "
+        "WHERE e.source_id=? AND r.status='completed'", (source_id,)).fetchone()["c"]
+    if cited and not force:
+        _err(409, f"{cited} completed run(s) cite this source. Deleting it would strip "
+                  "their evidence and break their coded-document links. Delete the "
+                  "project to remove everything, or repeat with ?force=true to "
+                  "delete the source anyway.")
     # excerpts reference sources (FK RESTRICT): remove the evidence rows first
     # or the delete 500s once any run has coded this source
     conn.execute("DELETE FROM excerpts WHERE source_id=?", (source_id,))
@@ -477,13 +586,22 @@ def estimate(project_id: str):
               "literature_synthesis": 1.7}.get(method, 2.0)
     est_in = int(data_tokens * passes) + 20000
     est_out = int(est_in * 0.15)
-    p_in, p_out = llm.catalog().get(provider, {}).get("pricing", (3.0, 15.0))
+    cat = llm.catalog()
+    model = (config.get("model") or "").strip() or cat.get(provider, {}).get("default_model", "")
+    p_in, p_out = llm.price_for(provider, model, cat)
+    priced_by_model = model in cat.get(provider, {}).get("pricing_by_model", {})
     cost = est_in / 1e6 * p_in + est_out / 1e6 * p_out
     return {"n_sources": len(sources), "total_chars": total_chars,
             "est_input_tokens": est_in, "est_output_tokens": est_out,
             "est_cost_usd": round(cost, 2),
-            "note": "Rough estimate from data volume and default prices; actual cost "
-                    "depends on provider pricing and model verbosity."}
+            "priced_model": model if priced_by_model else None,
+            "price_per_mtok": [p_in, p_out],
+            "note": ("Rough estimate from data volume and "
+                     + (f"the catalog's price for {model}" if priced_by_model
+                        else f"the {provider} default price (no per-model price for {model} "
+                             "in the catalog)")
+                     + "; actual cost depends on provider pricing, reasoning tokens, and "
+                       "model verbosity.")}
 
 
 @app.post("/api/projects/{project_id}/runs")
@@ -524,10 +642,48 @@ def run_events(run_id: str, after: float = 0):
     return [dict(r) for r in rows]
 
 
+@app.get("/api/runs/{run_id}/audit.json")
+def run_audit_export(run_id: str):
+    """The complete audit trail of a run as one downloadable JSON document:
+    the frozen configuration, every event with its payload, and every
+    checkpoint with the payload the researcher saw and the resolution they
+    submitted. This is the record a reviewer can ask for; the report's
+    appendix summarizes it."""
+    conn = db.get_conn()
+    row = conn.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+    if not row:
+        _err(404, "Run not found")
+    project = conn.execute("SELECT id,name,method FROM projects WHERE id=?",
+                           (row["project_id"],)).fetchone()
+    state = json.loads(row["state"] or "{}")
+    doc = {
+        "run_id": run_id,
+        "project": dict(project) if project else None,
+        "status": row["status"], "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "config": state.get("config"),
+        "source_ids": state.get("source_ids"),
+        "branched_from": state.get("branched_from"),
+        "branched_at": state.get("branched_at"),
+        "usage": json.loads(row["usage"] or "{}"),
+        "checkpoints": [db.row_to_dict(c, ("payload", "resolution")) for c in conn.execute(
+            "SELECT * FROM checkpoints WHERE run_id=? ORDER BY created_at", (run_id,)).fetchall()],
+        "events": [db.row_to_dict(e, ("payload",)) for e in conn.execute(
+            "SELECT ts,kind,message,payload FROM events WHERE run_id=? ORDER BY ts", (run_id,)).fetchall()],
+        "exported_at": db.now(),
+        "generator": f"QualiLens {update._current_version()}",
+    }
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", (project["name"] if project else "run")).strip("_") or "run"
+    return Response(content=json.dumps(doc, indent=1, ensure_ascii=False),
+                    media_type="application/json",
+                    headers={"Content-Disposition":
+                             f'attachment; filename="{name}_audit_{run_id}.json"'})
+
+
 @app.post("/api/runs/{run_id}/checkpoints/{checkpoint_id}/resolve")
 def resolve_cp(run_id: str, checkpoint_id: str, body: dict):
     try:
-        pipeline.resolve_checkpoint(run_id, checkpoint_id, body or {})
+        pipeline.resolve_checkpoint(run_id, checkpoint_id, body if isinstance(body, dict) else {})
     except ValueError as e:
         _err(400, str(e))
     return {"ok": True}
@@ -538,7 +694,7 @@ def branch(run_id: str, body: dict):
     """Revisit a review: a new run carrying everything up to that checkpoint,
     which it reopens. The source run and its report stay untouched."""
     try:
-        new_id = pipeline.branch_run(run_id, str(body.get("stage") or ""))
+        new_id = pipeline.branch_run(run_id, _s(body, "stage"))
     except ValueError as e:
         _err(400, str(e))
     return {"run_id": new_id}
@@ -555,7 +711,10 @@ def resume(run_id: str):
 
 @app.post("/api/runs/{run_id}/cancel")
 def cancel(run_id: str):
-    pipeline.cancel_run(run_id)
+    try:
+        pipeline.cancel_run(run_id)
+    except ValueError as e:
+        _err(404 if "not found" in str(e) else 400, str(e))
     return {"ok": True}
 
 
@@ -702,10 +861,22 @@ def get_report_docx(run_id: str):
 # ---------------- static frontend (production) ----------------
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+FRONTEND_SRC = FRONTEND_DIST.parent
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 
     _DIST_BASE = FRONTEND_DIST.resolve()
+
+    def _index_html() -> HTMLResponse:
+        """index.html with the session token injected; never cached, so a
+        restart (new token) is picked up by the next page load. The cookie
+        lets plain <a href> downloads authenticate without a header."""
+        html = (_DIST_BASE / "index.html").read_text(encoding="utf-8")
+        meta = f'<meta name="ql-token" content="{SESSION_TOKEN}">'
+        html = html.replace("</head>", meta + "</head>", 1) if "</head>" in html else meta + html
+        resp = HTMLResponse(html, headers={"Cache-Control": "no-store"})
+        resp.set_cookie(TOKEN_COOKIE, SESSION_TOKEN, httponly=True, samesite="strict", path="/")
+        return resp
 
     @app.get("/{full_path:path}")
     def spa(full_path: str):
@@ -715,6 +886,25 @@ if FRONTEND_DIST.exists():
         # anything else (the database and source code live nearby)
         target = (_DIST_BASE / full_path).resolve()
         if (full_path and target.is_file()
-                and _DIST_BASE in target.parents):
+                and _DIST_BASE in target.parents
+                and target.name != "index.html"):
             return FileResponse(target)
-        return FileResponse(_DIST_BASE / "index.html")
+        return _index_html()
+
+    def _warn_if_build_stale() -> None:
+        """A dist built from older sources than the ones beside it is the
+        defect that shipped v1.4.0 with a stale interface. The Vite build
+        stamps a fingerprint of the sources into index.html; compare it."""
+        try:
+            from .buildinfo import frontend_source_fingerprint
+            built = re.search(r'<meta name="ql-src" content="([0-9a-f]+)"',
+                              (_DIST_BASE / "index.html").read_text(encoding="utf-8"))
+            current = frontend_source_fingerprint(FRONTEND_SRC)
+            if built and current and built.group(1) != current:
+                print("WARNING: frontend/dist was built from different sources than "
+                      "frontend/src — run `cd frontend && npm run build` (or ./package.sh) "
+                      "to refresh the interface.", flush=True)
+        except Exception:  # noqa: BLE001 — a diagnostic must never block startup
+            pass
+
+    _warn_if_build_stale()

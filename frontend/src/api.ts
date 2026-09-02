@@ -16,7 +16,10 @@ export interface MethodMeta {
 export interface ProviderMeta {
   id: string; label: string; default_model: string; models: string[]; has_key: boolean;
 }
-export interface Meta { methods: MethodMeta[]; providers: ProviderMeta[]; ffmpeg: boolean; version?: string }
+export interface Meta {
+  methods: MethodMeta[]; providers: ProviderMeta[]; ffmpeg: boolean; version?: string;
+  data_dir?: string; synced_folder?: string;
+}
 
 export interface Source {
   id: string; filename: string; kind: string; status: string;
@@ -56,8 +59,22 @@ export interface Run extends RunSummary {
   pending_checkpoint: Checkpoint | null; has_report: boolean;
 }
 
+// The per-launch session token the server injects into index.html. Every
+// API request carries it; the server refuses /api calls without it, which is
+// what keeps other web pages (and DNS-rebinding hosts) out of this app.
+const TOKEN =
+  (typeof document !== 'undefined'
+    ? document.querySelector('meta[name="ql-token"]')?.getAttribute('content')
+    : null) ?? ''
+
+function withToken(init?: RequestInit): RequestInit {
+  const headers = new Headers(init?.headers ?? {})
+  if (TOKEN) headers.set('X-QualiLens-Token', TOKEN)
+  return { ...init, headers, credentials: 'same-origin' }
+}
+
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init)
+  const res = await fetch(path, withToken(init))
   if (!res.ok) throw new Error(await errText(res))
   return res.json()
 }
@@ -93,7 +110,7 @@ export const api = {
     const fd = new FormData()
     fd.append('file', file)
     fd.append('grp', grp)
-    const res = await fetch(`/api/projects/${projectId}/sources`, { method: 'POST', body: fd })
+    const res = await fetch(`/api/projects/${projectId}/sources`, withToken({ method: 'POST', body: fd }))
     if (!res.ok) throw new Error(await errText(res))
     return res.json() as Promise<Source>
   },
@@ -102,7 +119,8 @@ export const api = {
   sourceText: (id: string) => j<{ filename: string; text: string }>(`/api/sources/${id}/text`),
   estimate: (projectId: string) =>
     j<{ n_sources: number; total_chars: number; est_input_tokens: number;
-        est_output_tokens: number; est_cost_usd: number; note: string }>(`/api/projects/${projectId}/estimate`),
+        est_output_tokens: number; est_cost_usd: number; note: string;
+        priced_model?: string | null; price_per_mtok?: number[] }>(`/api/projects/${projectId}/estimate`),
   startRun: (projectId: string) => j<{ run_id: string }>(`/api/projects/${projectId}/runs`, post()),
   run: (id: string) => j<Run>(`/api/runs/${id}`),
   events: (id: string, after: number) =>
@@ -127,10 +145,10 @@ export const api = {
   applyUpdate: async (file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch('/api/settings/update', { method: 'POST', body: fd })
+    const res = await fetch('/api/settings/update', withToken({ method: 'POST', body: fd }))
     if (!res.ok) throw new Error(await errText(res))
     return res.json() as Promise<{ ok: boolean; from_version: string; to_version: string;
-      files_installed: number; backup: string; restart_required?: boolean }>
+      files_installed: number; backup: string; restart_required?: boolean; note?: string }>
   },
   codedSource: (runId: string, sourceId: string) =>
     j<CodedSource>(`/api/runs/${runId}/sources/${sourceId}/coded`),
@@ -140,7 +158,7 @@ export const api = {
       '/api/settings/check_updates', post()),
   installUpdate: () =>
     j<{ ok: boolean; from_version: string; to_version: string; files_installed: number;
-        backup: string; restart_required?: boolean }>('/api/settings/install_update', post()),
+        backup: string; restart_required?: boolean; note?: string }>('/api/settings/install_update', post()),
 }
 
 export const statusLabel = (s: string) =>

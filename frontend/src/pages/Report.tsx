@@ -50,8 +50,28 @@ export default function ReportPage() {
             {' · '}{new Date(rep.generated_at * 1000).toLocaleString()}
           </p>
         </div>
-        <a href={`/api/runs/${id}/report.docx`}><button className="primary">Download .docx</button></a>
+        <div className="row">
+          <a href={`/api/runs/${id}/audit.json`} title="The complete audit trail: every event, decision, and checkpoint payload, as JSON">
+            <button>Export audit log</button></a>
+          <a href={`/api/runs/${id}/report.docx`}><button className="primary">Download .docx</button></a>
+        </div>
       </div>
+
+      {rep.config && Object.keys(rep.config).length > 0 && (
+        <section>
+          <h2>Method configuration</h2>
+          <p className="desc">Every setup answer exactly as recorded for this run, frozen when the run
+            started. Reproduce these verbatim in a methods section — the option text carries the
+            methodological commitment.</p>
+          <table className="freq"><tbody>
+            {Object.entries(rep.config).map(([k, v]: [string, any]) => (
+              <tr key={k}><td className="muted" style={{ width: 240 }}>{rep.config_labels?.[k] ?? k}</td>
+                <td style={{ whiteSpace: 'pre-wrap' }}>{String(v ?? '').trim() || <span className="muted">(blank)</span>}</td></tr>
+            ))}
+            <tr><td className="muted">Provider and model</td><td>{rep.provider}/{rep.model}</td></tr>
+          </tbody></table>
+        </section>
+      )}
 
       <section>
         <h2>Sources</h2>
@@ -99,16 +119,22 @@ export default function ReportPage() {
         <section>
           <h2>Code Frequencies</h2>
           <div className="viz-card"><FreqChart stats={stats} /></div>
+          {stats.unit && <p className="desc">Unit counted: {stats.unit}. Rates are per 10,000 characters
+            of source text and correct for unequal source and group sizes; compare groups on rates, not counts.</p>}
           <table className="freq">
             <thead><tr>
               <th>Code</th><th>Count</th><th>%</th><th>Sources</th>
+              {'per_10k_chars' in (stats.rows[0] ?? {}) && <th>per 10k chars</th>}
               {(stats.groups ?? []).map((g: string) => <th key={g}>{g}</th>)}
+              {(stats.groups ?? []).map((g: string) => <th key={`${g}-rate`}>{g} per 10k</th>)}
             </tr></thead>
             <tbody>
               {stats.rows.map((r: any) => (
                 <tr key={r.code}>
                   <td>{r.code}</td><td>{r.count}</td><td>{r.pct}%</td><td>{r.sources}</td>
+                  {'per_10k_chars' in r && <td>{r.per_10k_chars}</td>}
                   {(stats.groups ?? []).map((g: string) => <td key={g}>{r.by_group?.[g] ?? 0}</td>)}
+                  {(stats.groups ?? []).map((g: string) => <td key={`${g}-rate`}>{r.by_group_per_10k?.[g] ?? '—'}</td>)}
                 </tr>
               ))}
             </tbody>
@@ -218,6 +244,11 @@ export default function ReportPage() {
                   <b>{stats.field_labels?.[k] ?? k}:</b> {v}
                 </p>
               ))}
+              {r.cited_work && (
+                <p className="desc" style={{ margin: '6px 0' }}>
+                  <b>Findings the paper attributes to other work</b> (not used in the synthesis): {r.cited_work}
+                </p>
+              )}
             </div>
           ))}
         </section>
@@ -239,16 +270,50 @@ export default function ReportPage() {
       <section>
         <h2>Audit Trail</h2>
         <p className="desc">
-          {rep.audit?.events} logged events · researcher checkpoints:{' '}
-          {(rep.audit?.checkpoints ?? []).map((c: any) =>
-            `${c.title} (${c.status})`).join('; ') || 'none'}.
-          {' '}Model usage: {usage.calls ?? 0} calls, {((usage.input_tokens ?? 0) / 1000).toFixed(0)}k input /
+          {rep.audit?.events} logged events. Model usage: {usage.calls ?? 0} calls,{' '}
+          {((usage.input_tokens ?? 0) / 1000).toFixed(0)}k input /
           {' '}{((usage.output_tokens ?? 0) / 1000).toFixed(0)}k output tokens.
+          {rep.audit?.models_used && Object.keys(rep.audit.models_used).length > 0 && (
+            <> Models that answered: {Object.entries(rep.audit.models_used)
+              .map(([m, n]: [string, any]) => `${m} (${n})`).join(', ')}.</>)}
+          {typeof rep.audit?.excerpts_unlocated === 'number' && (
+            <> Evidence: {rep.audit.excerpts_located} excerpts located verbatim,{' '}
+              {rep.audit.excerpts_unlocated} unverified.</>)}
+          {rep.audit?.branched_from && (
+            <> Branched from run {rep.audit.branched_from} at “{rep.audit.branched_at}”.</>)}
         </p>
+        <p className="desc">Researcher checkpoints:</p>
+        <table className="freq"><tbody>
+          {(rep.audit?.checkpoints ?? []).map((c: any, i: number) => (
+            <tr key={i}>
+              <td style={{ width: 260 }}><b>{c.title}</b> <span className="muted small">({c.status})</span></td>
+              <td className="small">{summaryLine(c.summary)}</td>
+            </tr>
+          ))}
+        </tbody></table>
+        <p className="desc">The complete log — every model call, every decision with its parameters,
+          every checkpoint payload — is in <b>Export audit log</b> at the top of this page.</p>
       </section>
     </div>
   )
 }
+
+function summaryLine(summ: any): string {
+  if (!summ || Object.keys(summ).length === 0) return 'approved without changes'
+  const bits: string[] = []
+  if (summ.decisions) bits.push('decisions: ' + Object.entries(summ.decisions).map(([k, v]) => `${k} ${v}`).join(', '))
+  if (summ.renamed_to?.length) bits.push('renamed to: ' + summ.renamed_to.slice(0, 8).join('; ') + (summ.renamed_to.length > 8 ? '…' : ''))
+  if (summ.added?.length) bits.push('added: ' + summ.added.slice(0, 8).join('; '))
+  if (summ.excerpts_removed) bits.push(`excerpts removed: ${summ.excerpts_removed}`)
+  if (summ.extraction_rows_edited) bits.push(`extraction rows edited: ${summ.extraction_rows_edited}`)
+  if (summ.papers_excluded) bits.push(`papers excluded: ${summ.papers_excluded}`)
+  return bits.join(' · ') || 'approved without changes'
+}
+
+// an excerpt is located when its quote was found verbatim in the source;
+// older reports carry no flag and are shown as they were
+const isLocated = (e: any) =>
+  'located' in e ? !!e.located : (!('start_char' in e) || e.start_char !== null)
 
 function Excerpts({ list, onView }: { list: any[]; onView: (e: any) => void }) {
   const [showAll, setShowAll] = useState(false)
@@ -256,8 +321,10 @@ function Excerpts({ list, onView }: { list: any[]; onView: (e: any) => void }) {
   return (
     <>
       {visible.map((e: any, i: number) => (
-        <div key={i} className="excerpt">
-          “{e.quote}”
+        <div key={i} className={`excerpt ${isLocated(e) ? '' : 'unverified'}`}>
+          {isLocated(e)
+            ? <>“{e.quote}”</>
+            : <><span className="unverified-tag" title="The model returned this text under the code, but it could not be found verbatim in the source — likely paraphrase. Not a quotation.">not located verbatim</span> {e.quote}</>}
           {e.memo && <div className="memo">{e.memo}</div>}
           <div className="meta">
             {e.source}
@@ -265,7 +332,7 @@ function Excerpts({ list, onView }: { list: any[]; onView: (e: any) => void }) {
             {typeof e.confidence === 'number' && <> · conf {Math.round(e.confidence * 100)}%</>}
             {' · '}
             <a href="#" onClick={ev => { ev.preventDefault(); onView(e) }}>
-              view in coded document
+              {isLocated(e) ? 'view in coded document' : 'open document (listed under Not located)'}
             </a>
           </div>
         </div>

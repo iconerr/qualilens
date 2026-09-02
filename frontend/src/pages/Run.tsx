@@ -101,10 +101,12 @@ export default function RunPage() {
       {run.status === 'completed' && run.has_report && (
         <div className="card" style={{ borderColor: 'var(--green)' }}>
           <h3>Analysis complete</h3>
-          <p className="desc">The report is ready — browse it interactively or export Word.</p>
+          <p className="desc">The report is ready — browse it interactively, export Word, or export
+            the complete audit trail (every call, decision, and checkpoint) as JSON.</p>
           <div className="row">
             <Link to={`/runs/${id}/report`}><button className="primary">Open report</button></Link>
             <a href={`/api/runs/${id}/report.docx`}><button>Download .docx</button></a>
+            <a href={`/api/runs/${id}/audit.json`}><button>Export audit log</button></a>
           </div>
         </div>
       )}
@@ -164,7 +166,10 @@ export default function RunPage() {
                 api.cancelRun(id!).catch((e: any) => setError(String(e.message ?? e)))
             }}>Cancel run</button>
           )}
-          <h3 className="mt">Audit log</h3>
+          <div className="row spread mt"><h3 style={{ margin: 0 }}>Audit log</h3>
+            <a className="small" href={`/api/runs/${id}/audit.json`}
+              title="Every event with its payload, every checkpoint with its resolution, the frozen configuration">export as JSON ↗</a></div>
+          <p className="desc small">The screen keeps recent entries; the export carries the complete record.</p>
           <div className="eventlog" ref={logRef}>
             {events.map((e, i) => (
               <div key={i} className={`ev-${e.kind}`}>
@@ -411,6 +416,12 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
                     → merging into “{displayName(items.find(o => o.id === a.merge_into) ?? { name: '?' })}”
                   </p>
                 )}
+                {it.candidate_name && it.candidate_name !== it.name && (
+                  <p className="small muted" style={{ margin: '4px 0 0 26px' }}>
+                    Named in Phase 5 from the candidate “{it.candidate_name}” — the name and
+                    definition above are what the report will carry unless you edit them.
+                  </p>
+                )}
                 {it.review && (
                   <p className="small" style={{ margin: '6px 0 0 26px' }}>
                     <b>Model’s own critique:</b> coherence {it.review.coherence},
@@ -528,7 +539,8 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
     setEdits(e => ({ ...e, [sid]: { ...e[sid], [key]: value } }))
   const original = (row: any, key: string): string =>
     key === 'label' ? (row.label ?? '') :
-    key === 'citation' ? (row.citation ?? '') : (row.fields?.[key] ?? '')
+    key === 'citation' ? (row.citation ?? '') :
+    key === 'cited_work' ? (row.cited_work ?? '') : (row.fields?.[key] ?? '')
   const current = (row: any, key: string): string =>
     edits[row.source_id]?.[key] ?? original(row, key)
   const isExcluded = (row: any): boolean =>
@@ -541,7 +553,7 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
     if (k === 'label' && !v.trim()) return false
     return v !== original(r, k)
   }
-  const nEdited = rows.filter(r => fieldKeys.concat(['label', 'citation'])
+  const nEdited = rows.filter(r => fieldKeys.concat(['label', 'citation', 'cited_work'])
     .some(k => isEdit(r, k))).length
   const nExcluded = rows.filter(isExcluded).length
 
@@ -556,7 +568,7 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
       const patch: Record<string, unknown> = {}
       // only submit REAL edits: a typed-then-reverted value is not an edit,
       // and must not mark the row researcher-edited
-      for (const k of ['label', 'citation', ...fieldKeys])
+      for (const k of ['label', 'citation', 'cited_work', ...fieldKeys])
         if (isEdit(r, k)) patch[k] = current(r, k)
       if (isExcluded(r) !== !!r.excluded) patch.exclude = isExcluded(r)
       if (Object.keys(patch).length) out.push({ source_id: r.source_id, ...patch })
@@ -624,6 +636,12 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
                       onChange={ev => setEdit(r.source_id, k, ev.target.value)} />
                   </label>
                 ))}
+                <label className="field">
+                  <span className="lbl">Findings the paper attributes to other work
+                    <span className="muted"> · not used in the synthesis; here so a cited result is not mistaken for this paper's own</span></span>
+                  <textarea value={current(r, 'cited_work')} disabled={off}
+                    onChange={ev => setEdit(r.source_id, 'cited_work', ev.target.value)} />
+                </label>
               </div>
             )}
           </div>
@@ -688,7 +706,8 @@ function FrameworkReview({ runId, cp, onError, onResolved }: PanelProps) {
       {emergent.length > 0 && <>
         <h3>Emergent code candidates</h3>
         <p className="desc small">Passages that fit no framework code. Promote the ones worth keeping —
-          unpromoted candidates are discarded.</p>
+          unpromoted candidates are discarded. A promoted code is charted across every source before
+          the matrix is built, so its column means what the other columns mean.</p>
         {emergent.map(e => {
           const d = decisions[e.id]
           return (
@@ -716,12 +735,16 @@ function FrameworkReview({ runId, cp, onError, onResolved }: PanelProps) {
       </>}
       {lowConf.length > 0 && <>
         <h3>Low-confidence assignments</h3>
-        <p className="desc small">Tick any assignment that is wrong; ticked excerpts are removed.</p>
+        <p className="desc small">Tick any assignment that is wrong; ticked excerpts are removed.
+          {typeof cp.payload.low_confidence_total === 'number' && cp.payload.low_confidence_total > lowConf.length && (
+            <> Showing the {lowConf.length} weakest of {cp.payload.low_confidence_total} below the threshold;
+              the rest are accepted on approval — check them in the coded-source reader.</>)}
+          {' '}An assignment marked “no confidence given” came back without a rating; it is listed first.</p>
         {lowConf.map(e => (
           <div key={e.excerpt_id} className="code-item" style={deletions.has(e.excerpt_id) ? { opacity: .5 } : {}}>
             <label className="row" style={{ cursor: 'pointer' }}>
               <input type="checkbox" checked={deletions.has(e.excerpt_id)} onChange={() => toggle(e.excerpt_id)} />
-              <span><b>{e.code}</b> <span className="count-pill">conf {Math.round((e.confidence ?? 0) * 100)}%</span>
+              <span><b>{e.code}</b> <span className="count-pill">{typeof e.confidence === 'number' ? `conf ${Math.round(e.confidence * 100)}%` : 'no confidence given'}</span>
                 <span className="muted small"> · {e.source}</span></span>
             </label>
             <div className="quote">“{e.quote}” {e.memo && <span className="src">— {e.memo}</span>}</div>

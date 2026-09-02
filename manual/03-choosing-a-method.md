@@ -21,11 +21,11 @@ QualiLens offers five methods. Your choice is not reversible once a run exists, 
 
 | | Grounded theory | Thematic analysis | Content analysis | Framework | Literature synthesis |
 |---|---|---|---|---|---|
-| Stages | 8 | 8 | 4 | 4 | 5 |
+| Stages | 8 | 8 | 4 | 5 | 5 |
 | Checkpoints | 3 | 2 | 1 | 1 | 2 |
-| Reads every source in full before coding | Yes | Yes | No | No | Yes |
+| Familiarization pass before coding (first 60,000 characters of each source) | Yes | Yes | No | No | No — extraction is the first reading |
 | Codes derived from data | Yes | Yes | Optional | No | Yes |
-| Confidence scores on assignments | No | No | Yes | Yes | No |
+| Confidence scores on assignments | No | No | Yes, where the model gives one | Yes, where the model gives one | No |
 | Numeric output | No | No | Frequency table | Source-by-code matrix | Concept-by-paper matrix |
 | Report includes source summaries | Yes | Yes | No | No | Extraction table |
 | Relative cost | Highest | Highest | Lowest | Low | Low |
@@ -36,11 +36,11 @@ The two inductive methods cost more for two reasons. They add a familiarization 
 
 **Grounded theory** runs familiarization, open coding, *review of open codes*, axial coding, *review of categories*, selective coding, *review of the core category*, and the theory narrative with report.
 
-**Thematic analysis** runs familiarization, initial coding, *review of initial codes*, theme construction, theme review against the data, *review of themes*, defining and naming, and the report.
+**Thematic analysis** runs familiarization, initial coding, *review of initial codes*, theme construction, theme review against the extracts, defining and naming, *review of themes*, and the report.
 
 **Content analysis** runs codebook construction, *review of the codebook*, application of the codebook to every source, and quantification with report.
 
-**Framework** runs framework loading, charting of every source against the framework, *review of the charting*, and the matrix with report.
+**Framework** runs framework loading, charting of every source against the framework, *review of the charting*, charting of any promoted emergent codes across every source, and the matrix with report.
 
 **Literature synthesis** runs structured extraction from every paper, *review of the extraction table*, cross-paper synthesis, *review of the concepts*, and the concept matrix with report.
 
@@ -52,7 +52,7 @@ The italicized stages are the ones where the pipeline stops and waits for you.
 
 **Content analysis against framework.** Both methods apply a fixed codebook to every source, and both attach a confidence score to each assignment. Content analysis counts, and its report is a frequency table you can cross-tabulate by group. Framework charts, and its report is a matrix whose cells summarize what each source said under each code. Choose content analysis when your question is how often. Choose framework when your question is what each case said. Framework can also admit codes your framework failed to anticipate, which content analysis cannot.
 
-**Literature synthesis against everything else.** The other four methods assume the sources are your data. Literature synthesis assumes they are published papers, and it changes what the stages do accordingly: the coding pass becomes a structured extraction (aims, method, sample, findings, limitations), the grouping pass becomes a cross-paper synthesis, and the matrix crosses concepts with papers rather than codes with cases. It is also the one method with a structural guarantee about citations: the AI model can cite only from the uploaded corpus, never from memory. Running interview transcripts through it will produce a strained extraction table; running papers through thematic analysis will produce themes without the extraction table, the paper labels, or the citation guard. Match the method to the material.
+**Literature synthesis against everything else.** The other four methods assume the sources are your data. Literature synthesis assumes they are published papers, and it changes what the stages do accordingly: the coding pass becomes a structured extraction (aims, method, sample, findings, limitations), the grouping pass becomes a cross-paper synthesis, and the matrix crosses concepts with papers rather than codes with cases. It is also the one method with a structural guarantee about citations: every concept must be grounded in quotes located in the uploaded corpus, and the narrative is guarded against citation-shaped text that names no uploaded paper (see the method's chapter for exactly what is enforced and what is guarded). Running interview transcripts through it will produce a strained extraction table; running papers through thematic analysis will produce themes without the extraction table, the paper labels, or the citation guard. Match the method to the material.
 
 **Deductive thematic analysis against framework.** Both methods read data through a stated prior structure. Deductive thematic analysis takes a theoretical lens as a paragraph of prose and lets the AI coder derive codes through it, so the codes are still discovered. Framework takes an explicit list of codes and definitions and applies exactly those. Choose the framework method when your prior structure is already a codebook. Choose deductive thematic analysis when your prior structure is a theory rather than a list.
 

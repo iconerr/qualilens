@@ -9,7 +9,11 @@ The Run screen shows a green card offering **Open report** and **Download .docx*
 
 ## The interactive report
 
-The report opens with the title, a line linking back to the run and naming the provider, the AI model, and the time of generation, and a Download button.
+The report opens with the title, a line linking back to the run and naming the provider, the AI model, and the time of generation, an **Export audit log** button, and a Download button.
+
+### Method configuration
+
+Every setup answer exactly as recorded for this run — the research question, the orientation or variant, the codebook or lens, the sensitizing concepts — frozen when the run started, with the provider and model beneath. Reproduce these verbatim in a methods section; the option text carries the methodological commitment. The Word export carries the same section.
 
 ### Sources
 
@@ -19,7 +23,7 @@ Glance at those counts before you read a word of the narrative. A source contrib
 
 ### Narrative sections
 
-Four of the methods produce the same four narrative sections. They are written from your final analytic structure by a call instructed to ground every claim in the coded structure, and never to invent quotes or findings.
+Four of the methods produce the same four narrative sections. They are written from your final analytic structure by a call instructed to ground every claim in the coded structure, and never to invent quotes or findings. A quote guard then checks every quotation of twenty-five characters or more in the narrative against the coded excerpts and the sources; any that matches neither is named in the Limitations section as unverified.
 
 | Section | Contents |
 |---|---|
@@ -84,7 +88,9 @@ The evidence section is your provenance chain. It is the part of the report that
 
 Each top-level item appears as a collapsible card showing its name, its definition, and a count of every excerpt beneath it, including those on its child codes. Expanding the card reveals the excerpts attached directly to the item, then each child code with its own name, definition, and excerpts. Grounded theory shows categories with their open codes. Thematic analysis shows themes with their initial codes. Content analysis and framework analysis show a flat list of codebook codes, because neither method has a grouping level, and literature synthesis shows a flat list of concepts with their supporting quotes for the same reason.
 
-Each excerpt shows the verbatim quote, the memo where the method records one, the source filename — with the page number, for a PDF ingested since page anchoring was added — the confidence percentage where the method records one, and a **view in coded document** link.
+Each excerpt shows the verbatim quote, the memo where the method records one, the source filename — with the page number, for a PDF ingested since page anchoring was added — the confidence percentage where the method records one and the model gave one, and a **view in coded document** link.
+
+An excerpt whose quote could not be located in its source is shown differently: no quotation marks, an amber *not located verbatim* marker, and a link that opens the document at its Not located list rather than at a highlight. The text is what the model returned under that code; it is not a quotation, and the report never presents it as one. The audit appendix counts located and unverified excerpts for the whole run.
 
 Six excerpts show at first. **Show all** reveals the rest.
 
@@ -100,9 +106,9 @@ Six excerpts show at first. **Show all** reveals the rest.
 
 The **view in coded document** link opens that source in [the coded-source reader](10-coded-source-reader.md), at the excerpt, briefly highlighted, with every other coded passage in the document shaded around it. Reading a quote inside its own paragraph, with its neighbors visible, is the check that makes your analysis auditable. Perform it on a sample of excerpts under every theme before you write anything from the report.
 
-The highlight is placed by locating the quote in the source. QualiLens tries an exact match first. It then tries a match that treats typographic quotation marks, dashes, and whitespace as equivalent, because AI models routinely normalize those characters when echoing a passage. The opening of the quote is located instead when neither match succeeds, and the highlight then covers less than the full quote. A highlight noticeably shorter than the quote you are reading is therefore a partial match rather than a truncated source, and the passage is still there.
+The highlight is placed by locating the quote in the source. QualiLens tries an exact match first, searching the segment the model was reading before the rest of the document so a phrase that recurs is highlighted where it was coded. It then tries a match that treats typographic quotation marks, dashes, case, ligatures, soft hyphens, line-end hyphenation, and whitespace as equivalent, because models and PDF text layers routinely differ in exactly those ways. The opening of the quote is located instead when neither match succeeds, and the highlight then covers less than the full quote. A highlight noticeably shorter than the quote you are reading is therefore a partial match rather than a truncated source, and the passage is still there.
 
-The reader says so when a quote cannot be located at all, and lists that excerpt under **Not located in the text** instead. Such excerpts still count as evidence in your report. Give them your attention, because a quote absent from its source is a quote the AI model did not copy verbatim, which the coding instructions forbid.
+The reader says so when a quote cannot be located at all, and lists that excerpt under **Not located in the text** instead. Such excerpts are marked unverified in your report, as described above. Give them your attention, because a quote absent from its source is a quote the AI model did not copy verbatim, which the coding instructions forbid.
 
 ### Appendices
 
@@ -110,19 +116,19 @@ The reader says so when a quote cannot be located at all, and lists that excerpt
 
 **Extraction Table** appears in literature synthesis reports only. It preserves the per-paper extraction exactly as you approved it, excluded papers included and marked.
 
-**Audit Trail** appears in every report. It records the number of logged events, every checkpoint with its resolved status, and the total model usage in calls and tokens. The sources analyzed are listed at the head of the report rather than here.
+**Audit Trail** appears in every report. It records the number of logged events, the total model usage in calls and tokens, the models that actually answered and how many calls each took, the count of located and unverified excerpts, whether the run was branched and from where, and every checkpoint with its resolved status and a summary of what you decided there — how many codes were kept, renamed, merged, deleted, or added, the new names, excerpts removed, papers excluded. The complete record, with every event's payload and every checkpoint's full resolution, is the **Export audit log** file. The sources analyzed are listed at the head of the report rather than here.
 
 ## The Word export
 
-**Download .docx** builds a formatted document from the same payload. The document is set in Georgia at eleven points. It carries a title block, the data sources with their group labels, the narrative sections, the method's figure with its caption, the frequency table or the matrix where applicable, the full evidence listing, the familiarization appendix, and the audit appendix.
+**Download .docx** builds a formatted document from the same payload. The document is set in Georgia at eleven points. It carries a title block, the method configuration, the data sources with their group labels, the narrative sections, the method's figure with its caption, the frequency table or the matrix where applicable, the evidence listing, the familiarization appendix, and the audit appendix with its checkpoint summaries.
 
 Three differences from the on-screen report are worth knowing before you send the file to a coauthor.
 
-Excerpts are capped at twelve per code, with a note recording how many further excerpts remain in the project database. The on-screen report shows all of them.
+Located excerpts are capped at twelve per code, with a note recording how many further excerpts remain in the project database. Unverified excerpts follow the located ones under their own note, in italics, marked *not located verbatim*, and never inside quotation marks. The on-screen report shows all of them.
 
 The framework matrix is rendered source by source rather than as a grid, listing each source as a heading with its populated cells beneath, and the concept-by-paper matrix is rendered paper by paper in the same way. A table wide enough to hold a full framework does not survive a page break.
 
-The frequency table carries the code, the count, the percentage, and the group columns. It omits the Sources column that appears on screen.
+The frequency table carries the code, the count, the percentage, the number of sources, the rate per ten thousand characters, and, when group comparison is on, a count and a rate column per group.
 
 The file is named after your project.
 
@@ -130,12 +136,14 @@ The file is named after your project.
 
 Your analysis may be going into a paper, a thesis, or a report to a sponsor. These are the facts your reader needs, and the places to find them.
 
-**From the wizard and the project page.** The method, which is on the project page. Every setup answer exactly as recorded, which is the Configuration table on the project page. Reproduce those answers verbatim, because the option text carries the methodological commitment. The provider and AI model, which are in the report header.
+**From the report.** The method and every setup answer exactly as the run froze them, which is the Method configuration section at the head of the report. Reproduce those answers verbatim, because the option text carries the methodological commitment. The provider and model, and the models that actually answered, which are in the report header and the audit appendix.
 
-**From the report's audit appendix.** The number of sources. The number of checkpoints, and the fact that a researcher resolved each one. The total model usage, if you are reporting cost or compute.
+**From the report's audit appendix.** The number of sources. The number of checkpoints, the fact that a researcher resolved each one, and the summary of what was decided at each. The count of located and unverified excerpts. The total model usage, if you are reporting cost or compute.
 
-**From your own record.** What you actually did at each checkpoint. The audit appendix records that checkpoints were resolved, and the underlying event log records each individual edit. Neither records why you made the decisions, and that is yours to supply. Keep a short note as you work through each checkpoint. It costs little, and it is the difference between an auditable analysis and one that merely logs.
+**From the exported audit log.** Every individual decision with its parameters, every model call with its sampling settings, and every checkpoint payload as you saw it. Keep the file with the project; it is what a reviewer who asks "show me" needs.
+
+**From your own record.** Why you made the decisions. Nothing in the log records that, and it is yours to supply. Keep a short note as you work through each checkpoint. It costs little, and it is the difference between an auditable analysis and one that merely logs.
 
 **From the verification you performed.** How many excerpts you checked against their sources, and in how many documents, and what you found. Whether you also read the uncoded stretches, which [the coded-source reader](10-coded-source-reader.md) makes visible, and what that showed. How many excerpts the reader could not locate in their sources. These are the claims that distinguish a reviewed machine coding from an unreviewed one, and QualiLens cannot make them for you, because the reader records nothing.
 
-**The limitations that apply to every QualiLens analysis.** A single AI model performed the coding, rather than multiple human coders, and no intercoder reliability was computed. Coding is not deterministic, so a second run over the same data with the same settings will differ. Transcripts produced automatically carry no speaker labels. Recordings above the transcription service's size limit were split on a fixed time boundary, which can garble a word at each seam. The method-specific limits are listed at the foot of each method chapter in this manual.
+**The limitations that apply to every QualiLens analysis.** A single AI model performed the coding, rather than multiple human coders, and no intercoder reliability was computed. Coding is not deterministic, so a second run over the same data with the same settings will differ; the sampling temperature is whatever each provider applies (Anthropic and OpenAI's reasoning models run at their defaults, the others at the value the audit log records per call). Transcripts produced automatically carry no speaker labels. Recordings above the transcription service's size limit were split on a fixed time boundary, which can garble a word at each seam. The method-specific limits are listed at the foot of each method chapter in this manual.

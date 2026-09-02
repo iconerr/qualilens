@@ -13,20 +13,20 @@ There is no familiarization stage. The AI model never reads a source whole befor
 
 ### Research question
 
-This field is required and accepts multiple lines. QualiLens passes it into the codebook derivation and the report narrative. It does not reach the coding calls in deductive mode, where the AI coder sees only the codebook and the text. In that mode your question shapes the write-up rather than the coding.
+This field is required and accepts multiple lines. QualiLens passes it into the codebook derivation and the report narrative. It does not reach the coding calls in either mode: the AI coder that applies the codebook sees only the codebook and the text. Your question shapes the codebook (inductive mode) and the write-up, not the coding itself.
 
 ### Codebook
 
 | Option | What happens |
 |---|---|
-| `Inductive — derive the codebook from the data` | One call reads a sample of each source and proposes a codebook of eight to twenty codes, each with a name, a definition, inclusion criteria, and one verbatim example from the data. |
+| `Inductive — derive the codebook from the data` | One call reads a sample of each source — its opening, middle, and end — and proposes a codebook of eight to twenty codes, each with a name, a definition, inclusion criteria, and one verbatim example from the data. |
 | `Deductive — I will supply the codebook` | The codebook you type in the next field is parsed and used exactly as written. |
 
 The default is inductive.
 
 **How to choose.** Deductive is the stronger position whenever you have a codebook you can defend. A codebook drawn from prior literature, from a pilot, or from a published instrument carries an argument for its categories that a derived codebook does not. Choose inductive when no such codebook exists for your setting, or when the point of your study is to establish what categories the material contains.
 
-**What inductive derivation actually reads.** The derivation call does not read your corpus. It reads a sample taken from the beginning of each source. The size of that sample shrinks as your corpus grows, because a fixed budget of roughly forty-five thousand characters is divided across the sources, with a floor of two thousand characters each.
+**What inductive derivation actually reads.** The derivation call does not read your corpus. It reads a sample of each source, taken as three windows of equal size from the opening, the middle, and the end of the file, joined with a visible break. The size of that sample shrinks as your corpus grows, because a fixed budget of roughly forty-five thousand characters is divided across the sources, with a floor of two thousand characters each. The audit log records the sample size used.
 
 | Number of sources | Characters sampled from each | Total sampled |
 |---|---|---|
@@ -36,7 +36,7 @@ The default is inductive.
 | 20 | 2,250 | 45,000 |
 | 30 | 2,000 | 60,000 |
 
-Two consequences follow. A category that appears only in the later part of long interviews may never be sampled, and so may never enter your codebook. Coding is instructed to use only the codes provided, so that category will then be invisible in your counts. And the sample is taken from the opening of each file, so an interview that begins with demographic questions spends its sample on them.
+Two consequences follow. A category that appears only between the sampled windows of long interviews may never be sampled, and so may never enter your codebook. Coding is instructed to use only the codes provided, so that category will then be invisible in your counts. And a third of each sample is the opening of the file, so an interview that begins with demographic questions spends that third on them.
 
 Read the derived codebook at the checkpoint against your own reading of the material if you run inductively over long sources, and add what is missing. That is exactly what the checkpoint is for.
 
@@ -99,23 +99,23 @@ Three checks are worth making every time. Read each pair of definitions that sou
 
 Each source is split into segments of twenty-four thousand characters at paragraph boundaries, and each segment is coded in one call against the full codebook. The AI coder is instructed to use only the codes provided and never to invent new ones. It is told to find every passage that satisfies a code's definition, to assign more than one code to a passage only where the definitions genuinely overlap on it, and to give every assignment a confidence between zero and one.
 
-Every quote is copied verbatim and located in the source. Assignments carry a confidence score and no memo, so your report shows a confidence percentage on each excerpt and no justification.
+Every quote is copied verbatim and located in the source. Assignments carry a confidence score and no memo, so your report shows a confidence percentage on each excerpt and no justification. When the model returns an assignment without a confidence, the field is left empty — a number the model did not give is not filled in for it.
 
 **Sometimes the AI model names a code that is not in your codebook.** The assignment is then discarded rather than guessed at, and the discard is written to the audit log with the offending name and the quote. A summary event at the end of the stage records how many assignments were dropped, and warns you that the counts may undercount. Check the audit log after a run if your totals look low. A codebook whose names are long or unusual attracts more of these.
 
 ### Quantify and report
 
-Counts are assembled per code, sorted from most to least frequent, and expressed as a percentage of all assignments. The number of distinct sources in which each code appears is recorded alongside. Each code's count is broken out by group when group comparison is on.
+Counts are assembled per code, sorted from most to least frequent, and expressed as a percentage of all assignments. The number of distinct sources in which each code appears is recorded alongside, and so is a rate per ten thousand characters of source text, overall and per group. Each code's count is broken out by group when group comparison is on. The report's Code Frequencies section states what is counted.
 
 ## Reading the frequency table
 
-The table has one column you must read carefully, and one you must not over-read.
+The table has one column you must read carefully, one you must not over-read, and one built for comparison.
 
-The **Count** column counts coded passages. It does not count participants, and it does not count sources. A single participant who returns to the same concern six times contributes six to that code.
+The **Count** column counts coded passages — spans the model returned under a code. It does not count participants, sentences, or sources, and it is not a unit of analysis you defined: the model decides how many spans a stretch of talk becomes. A single participant who returns to the same concern six times contributes six to that code.
 
 The **%** column is each code's share of all assignments across the whole corpus. It is not prevalence, and it does not tell you what proportion of your participants raised the theme. The **Sources** column is closer to a prevalence measure, because it counts how many distinct sources contain the code at least once. That is usually the figure to report alongside the count.
 
-The group columns carry raw counts rather than proportions when group comparison is on. You cannot compare groups of unequal size by reading across the row. Normalize by group size yourself before you draw any conclusion.
+The **per 10k chars** column is the count divided by the length of the text it came from, in units of ten thousand characters. It corrects for a long interview contributing more passages than a short one. When group comparison is on, each group gets a count column and a per-10k column; compare groups on the rate, never on the raw count, because the groups will not be the same size.
 
 ## What the report contains
 
@@ -127,7 +127,7 @@ There is no source summaries appendix, because this method has no familiarizatio
 
 A derived codebook was derived from a sample of each source rather than from the whole corpus. The sampling rule is the one tabulated above.
 
-Counting is of coded passages, and the denominator of the percentage column is the total number of assignments.
+Counting is of coded passages as the model delimited them, not of a unit of analysis fixed in advance; the denominator of the percentage column is the total number of assignments, and the rates are per ten thousand characters of source text.
 
 The coder is one AI model. No intercoder reliability is modeled, and reproducibility across runs has not been established for your corpus. Run the analysis twice and report the agreement you observe if your argument depends on the counts. That is the closest QualiLens comes to a reliability check.
 

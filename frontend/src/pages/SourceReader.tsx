@@ -222,8 +222,9 @@ export default function SourceReader() {
             <div className="card" style={{ padding: '12px 16px' }}>
               <h3 style={{ fontSize: 14 }}>Not located in the text ({data.unlocated.length})</h3>
               <p className="desc small">These excerpts' quotes could not be matched to an
-                exact position (usually the model paraphrased). They still count as evidence
-                in the report.</p>
+                exact position (usually the model paraphrased). The report and the Word export
+                list them as unverified — never inside quotation marks — and the synthesis
+                stage never builds on them. Quote the transcript, not the paraphrase.</p>
               {data.unlocated.map(s => (
                 <div key={s.excerpt_id} className="quote">
                   “{s.quote.slice(0, 200)}{s.quote.length > 200 ? '…' : ''}”

@@ -11,17 +11,40 @@ overwriting history.
 
 import atexit
 import json
+import os
 import sqlite3
 import threading
 import time
 import uuid
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-DATA_DIR.mkdir(exist_ok=True)
+# Where projects, keys, and uploads live. QUALILENS_DATA_DIR moves them out
+# of the application folder — the right choice when that folder sits inside
+# a cloud-synced directory, since the database holds raw participant data
+# and API keys in plain text.
+_env_dir = (os.environ.get("QUALILENS_DATA_DIR") or "").strip()
+DATA_DIR = Path(_env_dir).expanduser().resolve() if _env_dir \
+    else Path(__file__).resolve().parent.parent / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "qualilens.db"
 UPLOADS_DIR = DATA_DIR / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
+
+# folder names that mark a cloud-synced tree; used only for a startup notice
+SYNC_MARKERS = ("dropbox", "icloud", "onedrive", "google drive", "googledrive",
+                "box sync", "mobile documents", "sync")
+
+
+def synced_folder_hint(path: Path = DATA_DIR) -> str:
+    """The sync service a path appears to live under, or '' when none of
+    the usual folder names occur in it. A heuristic for a warning, never
+    a decision."""
+    parts = [p.lower() for p in Path(path).resolve().parts]
+    for part in parts:
+        for m in SYNC_MARKERS:
+            if m in part:
+                return part
+    return ""
 
 _local = threading.local()
 
@@ -146,14 +169,26 @@ def init_db() -> None:
         set_setting("lineage", LINEAGE)
     # This database may live in a cloud-synced folder (e.g. Dropbox). Keep the
     # WAL sidecar file empty whenever we can so the at-rest state syncs as a
-    # single coherent file: fold the WAL into the main DB at startup and exit.
+    # single coherent file: fold the WAL into the main DB at startup, at exit,
+    # and (see pipeline) at every stage boundary and checkpoint resolution.
     checkpoint_wal()
     atexit.register(checkpoint_wal)
+    hint = synced_folder_hint()
+    if hint:
+        print(f"NOTICE: the data folder {DATA_DIR} appears to sit inside a cloud-synced "
+              f"directory ('{hint}'). It holds raw participant data and API keys in plain "
+              "text, and the sync service holds them too. Set QUALILENS_DATA_DIR to a "
+              "folder outside the synced tree to keep them on this computer only "
+              "(manual: Data, Privacy, and Governance).", flush=True)
 
 
-def checkpoint_wal() -> None:
+def checkpoint_wal(mode: str = "TRUNCATE") -> None:
+    """Fold the write-ahead log into the main file. TRUNCATE (startup, exit)
+    empties the sidecar and may wait for other connections; PASSIVE (stage
+    boundaries, checkpoint resolutions, while request and executor threads
+    are live) folds what it can without ever blocking. Never raises."""
     try:
-        get_conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        get_conn().execute(f"PRAGMA wal_checkpoint({mode})")
     except sqlite3.Error:
         pass  # best-effort hygiene; never block startup/shutdown on it
 

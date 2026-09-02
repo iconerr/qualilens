@@ -290,7 +290,8 @@ export default function Wizard() {
                 <span className="lbl">API key {providerMeta.has_key && <span className="muted">(saved — leave blank to keep)</span>}</span>
                 <input type="password" value={keyDraft} onChange={e => setKeyDraft(e.target.value)}
                   placeholder={providerMeta.has_key ? '••••••••  (already saved)' : 'Paste your API key'} />
-                <span className="hint">Stored only in the local database on this computer and sent only to {providerMeta.label}.</span>
+                <span className="hint">Stored in plain text in this app's local database and sent only to {providerMeta.label}.
+                  {' '}If the data folder is inside a cloud-synced directory, the sync service holds it too — Settings says where it lives.</span>
               </label>
               <div className="row">
                 <button onClick={doTestKey} disabled={testing}>{testing ? 'Testing…' : 'Test key'}</button>
@@ -404,7 +405,8 @@ function Dropzone({ busy, onFiles, inputRef }: {
       </div>
       <div className="dz-sub">Transcripts, documents, audio, or video — several at once is fine</div>
       <div className="fmt-chips">
-        {['.txt', '.md', '.docx', '.pdf', '.mp3', '.m4a', '.wav', '.mp4', '.mov'].map(f =>
+        {['.txt', '.md', '.docx', '.pdf', '.mp3', '.m4a', '.wav', '.flac', '.ogg', '.webm', '.aac',
+          '.mp4', '.mov', '.avi', '.mkv'].map(f =>
           <span key={f}>{f}</span>)}
       </div>
       <input ref={inputRef} type="file" multiple style={{ display: 'none' }}

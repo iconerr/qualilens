@@ -92,10 +92,10 @@ def fake_json_router(system, user):
 llm_mod.chat = fake_chat
 
 from starlette.testclient import TestClient
-from app.main import app
+from app.main import app, SESSION_TOKEN
 import app.pipeline as pipeline
 
-c = TestClient(app)
+c = TestClient(app, base_url="http://127.0.0.1", headers={"X-QualiLens-Token": SESSION_TOKEN})
 
 # providers key
 c.put('/api/settings/keys', json={"anthropic": "sk-fake"})

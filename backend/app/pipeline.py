@@ -69,7 +69,13 @@ def _load_ctx(run_id: str) -> RunContext:
     if isinstance(frozen, list) and frozen:
         keep = set(frozen)
         sources = [s for s in sources if s["id"] in keep]
-    config = project["config"]
+    # runs since the config freeze carry their own copy of the setup answers,
+    # provider, and model: a project edited after the run started (or after
+    # it failed) must not change what a resumed or branched run does, and the
+    # report must name the model that actually ran. Older runs fall back to
+    # the project row, as before.
+    snap = state.get("config")
+    config = dict(snap) if isinstance(snap, dict) and snap else project["config"]
     provider = config.get("provider", "anthropic")
     model = (config.get("model") or "").strip() or llm.catalog()[provider]["default_model"]
     api_key = db.get_setting(f"api_key_{provider}", "")
@@ -120,13 +126,21 @@ def start_run(project_id: str) -> str:
     ready_ids = [r["id"] for r in conn.execute(
         "SELECT id FROM sources WHERE project_id=? AND status='ready' ORDER BY filename",
         (project_id,)).fetchall()]
+    # freeze the configuration the same way (see _load_ctx)
+    config = json.loads(project["config"] or "{}")
+    provider = config.get("provider", "anthropic")
+    config["model"] = ((config.get("model") or "").strip()
+                       or llm.catalog().get(provider, {}).get("default_model", ""))
     conn.execute(
         "INSERT INTO runs(id,project_id,status,stage_index,state,created_at,updated_at) "
         "VALUES(?,?,?,?,?,?,?)",
-        (run_id, project_id, "running", 0, json.dumps({"source_ids": ready_ids}),
+        (run_id, project_id, "running", 0,
+         json.dumps({"source_ids": ready_ids, "config": config}),
          db.now(), db.now()))
     conn.commit()
-    db.log_event(run_id, "info", f"Run started with {n_ready} sources")
+    db.log_event(run_id, "info", f"Run started with {n_ready} sources",
+                 {"provider": provider, "model": config["model"],
+                  "config": {k: v for k, v in config.items() if k != "model"}})
     _launch(run_id)
     return run_id
 
@@ -191,6 +205,7 @@ def resolve_checkpoint(run_id: str, checkpoint_id: str, resolution: dict) -> Non
         raise
     db.log_event(run_id, "user_decision", f"Checkpoint '{cp['title']}' resolved")
     _set_run(run_id, status="running", stage_index=run["stage_index"] + 1)
+    db.checkpoint_wal("PASSIVE")   # the researcher's decisions reach the main file now
     _launch(run_id)
 
 
@@ -279,6 +294,16 @@ def branch_run(source_run_id: str, stage_name: str) -> str:
             r["id"] for r in conn.execute(
                 "SELECT id FROM sources WHERE project_id=? AND status='ready' "
                 "ORDER BY filename", (run["project_id"],)).fetchall()]
+    # a source run from before the config freeze has no snapshot either;
+    # freeze the project's configuration as it stands for the branch
+    if not (isinstance(state.get("config"), dict) and state["config"]):
+        prow = conn.execute("SELECT config FROM projects WHERE id=?",
+                            (run["project_id"],)).fetchone()
+        cfg = json.loads(prow["config"] or "{}") if prow else {}
+        prov = cfg.get("provider", "anthropic")
+        cfg["model"] = ((cfg.get("model") or "").strip()
+                        or llm.catalog().get(prov, {}).get("default_model", ""))
+        state["config"] = cfg
     # the reopened review's panel says plainly that its earlier decisions
     # are already applied (see _execute)
     state["branched_from"] = source_run_id
@@ -362,6 +387,10 @@ def _launch(run_id: str) -> None:
         t = _threads.get(run_id)
         if t and t.is_alive():
             return  # an executor for this run is already working
+        # shed finished executors so the registry does not grow for the life
+        # of the process
+        for rid in [rid for rid, th in _threads.items() if not th.is_alive()]:
+            del _threads[rid]
         t = threading.Thread(target=_execute, args=(run_id,), daemon=True)
         _threads[run_id] = t
         # start INSIDE the lock: a not-yet-started thread reports is_alive()
@@ -383,6 +412,7 @@ def _execute(run_id: str) -> None:
             if idx >= len(method.stages):
                 _set_run(run_id, status="completed", stage_name=None)
                 db.log_event(run_id, "info", "Run completed")
+                db.checkpoint_wal("PASSIVE")
                 return
             stage = method.stages[idx]
             _set_run(run_id, stage_name=stage.name)
@@ -407,12 +437,14 @@ def _execute(run_id: str) -> None:
                     conn.commit()
                 _set_run(run_id, status="awaiting_review")
                 db.log_event(run_id, "stage", f"Awaiting review: {stage.label}")
+                db.checkpoint_wal("PASSIVE")   # a run may wait here for days
                 return  # resolution re-launches the thread
             db.log_event(run_id, "stage", f"Stage started: {stage.label}")
             stage.run(ctx)
             _save_state(ctx)
             _set_run(run_id, stage_index=idx + 1)
             db.log_event(run_id, "stage", f"Stage finished: {stage.label}")
+            db.checkpoint_wal("PASSIVE")
     except Cancelled:
         db.log_event(run_id, "info", "Stage stopped mid-flight after cancellation")
         # status is already 'cancelled'; partial work stays recorded

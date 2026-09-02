@@ -12,9 +12,11 @@
 # not on the manifest, so it never enters the staging, the repo directory,
 # or the history.
 #
-# Two departures from the bundle:
+# Three departures from the bundle:
 #   - frontend/dist is omitted (the repo tracks source; the runnable build
 #     travels in each release's QualiLens.zip asset instead), per .gitignore.
+#   - the bundle's MANIFEST.sha256 / MANIFEST.sig are omitted (they sign the
+#     zip, not a git tree).
 #   - repo-facing files ride along: CHANGELOG.md, CONTRIBUTING.md, the CI
 #     workflow, and this script.
 #
@@ -45,6 +47,8 @@ unzip -q "$TMP/bundle.zip" -d "$TMP"
 STAGE="$TMP/QualiLens"
 
 rm -rf "$STAGE/frontend/dist"
+# the bundle's signature covers the bundle, not the repo tree
+rm -f "$STAGE/MANIFEST.sha256" "$STAGE/MANIFEST.sig"
 for extra in CHANGELOG.md CONTRIBUTING.md sync_repo.sh; do
   cp "$extra" "$STAGE/$extra"
 done
@@ -66,9 +70,17 @@ if grep -RInE --binary-files=without-match --exclude-dir=.git \
 fi
 if find "$REPO_DIR" \( -name 'qualilens.db*' -o -name '*.venv*' \
     -o -path '*backend/data*' -o -name 'FINGERPRINT.md' -o -path '*devnotes*' \
-    -o -name 'Publication-Routes*' -o -path '*Sample Data*' \) \
+    -o -name 'Publication-Routes*' -o -path '*Sample Data*' \
+    -o -name 'release-signing*' -o -name 'MANIFEST.sig' \) \
     | grep -q .; then
-  echo "REFUSING to commit: a database, data path, or private file is in the repo tree." >&2
+  echo "REFUSING to commit: a database, data path, key, or private file is in the repo tree." >&2
+  exit 1
+fi
+# the release private key is a bare 64-hex-character line; refuse any file
+# outside the tests that consists of exactly that
+if grep -RlxE --binary-files=without-match --exclude-dir=.git --exclude-dir=tests \
+    '[0-9a-f]{64}' "$REPO_DIR" | grep -q .; then
+  echo "REFUSING to commit: a file holding a bare 64-hex key-shaped line is in the repo tree." >&2
   exit 1
 fi
 

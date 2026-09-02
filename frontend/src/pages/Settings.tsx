@@ -45,7 +45,7 @@ export default function Settings() {
       setUpdState({ phase: 'done',
         msg: `Updated ${r.from_version} → ${r.to_version} (${r.files_installed} files; `
           + `previous version kept in ${r.backup}). The app is stopping — `
-          + 'run ./run.sh to start the new version.' })
+          + 'run ./run.sh to start the new version.' + (r.note ? ` ${r.note}` : '') })
     } catch (e: any) {
       setUpdState({ phase: 'error', msg: String(e.message ?? e) })
     }
@@ -62,7 +62,7 @@ export default function Settings() {
       setUpdState({ phase: 'done',
         msg: `Updated ${r.from_version} → ${r.to_version} (${r.files_installed} files; `
           + `previous version kept in ${r.backup}). The app is stopping — `
-          + 'run ./run.sh to start the new version.' })
+          + 'run ./run.sh to start the new version.' + (r.note ? ` ${r.note}` : '') })
     } catch (e: any) {
       setUpdState({ phase: 'error', msg: String(e.message ?? e) })
     } finally {
@@ -218,6 +218,21 @@ export default function Settings() {
       </div>
 
       <div className="card">
+        <h3 style={{ margin: 0 }}>Where your data lives</h3>
+        <p className="desc" style={{ margin: '10px 0 0' }}>
+          Projects, uploaded files, and API keys are stored in <code>{meta.data_dir}</code>,
+          unencrypted, protected only by your computer's file permissions.
+          {meta.synced_folder
+            ? <> <b>This folder appears to sit inside a cloud-synced directory ({meta.synced_folder}),
+                so the sync service holds your participant data and keys as well.</b> To keep them on
+                this computer only, stop the app and start it with <code>QUALILENS_DATA_DIR=/path/outside/the/synced/tree ./run.sh</code>
+                (move the existing <code>data</code> folder there first). The manual's Data, Privacy, and
+                Governance chapter has the details.</>
+            : <> It does not appear to be inside a cloud-synced directory. <code>QUALILENS_DATA_DIR</code> moves it if you ever need to.</>}
+        </p>
+      </div>
+
+      <div className="card">
         <div className="row spread">
           <h3 style={{ margin: 0 }}>Application</h3>
           <span className="badge pending">version {meta.version ?? 'unknown'}</span>
@@ -225,10 +240,12 @@ export default function Settings() {
         <p className="desc" style={{ margin: '10px 0' }}>
           Updates are pull-only. <b>Check for updates</b> makes one request to
           GitHub, only when you press it — nothing runs in the background, and
-          nothing is sent beyond the request itself. Your projects, API keys,
-          and uploaded data are never touched by an update — only the
-          application's own files are replaced, and the previous version is
-          kept as a backup.
+          nothing is sent beyond the request itself. A bundle installs only if it
+          carries a valid signature from the QualiLens release key; an unsigned,
+          foreign, or altered bundle is refused. Your projects, API keys, and
+          uploaded data are never touched by an update — only the application's
+          own files are replaced, the previous version is kept as a backup, and
+          an update is refused while any run is executing or awaiting review.
         </p>
         <div className="row">
           <button onClick={checkForUpdates}

@@ -60,7 +60,7 @@ The coding is one coder's work, and that coder is a language model whose judgmen
 
 Audio and video transcripts carry no speaker labels, because the transcription service does not diarize. If who said something matters to your analysis, prepare formatted transcripts yourself and upload those as text.
 
-Every quote in the report is checkable against its exact position in the source, and you should check a sample of them. The provenance chain exists so that verification is cheap, and cheap verification is worth performing rather than assuming. [The Coded-Source Reader](10-coded-source-reader.md) is where that check happens, and it shows you something no other screen does, which is the stretches of each transcript the coder passed over in silence.
+Every located quote in the report is checkable against its position in the source, and you should check a sample of them; a quote that could not be located is marked unverified rather than quoted. The provenance chain exists so that verification is cheap, and cheap verification is worth performing rather than assuming. [The Coded-Source Reader](10-coded-source-reader.md) is where that check happens, and it shows you something no other screen does, which is the stretches of each transcript the coder passed over in silence.
 
 ## License and citation
 

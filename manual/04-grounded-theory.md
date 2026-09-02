@@ -60,9 +60,9 @@ One limit applies. Familiarization reads the first sixty thousand characters of 
 
 Each source is split into segments of twenty-four thousand characters at paragraph boundaries, and each segment is coded in one call. The AI coder is instructed to fracture the data into discrete incidents and to label each with a conceptual code. It is told to prefer gerunds such as `managing uncertainty` or `seeking validation`, to use in-vivo codes when a participant's own phrase is analytically striking, and to code actions, processes, and meanings rather than topics. It is told explicitly that this is not the stage for theoretical abstraction.
 
-Every excerpt must be copied verbatim from the source, and each one carries a one-sentence memo explaining why it fits the code. QualiLens locates each quote's exact character position in the source, so that your report can highlight the quote in place.
+Every excerpt must be copied verbatim from the source, and each one carries a one-sentence memo explaining why it fits the code. QualiLens locates each quote in the source — exact match first, then a match that tolerates typography, case, and PDF line-break hyphenation, searched first inside the segment the coder was reading so a phrase that recurs is highlighted where it was coded — so that your report can highlight the quote in place. A quote that cannot be found at all is kept but marked unverified, and the report never presents it as a quotation ([Reports](12-reports.md#evidence)).
 
-Codes are reused across sources by exact name match. The coder is shown the codes already in use, with an instruction to reuse those names when the same idea recurs. That listing is capped at one hundred and twenty codes. The code count passes that cap on a large corpus, later segments stop seeing the earliest codes, and near-duplicates appear. Expect this rather than treating it as a fault. It is what the merge control at your first checkpoint exists for.
+Codes are reused across sources by exact name match. The coder is shown the codes already in use, with an instruction to reuse those names when the same idea recurs. That listing is capped at three hundred codes. The code count passes that cap only on a very large corpus; when it does, later segments stop seeing the earliest codes, near-duplicates appear, and the audit log says so. It is what the merge control at your first checkpoint exists for.
 
 ### Review open codes
 
@@ -72,7 +72,7 @@ This is the checkpoint that most repays your care, because everything downstream
 
 ### Axial coding
 
-One call receives every surviving open code with its excerpt count, its definition, and up to two sample quotes. It returns a set of categories. Each category carries a name, a definition of two to three sentences, a rationale for why those codes cohere, and the list of codes it claims. Every code must land in exactly one category, and codes that fit nowhere are placed in a category named `Uncategorized` with a rationale.
+One call receives every surviving open code with its excerpt count, its definition, and up to two sample quotes, and returns a set of categories. Above one hundred and twenty codes the grouping runs in chunks of that size, and a second call consolidates the provisional categories into the final set, so a large study does not fail on the model's output limit. Each category carries a name, a definition of two to three sentences, a rationale for why those codes cohere, and the list of codes it claims. Every code must land in exactly one category, and codes that fit nowhere are placed in a category named `Uncategorized` with a rationale.
 
 Any code the AI model fails to place is swept into `Uncategorized` as well, so no evidence is lost by omission.
 
@@ -88,7 +88,7 @@ It returns the core category, which may be one of the existing categories or a h
 
 ### Review core category
 
-You edit the core category's name, definition, and storyline directly. The proposed relationships are displayed for your information, and you cannot edit them at this checkpoint. The storyline is the spine of the final report, so this is the checkpoint where your own analytic voice enters the report most directly.
+You edit the core category's name, definition, and storyline directly. The proposed relationships are displayed for your information, and you cannot edit them at this checkpoint. The storyline is the spine of the final report, so this is the checkpoint where your own analytic voice enters the report most directly. The audit trail records which of the three fields you changed, and records an unchanged approval as exactly that.
 
 ### Theory and report
 
@@ -96,7 +96,7 @@ The narrative is generated from the final structure and assembled into your repo
 
 ## What the report contains
 
-Themes in the evidence tree are the categories, and their children are the open codes. Each excerpt carries its memo and a link that opens the source document with the quoted span highlighted. The familiarization summaries appear as an appendix. The audit trail records every checkpoint and every edit you made.
+Themes in the evidence tree are the categories, and their children are the open codes. Each excerpt carries its memo and a link that opens the source document with the quoted span highlighted. The familiarization summaries appear as an appendix. The report opens with the configuration the run was frozen with, and its audit appendix summarizes each checkpoint's decisions; the complete record of every edit exports from the run screen.
 
 ## Limits to state plainly in a methods section
 

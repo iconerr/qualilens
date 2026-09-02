@@ -40,7 +40,7 @@ SPDX-License-Identifier: Apache-2.0
 
 **Coded span.** An excerpt drawn in place over the text of its source, in [the coded-source reader](10-coded-source-reader.md). The text is split at the boundary where two excerpts overlap, so that each stretch is shaded by how many codes cover it.
 
-**Located and unlocated.** An excerpt is located when its quote was found at an exact position in the source, and unlocated when it was not. An excerpt goes unlocated when the AI model paraphrased rather than copying verbatim. Unlocated excerpts count as evidence in your report. They appear in the reader's **Not located in the text** panel rather than over the text. In literature synthesis, an unlocated extraction quote is additionally barred from grounding the synthesis, and the extraction review shows how many quotes went unlocated per paper.
+**Located and unlocated.** An excerpt is located when its quote was found in the source — exactly, or after folding typography, case, ligatures, soft hyphens, line-end hyphenation, and whitespace, searched first inside the segment the model was reading — and unlocated when it was not. An excerpt goes unlocated when the AI model paraphrased rather than copying verbatim. Unlocated excerpts are kept and marked *unverified*: the report shows them with a *not located verbatim* marker instead of quotation marks, the Word export lists them outside quotation marks under an Unverified note, the audit appendix counts them, and they appear in the reader's **Not located in the text** panel rather than over the text. In literature synthesis, an unlocated extraction quote is additionally barred from grounding the synthesis, and the extraction review shows how many quotes went unlocated per paper.
 
 **Coverage.** The share of a document's characters lying inside at least one coded span, shown in the reader. It describes how much of the document the coding touched. It is not a quality score.
 
@@ -50,7 +50,7 @@ SPDX-License-Identifier: Apache-2.0
 
 **Memo.** A one-sentence justification attached to an excerpt by the AI coder, recorded in grounded theory, thematic analysis, and framework analysis. In familiarization, a memo is instead a longer analytic note about a whole source. In literature synthesis, a concept excerpt's memo is the point the synthesis recorded for that quote.
 
-**Confidence.** A score between zero and one that the AI coder attaches to an assignment, recorded in content analysis and framework analysis. Framework analysis uses the score to select the assignments you review, flagging those below sixty percent. Emergent codes carry no confidence, because the model proposed the code rather than rating a fit.
+**Confidence.** A score between zero and one that the AI coder attaches to an assignment, recorded in content analysis and framework analysis when the model gives one; an assignment returned without a score is stored as missing, never as a default. Framework analysis uses the score to select the assignments you review, flagging those below sixty percent and listing the unscored ones first. Emergent codes carry no confidence, because the model proposed the code rather than rating a fit.
 
 **Checkpoint.** A stage where the pipeline stops and presents its output for your decisions. See [Checkpoints](09-checkpoints.md).
 
@@ -70,13 +70,23 @@ SPDX-License-Identifier: Apache-2.0
 
 **Familiarization.** The opening stage of grounded theory and thematic analysis. It produces a summary and an analytic memo for each source. The memo is injected into that source's coding prompt, and the summaries appear in your report appendix.
 
-**Framework matrix.** The output of framework analysis, a table whose rows are sources and whose columns are framework codes, each populated cell holding a summary of what that source said under that code.
+**Framework matrix.** The output of framework analysis, a table whose rows are sources and whose columns are framework codes, each populated cell holding a summary of what that source said under that code. A column for a promoted emergent code was filled by charting that code across every source after the review.
 
 **Extraction table.** The output of literature synthesis's first stage and the subject of its first checkpoint: one row per paper carrying its label, its citation line, and consolidated summaries of aims, method, sample, findings, and limitations, each backed by verbatim quotes. The approved table is preserved in the report's appendix.
 
 **Concept-by-paper matrix.** The output of literature synthesis, a table whose rows are papers and whose columns are concepts, each populated cell holding a summary of what that paper contributes to that concept, drawn strictly from that paper's extraction quotes.
 
-**Citation guard.** The scan literature synthesis runs over its finished narrative, checking every parenthetical that carries a year against the corpus labels. Citation-shaped text matching no uploaded paper is listed in the report's limitations section and logged. It is a tripwire against fabricated references, not a validation of real ones.
+**Citation guard.** The scan literature synthesis runs over its finished narrative, checking every parenthetical that carries a year against the corpus labels — a name in any script must match, and where the label carries a year the years must agree. Citation-shaped text matching no uploaded paper is listed in the report's limitations section and logged. It is a tripwire against fabricated references, not a validation of real ones.
+
+**Quote guard.** The scan every method runs over its finished narrative, checking each quotation of twenty-five characters or more against the run's excerpts and sources. A quotation matching neither is listed in the limitations section as unverified and logged.
+
+**Cited work.** In literature synthesis, the extraction note that holds findings a paper attributes to other work (its literature review, its background). Shown and editable on the extraction review, kept in the report's extraction appendix, never offered to the synthesis.
+
+**Method configuration.** The section at the head of every report carrying the setup answers, provider, and model exactly as the run froze them at its start.
+
+**Session token.** A random value minted each time the app starts and written into the page it serves; every API call must carry it. It is what keeps other web pages on the same computer out of the app. A tab left open across a restart sees a message asking for a reload.
+
+**Signed bundle.** A `QualiLens.zip` carrying a manifest of every file's hash and an Ed25519 signature over that manifest from the release key. The updater installs nothing else.
 
 **Page anchor.** The page number attached to an excerpt from a PDF, derived from a page map recorded at upload. Page anchors appear beside quotes in reports, exports, and the coded-source reader. Sources ingested before page mapping existed, and formats without pages, carry none.
 
@@ -124,9 +134,11 @@ SPDX-License-Identifier: Apache-2.0
 | Quantity | Value | Where it matters |
 |---|---|---|
 | Segment size | 24,000 characters | Coding proceeds one segment at a time |
-| Familiarization read | First 60,000 characters of each source | The memo reflects the opening of a long transcript |
-| Inductive codebook sample | About 45,000 characters divided across sources, at least 2,000 each | Content analysis codebook derivation |
-| Existing codes shown to the coder | 120 | Above this, near-duplicate codes appear |
+| Familiarization read | First 60,000 characters of each source | The memo reflects the opening of a long transcript; the audit log names each source this shortens |
+| Inductive codebook sample | About 45,000 characters divided across sources, at least 2,000 each, as opening, middle, and closing windows | Content analysis codebook derivation |
+| Existing codes shown to the coder | 300 | Above this, near-duplicate codes appear and the audit log says so |
+| Single-call grouping limit | 120 codes | Above this, grouping runs in chunks and a consolidation call follows |
+| Quotation length checked by the quote guard | 25 characters or more | Narrative sections |
 | Evidence shown at a code checkpoint | All of it, on demand | Clicking a code opens every excerpt, not a sample |
 | Sample quotes on an emergent candidate | 4, 400 characters each | The framework charting checkpoint |
 | Quote preview in the Not located panel | 200 characters | The coded-source reader |
