@@ -155,6 +155,16 @@ def _current_release() -> str:
         return (APP_ROOT / "RELEASE").read_text().strip() or "unknown"
     except OSError:
         pass
+    # an installed copy whose updater predated RELEASE (1.6.3 and before)
+    # refused that file but took frontend/dist/, where package.sh stamps
+    # the same version into index.html
+    try:
+        html = (APP_ROOT / "frontend" / "dist" / "index.html").read_text(encoding="utf-8")
+        m = re.search(r'<meta name="ql-release-stamp" content="([^"]*)"', html)
+        if m and m.group(1).strip():
+            return m.group(1).strip()
+    except OSError:
+        pass
     try:
         text = (APP_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     except OSError:

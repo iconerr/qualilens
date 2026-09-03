@@ -26,7 +26,8 @@ export default function UpdateHint() {
         This build is {ageLabel(hint.build_age_days)} old
         {hint.days_since_check == null
           ? ', and updates have not been checked from this installation'
-          : `; updates were last checked ${ageLabel(hint.days_since_check)} ago`}.
+          : hint.days_since_check === 0 ? '; updates were checked today'
+            : `; updates were last checked ${ageLabel(hint.days_since_check)} ago`}.
         {' '}<Link to="/settings">Settings → Check for updates</Link>.
       </span>
       <button className="small" onClick={dismiss} title="Hide this until the app is next started">Dismiss</button>

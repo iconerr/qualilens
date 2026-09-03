@@ -118,6 +118,15 @@ for item in "${MANIFEST[@]}"; do
   fi
 done
 
+# the release also rides inside the interface's index.html: an updater older
+# than the RELEASE file (1.6.3 and before) refuses RELEASE as an unlisted
+# path but has always accepted frontend/dist/, so the app can still name
+# its version after that one update (update._current_release reads it)
+if [ -f "$STAGE/frontend/dist/index.html" ]; then
+  sed -i.bak "s#</head>#<meta name=\"ql-release-stamp\" content=\"$(cat RELEASE)\"></head>#" "$STAGE/frontend/dist/index.html" \
+    && rm -f "$STAGE/frontend/dist/index.html.bak"
+fi
+
 # strip caches that live inside the included trees
 find "$STAGE" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 find "$STAGE" -name '.pytest_cache' -type d -exec rm -rf {} + 2>/dev/null || true

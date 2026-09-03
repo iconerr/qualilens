@@ -30,6 +30,7 @@ export interface UpdateHint {
 // "3 days", "6 weeks", "4 months" — for the age of a build or of the last check
 export function ageLabel(days: number | null | undefined): string {
   if (days == null) return ''
+  if (days === 0) return 'today'
   if (days < 14) return `${days} day${days === 1 ? '' : 's'}`
   if (days < 70) { const w = Math.round(days / 7); return `${w} week${w === 1 ? '' : 's'}` }
   const m = Math.round(days / 30); return `${m} month${m === 1 ? '' : 's'}`

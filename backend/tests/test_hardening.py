@@ -1019,8 +1019,13 @@ def test_release_version_is_exposed_and_carried_by_updates(tmp_path, monkeypatch
     from app import main as main_mod
     root = _fake_app_root(tmp_path, monkeypatch)
     assert update._current_release() == "unknown"         # a checkout without the file
+    # the stamp inside dist/index.html serves an installed copy whose updater
+    # refused the RELEASE file (an allowlist older than 1.7.0)
+    (root / "frontend" / "dist" / "index.html").write_text(
+        '<html><head><meta name="ql-release-stamp" content="1.7.0"></head></html>')
+    assert update._current_release() == "1.7.0"
     (root / "RELEASE").write_text("1.6.3\n")
-    assert update._current_release() == "1.6.3"
+    assert update._current_release() == "1.6.3"          # the file wins when present
     assert update._is_allowed("RELEASE")
     r = update.apply_update(_make_bundle(tmp_path, extra={"QualiLens/RELEASE": "9.9.9"}))
     assert r["ok"] and (root / "RELEASE").read_text() == "9.9.9"

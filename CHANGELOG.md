@@ -9,6 +9,14 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.7.1 — 2026-09-03
+
+- An installation updated to 1.7.0 by an older build showed only its build
+  stamp: that build's updater refused the new `RELEASE` file. The version
+  now also rides inside the interface's `index.html`, which every updater
+  accepts, so the next update names its version whatever it came from.
+  "Updates checked" says "today" rather than "0 days ago".
+
 ## 1.7.0 — 2026-09-03
 
 - The version you are running shows in the footer of every page and on the

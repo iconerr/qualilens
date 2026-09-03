@@ -331,7 +331,7 @@ export default function Settings() {
             <td>{versionLabel(meta.release, meta.version)}</td></tr>
           <tr><td className="muted">Updates checked</td>
             <td>{meta.update_hint?.last_checked
-              ? `${ageLabel(meta.update_hint.days_since_check)} ago`
+              ? (meta.update_hint.days_since_check === 0 ? 'today' : `${ageLabel(meta.update_hint.days_since_check)} ago`)
               : 'never from this installation'}
               {meta.update_hint?.remind && meta.update_hint.build_age_days != null &&
                 <span className="muted"> · this build is {ageLabel(meta.update_hint.build_age_days)} old, worth a check</span>}
