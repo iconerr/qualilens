@@ -774,8 +774,13 @@ def test_package_script_manifest_and_relative_path():
                          "QualiLens/manual/01-getting-started.md",
                          "QualiLens/manual/08-literature-synthesis.md",
                          "QualiLens/backend/app/models.json",
-                         "QualiLens/VERSION"):
+                         "QualiLens/VERSION", "QualiLens/RELEASE"):
             assert required in names, f"bundle must contain {required}"
+        # RELEASE names the changelog's top entry, or says the bundle is interim
+        import re as _re
+        top = _re.search(r"^## (\S+)", (root / "CHANGELOG.md").read_text(), _re.M)
+        expect = top.group(1) if top and _re.fullmatch(r"\d+\.\d+\.\d+", top.group(1)) else "unreleased"
+        assert zipfile.ZipFile(out).read("QualiLens/RELEASE").decode().strip() == expect
 
 
 # ---------- provenance marks ----------

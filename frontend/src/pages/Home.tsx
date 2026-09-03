@@ -3,15 +3,9 @@
 
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api, statusLabel, type Project } from '../api'
-
-const METHOD_LABELS: Record<string, string> = {
-  grounded_theory: 'Grounded Theory',
-  thematic: 'Thematic Analysis',
-  content_analysis: 'Content Analysis',
-  framework: 'Framework / Deductive',
-  literature_synthesis: 'Literature Synthesis',
-}
+import { api, dayLabel, methodLabel, statusLabel, type Project } from '../api'
+import UpdateHint from '../UpdateHint'
+import MethodGlyph from '../Glyphs'
 
 export default function Home() {
   const [projects, setProjects] = useState<Project[] | null>(null)
@@ -32,8 +26,11 @@ export default function Home() {
 
   return (
     <div className="page">
-      <h1>Projects</h1>
-      <p className="sub">Each project is one analysis: a method, a dataset, and its runs. Everything is stored locally.</p>
+      <div className="page-head">
+        <h1>Projects</h1>
+        <p className="sub">One analysis each: a method, a dataset, and its runs. All of it on this computer.</p>
+      </div>
+      <UpdateHint />
       {error && <div className="error-box">{error}</div>}
       {projects && projects.length === 0 && (
         <div className="card empty-state">
@@ -53,35 +50,37 @@ export default function Home() {
           <Link to="/new"><button className="primary">New analysis</button></Link>
         </div>
       )}
-      {projects?.map(p => (
-        <div key={p.id} className="card clickable" onClick={() => nav(`/projects/${p.id}`)}>
-          <div className="row spread">
-            <div>
-              <div className="proj-title-row">
-                <h3>{p.name}</h3>
-                <span className="method-pill">{METHOD_LABELS[p.method] ?? p.method}</span>
+      {projects && projects.length > 0 && (
+        <section className="panel">
+          {projects.map(p => (
+            <div key={p.id} className="lrow clickable" role="link" tabIndex={0}
+              onClick={() => nav(`/projects/${p.id}`)}
+              onKeyDown={e => { if (e.key === 'Enter' && e.target === e.currentTarget) nav(`/projects/${p.id}`) }}>
+              <MethodGlyph method={p.method} className="lrow-glyph" />
+              <div className="lrow-main">
+                <div className="lrow-title">{p.name}</div>
+                <div className="lrow-meta">
+                  {methodLabel(p.method)} · {p.n_sources} source{p.n_sources === 1 ? '' : 's'} · {dayLabel(p.created_at)}
+                </div>
               </div>
-              <p className="desc">
-                {p.n_sources} source{p.n_sources === 1 ? '' : 's'}
-                {' · created '}{new Date(p.created_at * 1000).toLocaleDateString()}
-              </p>
+              <div className="lrow-actions">
+                {p.latest_run && (
+                  <span className={`badge ${p.latest_run.status}`} role="link"
+                    tabIndex={0} style={{ cursor: 'pointer' }} title="Open the latest run"
+                    onClick={e => { e.stopPropagation(); nav(`/runs/${p.latest_run!.id}`) }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.stopPropagation(); nav(`/runs/${p.latest_run!.id}`) }
+                    }}>
+                    {statusLabel(p.latest_run.status)}
+                  </span>
+                )}
+                <button className="small quiet" onClick={e => del(e, p.id, p.name)}>Delete</button>
+                <span className="chev" aria-hidden="true">›</span>
+              </div>
             </div>
-            <div className="row">
-              {p.latest_run && (
-                <span className={`badge ${p.latest_run.status}`} role="link"
-                  tabIndex={0} style={{ cursor: 'pointer' }} title="Open the latest run"
-                  onClick={e => { e.stopPropagation(); nav(`/runs/${p.latest_run!.id}`) }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') { e.stopPropagation(); nav(`/runs/${p.latest_run!.id}`) }
-                  }}>
-                  {statusLabel(p.latest_run.status)}
-                </span>
-              )}
-              <button className="small danger" onClick={e => del(e, p.id, p.name)}>Delete</button>
-            </div>
-          </div>
-        </div>
-      ))}
+          ))}
+        </section>
+      )}
     </div>
   )
 }

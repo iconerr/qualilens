@@ -1009,3 +1009,64 @@ def test_release_page_link_only_when_it_is_github(monkeypatch):
     good = f"https://github.com/{update.UPDATE_REPO}/releases/tag/v9"
     monkeypatch.setattr(update, "fetch_latest_release", lambda: {**base, "html_url": good})
     assert client.post('/api/settings/check_updates').json()["release_url"] == good
+
+
+def test_release_version_is_exposed_and_carried_by_updates(tmp_path, monkeypatch):
+    """The version a user sees ('1.6.3') comes from RELEASE beside VERSION:
+    read by the server, stamped into the page, named by the update check,
+    and replaced by an update like the build stamp is."""
+    from tests.test_fixes import _make_bundle, _fake_app_root
+    from app import main as main_mod
+    root = _fake_app_root(tmp_path, monkeypatch)
+    assert update._current_release() == "unknown"         # a checkout without the file
+    (root / "RELEASE").write_text("1.6.3\n")
+    assert update._current_release() == "1.6.3"
+    assert update._is_allowed("RELEASE")
+    r = update.apply_update(_make_bundle(tmp_path, extra={"QualiLens/RELEASE": "9.9.9"}))
+    assert r["ok"] and (root / "RELEASE").read_text() == "9.9.9"
+    m = client.get("/api/meta").json()
+    assert m["release"] == "9.9.9" and "running_release" in m
+    if main_mod.FRONTEND_DIST.exists():
+        assert '<meta name="ql-release" content="' in stranger.get("/").text
+    base = {"tag_name": "v9", "name": "v9 — build 9999.01.01-0000", "body": "", "assets": [], "html_url": ""}
+    monkeypatch.setattr(update, "fetch_latest_release", lambda: base)
+    assert client.post('/api/settings/check_updates').json()["release"] == "9.9.9"
+
+
+def test_update_reminder_thresholds_and_launch_dismissal(monkeypatch):
+    """A build 30+ days old with no check in 14 days earns the note; a check
+    silences it; Dismiss silences it for this launch. No network anywhere."""
+    import time as _time
+    from app import main as main_mod
+    now = _time.mktime((2026, 9, 3, 12, 0, 0, 0, 0, -1))
+    fresh, old = "2026.09.01-0900", "2026.07.01-0900"
+    assert update.update_reminder(fresh, None, now) == {"build_age_days": 2, "days_since_check": None, "remind": False}
+    r = update.update_reminder(old, None, now)
+    assert r["remind"] is True and r["build_age_days"] == 64
+    assert update.update_reminder(old, now - 3 * 86400, now)["remind"] is False
+    assert update.update_reminder(old, now - 20 * 86400, now)["remind"] is True
+    assert update.update_reminder("unknown", None, now) == {"build_age_days": None, "days_since_check": None, "remind": False}
+    assert update.update_reminder("2026.07.01", None, now)["remind"] is True     # date-only stamps count too
+    # the API, with an old running build and no check recorded
+    monkeypatch.setattr(main_mod, "STARTED_BUILD", old)
+    monkeypatch.setattr(main_mod, "_hint_dismissed", False)
+    db.set_setting(main_mod.LAST_CHECK_KEY, "")
+    h = client.get("/api/meta").json()["update_hint"]
+    assert h["remind"] is True and h["dismissed"] is False and h["last_checked"] is None
+    # pressing Check for updates records the time and silences the note
+    base = {"tag_name": "v9", "name": "v9 — build 9999.01.01-0000", "body": "", "assets": [], "html_url": ""}
+    monkeypatch.setattr(update, "fetch_latest_release", lambda: base)
+    assert client.post("/api/settings/check_updates").json()["ok"]
+    assert float(db.get_setting(main_mod.LAST_CHECK_KEY)) > 0
+    h = client.get("/api/meta").json()["update_hint"]
+    assert h["remind"] is False and h["days_since_check"] == 0
+    # a failed check records nothing
+    db.set_setting(main_mod.LAST_CHECK_KEY, "")
+    monkeypatch.setattr(update, "fetch_latest_release", lambda: (_ for _ in ()).throw(update.UpdateError("offline")))
+    assert client.post("/api/settings/check_updates").json()["ok"] is False
+    assert db.get_setting(main_mod.LAST_CHECK_KEY) == ""
+    # Dismiss hides it for this launch only (the flag lives in the process)
+    assert client.post("/api/settings/dismiss_update_hint").json()["ok"]
+    h = client.get("/api/meta").json()["update_hint"]
+    assert h["remind"] is True and h["dismissed"] is True
+    assert TestClient(app, base_url="http://127.0.0.1").post("/api/settings/dismiss_update_hint").status_code == 401

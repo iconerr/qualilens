@@ -66,14 +66,17 @@ The app runs on macOS and Linux; on Windows, use WSL.
 
 QualiLens calls AI model providers directly with your key. Open **Settings** from the top bar to manage your keys.
 
-Each provider gets its own card with four controls.
+Each provider gets its own card, and the card shows only the controls its
+state allows: a key field and Save when no key is stored, then Test, Check
+models, and Remove once one is.
 
 | Control | What it does |
 |---|---|
 | Key field | Accepts a pasted key. The field is masked, and an already-saved key shows as a placeholder rather than being displayed back to you. |
 | Save | Writes the key to the local database. The card then shows a check beside the provider's name and Ready to analyze, with a hint of the form `sk-ant…4f2a` — the first six and last four characters. |
-| Test | Sends one very short request to the provider and reports whether it answered. If you have typed a new key into the field but not saved it, Test uses the typed key, so a failing candidate never overwrites a working saved key. |
-| Remove | Clears the stored key for that provider. |
+| Test | Sends one very short request to the provider and reports whether it answered. It appears as soon as you type a key: if you have typed a new key but not saved it, Test uses the typed key, so a failing candidate never overwrites a working saved key. |
+| Check models | Compares the models this app offers with the provider's live list; the section below explains it. |
+| Remove | Clears the stored key for that provider. It stays quiet until you point at it. |
 
 The four providers, and the models QualiLens offers for each, are listed in [Choosing a Method](03-choosing-a-method.md#provider-and-model).
 
@@ -106,13 +109,20 @@ A sensible first session goes in this order. Save an API key in Settings and pre
 ## Updating the app
 
 Open **Settings** and find the **Application** card — it names the version
-you are running. **Check for updates** asks GitHub for the latest published
+you are running, with its build stamp (the date and time the release was
+packaged); the footer of every page carries the same line. **Check for
+updates** asks GitHub for the latest published
 QualiLens release and compares it with your installation. The check is
 pull-only and happens only when you press the button: one request goes to
 GitHub, nothing of yours goes with it, and nothing ever runs in the
 background. When a newer release exists, **Download and install** fetches
 its bundle and applies it through the same validated updater described
-next; when you are current, the card says so.
+next; when you are current, the card says so. The card also records when
+you last checked. When a build is a month or more old and no check has been
+made in two weeks, the Projects page says so in one line, once per launch,
+with the path to the check; **Dismiss** hides it until the app is next
+started. The reminder is worked out on your computer from the build's date
+and makes no request.
 
 When you receive a newer `QualiLens.zip` directly, do not replace the folder
 by hand. On the same card, press **Update from a downloaded zip**. Either
@@ -189,7 +199,7 @@ The better arrangement is the one described above: keep the data folder outside 
 
 ## License, and how to cite QualiLens
 
-QualiLens is copyright 2026 Ashita Aggarwal and Suraj Commuri. It is released under the Apache License 2.0. You may use it, modify it, and share it, including commercially, provided the copyright notice and the `NOTICE` file travel with any redistribution. Every source file carries an SPDX header, so attribution survives even when a single file is copied out of the project.
+QualiLens is copyright 2026 [Ashita Aggarwal](https://in.linkedin.com/in/drashita) and Suraj Commuri. It is released under the Apache License 2.0. You may use it, modify it, and share it, including commercially, provided the copyright notice and the `NOTICE` file travel with any redistribution. Every source file carries an SPDX header, so attribution survives even when a single file is copied out of the project.
 
 The analyses, codebooks, and reports you produce with QualiLens are yours alone. The authors claim no rights over any output of the tool. The `NOTICE` file says so explicitly. Point a sponsor or a publisher at that file if you are ever asked who owns your findings.
 

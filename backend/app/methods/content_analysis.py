@@ -250,10 +250,16 @@ def compute_stats(ctx) -> dict:
 
 def stage_quantify_report(ctx):
     stats = compute_stats(ctx)
+
+    def by_group(d: dict) -> str:        # {'Site A': 1, 'Site B': 2} -> "Site A 1, Site B 2"
+        return ", ".join(f"{g} {v}" for g, v in d.items())
+    # the figures the model narrates from (they reach the report only through
+    # its prose; the table itself is rendered from stats, on screen and in Word)
     table_text = "\n".join(
         f"- {r['code']}: {r['count']} ({r['pct']}%) across {r['sources']} sources; "
         f"{r['per_10k_chars']} per 10,000 characters"
-        + (f"; by group: {r['by_group']} (per 10,000 characters: {r['by_group_per_10k']})"
+        + (f"; by group: {by_group(r['by_group'])} "
+           f"(per 10,000 characters: {by_group(r['by_group_per_10k'])})"
            if "by_group" in r else "")
         for r in stats["rows"])
     level = ctx.config.get("ca_level", "Manifest")
@@ -262,10 +268,12 @@ def stage_quantify_report(ctx):
                  "who returns to a concern six times contributes six. Percentages are each "
                  "code's share of all coded passages. Rates per 10,000 characters correct "
                  "for source length and are the figures to compare across groups.")
-    extra = [{"heading": "Code Frequencies",
+    # the per-code figures live in the frequency table (screen and Word),
+    # so the prose states the totals and the unit once, and nothing twice
+    extra = [{"heading": "Coding Summary",
               "body": f"Total coded passages: {stats['total_assignments']} across "
                       f"{stats['n_sources']} sources ({stats['total_chars']:,} characters).\n"
-                      f"{unit_note}\n{table_text}"}]
+                      f"{unit_note}"}]
     sections = common.narrate(
         ctx, f"Qualitative content analysis ({level.split(' ')[0].lower()} level)",
         "Codebook with frequencies:\n" + table_text + "\n\nCodes and definitions:\n"

@@ -59,6 +59,27 @@ LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 # updater compares against the release. It is stamped into index.html so
 # ./run.sh can name the build holding the port without a token.
 STARTED_BUILD = update._current_version()
+STARTED_RELEASE = update._current_release()   # '1.6.3'; the footer shows both
+
+# The reminder to check for updates: computed from the running build's date
+# and the time Check for updates was last pressed (a local settings row).
+# Dismissing it lasts for this launch — the flag lives in the process.
+LAST_CHECK_KEY = "updates_last_checked"
+_hint_dismissed = False
+
+
+def _last_checked() -> float | None:
+    raw = db.get_setting(LAST_CHECK_KEY)
+    try:
+        return float(raw) if raw else None
+    except ValueError:
+        return None
+
+
+def _update_hint() -> dict:
+    last = _last_checked()
+    return {**update.update_reminder(STARTED_BUILD, last, db.now()),
+            "last_checked": last, "dismissed": _hint_dismissed}
 
 
 def _hostname(value: str) -> str:
@@ -159,7 +180,10 @@ def get_meta():
         ],
         "ffmpeg": transcription.ffmpeg_available(),
         "version": update._current_version(),   # the folder, as the updater sees it
+        "release": update._current_release(),   # its release version ('1.6.3')
         "running_build": STARTED_BUILD,          # this process
+        "running_release": STARTED_RELEASE,
+        "update_hint": _update_hint(),
         "data_dir": str(db.DATA_DIR),
         "synced_folder": db.synced_folder_hint(),
     }
@@ -299,9 +323,19 @@ def check_updates():
     made when the researcher presses the button — never in the background,
     and nothing is sent beyond the request itself."""
     try:
-        return update.check_for_update()
+        out = update.check_for_update()
     except update.UpdateError as e:
         return {"ok": False, "error": str(e)}
+    db.set_setting(LAST_CHECK_KEY, str(db.now()))   # silences the reminder for a while
+    return out
+
+
+@app.post("/api/settings/dismiss_update_hint")
+def dismiss_update_hint():
+    """Hide the reminder until the app is next launched."""
+    global _hint_dismissed
+    _hint_dismissed = True
+    return {"ok": True}
 
 
 @app.post("/api/settings/install_update")
@@ -1043,7 +1077,8 @@ if FRONTEND_DIST.exists():
         lets plain <a href> downloads authenticate without a header."""
         html = (_DIST_BASE / "index.html").read_text(encoding="utf-8")
         meta = (f'<meta name="ql-token" content="{SESSION_TOKEN}">'
-                f'<meta name="ql-build" content="{STARTED_BUILD}">')
+                f'<meta name="ql-build" content="{STARTED_BUILD}">'
+                f'<meta name="ql-release" content="{STARTED_RELEASE}">')
         html = html.replace("</head>", meta + "</head>", 1) if "</head>" in html else meta + html
         resp = HTMLResponse(html, headers={"Cache-Control": "no-store"})
         resp.set_cookie(TOKEN_COOKIE, SESSION_TOKEN, httponly=True, samesite="strict", path="/")

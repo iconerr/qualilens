@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, statusLabel, type Checkpoint, type Run, type SheetImport } from '../api'
+import { dateLabel, api, statusLabel, type Checkpoint, type Run, type SheetImport } from '../api'
 
 const TERMINAL = new Set(['completed', 'cancelled', 'failed'])
 
@@ -70,12 +70,14 @@ export default function RunPage() {
 
   return (
     <div className="page">
-      <h1>{run.project_name}</h1>
-      <p className="sub">
-        <Link to={`/projects/${run.project_id}`}>← project</Link>
-        {' · '}run of {new Date(run.created_at * 1000).toLocaleString()}
-        {' · '}<span className={`badge ${run.status}`}>{statusLabel(run.status)}</span>
-      </p>
+      <div className="page-head">
+        <h1>{run.project_name}</h1>
+        <p className="sub">
+          <Link to={`/projects/${run.project_id}`}>← project</Link>
+          {' · '}run of {dateLabel(run.created_at)}
+          {' · '}<span className={`badge ${run.status}`}>{statusLabel(run.status)}</span>
+        </p>
+      </div>
       {error && <div className="error-box">{error}</div>}
 
       {run.status === 'failed' && (
@@ -99,11 +101,11 @@ export default function RunPage() {
       )}
 
       {run.status === 'completed' && run.has_report && (
-        <div className="card" style={{ borderColor: 'var(--green)' }}>
+        <div className="card done-card">
           <h3>Analysis complete</h3>
-          <p className="desc">The report is ready — browse it interactively, export Word, or export
-            the complete audit trail (every call, decision, and checkpoint) as JSON.</p>
-          <div className="row">
+          <p className="desc">The report is ready: browse it, export Word, or export the complete
+            audit trail (every call, decision, and checkpoint) as JSON.</p>
+          <div className="row mt">
             <Link to={`/runs/${id}/report`}><button className="primary">Open report</button></Link>
             <a href={`/api/runs/${id}/report.docx`}><button>Download .docx</button></a>
             <a href={`/api/runs/${id}/audit.json`}><button>Export audit log</button></a>
@@ -118,9 +120,9 @@ export default function RunPage() {
       )}
 
       <div className="grid2">
-        <div className="card">
-          <h3>Pipeline</h3>
-          <div className="stagelist">
+        <section className="panel">
+          <div className="panel-head"><span className="eyebrow">Pipeline</span></div>
+          <div className="panel-body stagelist">
             {run.stages.map((s, i) => {
               const cls = i < run.stage_index ? 'done' : i === run.stage_index ? 'current' : 'pending'
               const revisitable = s.kind === 'checkpoint' && i < run.stage_index
@@ -143,9 +145,10 @@ export default function RunPage() {
               )
             })}
           </div>
-        </div>
-        <div className="card">
-          <h3>Progress</h3>
+        </section>
+        <section className="panel">
+          <div className="panel-head"><span className="eyebrow">Progress</span></div>
+          <div className="panel-body">
           {run.status === 'running' && (
             <>
               {pct !== null && <><div className="progressbar"><div style={{ width: `${pct}%` }} /></div>
@@ -166,7 +169,7 @@ export default function RunPage() {
                 api.cancelRun(id!).catch((e: any) => setError(String(e.message ?? e)))
             }}>Cancel run</button>
           )}
-          <div className="row spread mt"><h3 style={{ margin: 0 }}>Audit log</h3>
+          <div className="row spread mt"><span className="eyebrow">Audit log</span>
             <a className="small" href={`/api/runs/${id}/audit.json`}
               title="Every event with its payload, every checkpoint with its resolution, the frozen configuration">export as JSON ↗</a></div>
           <p className="desc small">The screen keeps recent entries; the export carries the complete record.</p>
@@ -177,7 +180,8 @@ export default function RunPage() {
               </div>
             ))}
           </div>
-        </div>
+          </div>
+        </section>
       </div>
     </div>
   )

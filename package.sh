@@ -74,6 +74,7 @@ mkdir -p "$STAGE"
 # ---- the manifest: application files only ----
 MANIFEST=(
   VERSION
+  RELEASE
   run.sh
   package.sh
   LICENSE
@@ -99,6 +100,16 @@ MANIFEST=(
 
 # stamp this build so recipients (and the in-app updater) can tell versions apart
 printf '%s' "$BUILD_STAMP" > VERSION
+# and name the release: the first versioned heading in CHANGELOG.md ("## 1.6.3 — date").
+# "unreleased" when the top entry is still "## Unreleased" (a test or interim bundle),
+# so the app never claims a version that was not cut. A recipient's folder has no
+# CHANGELOG; its RELEASE came with the bundle and is kept.
+if [ -f CHANGELOG.md ]; then
+  RELEASE="$(sed -n -E '/^## Unreleased/q; s/^## ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CHANGELOG.md | head -1)"
+  printf '%s' "${RELEASE:-unreleased}" > RELEASE
+elif [ ! -f RELEASE ]; then
+  printf 'unknown' > RELEASE
+fi
 
 for item in "${MANIFEST[@]}"; do
   if [ -e "$item" ]; then

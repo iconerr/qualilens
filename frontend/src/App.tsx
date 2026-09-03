@@ -10,8 +10,15 @@ import RunPage from './pages/Run'
 import ReportPage from './pages/Report'
 import SourceReader from './pages/SourceReader'
 import Settings from './pages/Settings'
+import { versionLabel } from './api'
 
 const QL_LINEAGE = 'ql-a2f4467befc3477b9caea1866a2af37e'
+
+// what this page was served by: the server stamps both into index.html, so
+// the footer can say which version is running without a request
+const metaTag = (name: string) =>
+  document.querySelector(`meta[name="${name}"]`)?.getAttribute('content') ?? ''
+const RUNNING = versionLabel(metaTag('ql-release'), metaTag('ql-build'))
 
 const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown',
   'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a']
@@ -100,7 +107,8 @@ export default function App() {
         <Route path="/settings" element={<Settings />} />
       </Routes>
       <footer className="footer" data-ql={QL_LINEAGE}>
-        QualiLens · © 2026 Ashita Aggarwal &amp; Suraj Commuri ·
+        QualiLens <span className="mono" title="The version you are running; Settings has the update check">{RUNNING}</span> ·
+        © 2026 <a href="https://in.linkedin.com/in/drashita" target="_blank" rel="noopener">Ashita Aggarwal</a> &amp; Suraj Commuri ·
         released under the <a href="https://www.apache.org/licenses/LICENSE-2.0"
           target="_blank" rel="noopener">Apache-2.0 license</a> — free to use,
         modify, and share with attribution. Your data and analyses remain

@@ -3,7 +3,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, statusLabel, testKey, type Meta, type MethodMeta, type Question, type Source } from '../api'
+import MethodGlyph from '../Glyphs'
+import { sizeLabel, api, statusLabel, testKey, type Meta, type MethodMeta, type Question, type Source } from '../api'
 
 const STEPS = ['Method', 'Method setup', 'Model & keys', 'Data', 'Review & run']
 
@@ -179,8 +180,10 @@ export default function Wizard() {
 
   return (
     <div className="page">
-      <h1>New analysis</h1>
-      <p className="sub">Five steps: method, setup, model, data, run.</p>
+      <div className="page-head">
+        <h1>New analysis</h1>
+        <p className="sub">Five steps: method, setup, model, data, run.</p>
+      </div>
       <div className="steps">
         {STEPS.map((s, i) => (
           <div key={s} className={`step ${i === step ? 'active' : i < step ? 'done' : ''}`}>
@@ -204,11 +207,16 @@ export default function Wizard() {
             if (stashed) setAnswers(stashed)
             else initAnswers(m)
           }}>
-          <h3>{m.label}</h3>
-          <p className="desc">{m.description}</p>
-          <p className="desc small">
-            Pipeline: {m.stages.map(s => s.label).join(' → ')}
-          </p>
+          <div className="method-card">
+            <MethodGlyph method={m.id} size={28} className="method-card-glyph" />
+            <div>
+              <h3>{m.label}</h3>
+              <p className="desc">{m.description}</p>
+              <p className="desc small" title={m.stages.map(s => s.label).join(' → ')}>
+                {m.stages.length} stages, {m.stages.filter(s => s.kind === 'checkpoint').length} of them your reviews
+              </p>
+            </div>
+          </div>
         </div>
       ))}
 
@@ -330,7 +338,7 @@ export default function Wizard() {
                 <span>
                   <div className="src-name">{s.filename} {s.grp ? <span className="count-pill">{s.grp}</span> : null}</div>
                   <div className="src-meta">
-                    {s.kind}{s.status === 'ready' && s.chars > 0 ? ` · ${(s.chars / 1000).toFixed(s.chars < 10000 ? 1 : 0)}k characters` : ''}
+                    {s.kind}{s.status === 'ready' && s.chars > 0 ? ` · ${sizeLabel(s.chars)}` : ''}
                   </div>
                 </span>
                 <span className="src-actions">

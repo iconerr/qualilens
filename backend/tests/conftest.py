@@ -21,15 +21,21 @@ os.environ["QUALILENS_TEST"] = "1"
 
 import pytest  # noqa: E402
 
-_VERSION_FILE = pathlib.Path(__file__).resolve().parent.parent.parent / "VERSION"
+_TREE = pathlib.Path(__file__).resolve().parent.parent.parent
+_VERSION_FILE = _TREE / "VERSION"
+_RELEASE_FILE = _TREE / "RELEASE"
 
 
 @pytest.fixture(autouse=True)
 def _keep_the_trees_build_stamp():
-    """Tests that run package.sh re-stamp VERSION in the working tree, and a
-    test build is not a release: the tree must keep the stamp of the build it
-    actually is (the one the updater and the launcher compare against)."""
-    before = _VERSION_FILE.read_text() if _VERSION_FILE.exists() else None
+    """Tests that run package.sh re-stamp VERSION (and write RELEASE) in the
+    working tree, and a test build is not a release: the tree must keep the
+    stamp of the build it actually is (the one the updater and the launcher
+    compare against), and a RELEASE file that was not there must not appear."""
+    before = {f: (f.read_text() if f.exists() else None) for f in (_VERSION_FILE, _RELEASE_FILE)}
     yield
-    if before is not None and _VERSION_FILE.read_text() != before:
-        _VERSION_FILE.write_text(before)
+    for f, text in before.items():
+        if text is None:
+            f.unlink(missing_ok=True)
+        elif f.read_text() != text:
+            f.write_text(text)

@@ -62,7 +62,7 @@ APP_ROOT = Path(__file__).resolve().parent.parent.parent
 # shipping manifest in package.sh. Everything else — backend/data above all —
 # is refused.
 ALLOWED = (
-    "VERSION", "run.sh", "package.sh", "LICENSE", "NOTICE", "CITATION.cff",
+    "VERSION", "RELEASE", "run.sh", "package.sh", "LICENSE", "NOTICE", "CITATION.cff",
     "README.md", ".gitignore",
     "backend/requirements.txt", "backend/app/", "backend/tests/",
     "frontend/index.html", "frontend/package.json", "frontend/package-lock.json",
@@ -96,6 +96,40 @@ def is_older_build(candidate: str, installed: str) -> bool:
     return bool(_STAMP_RE.match(c) and _STAMP_RE.match(i)) and c < i
 
 
+# ---------- the reminder to check (no network: the build stamp is a date) ----------
+
+REMIND_BUILD_AGE_DAYS = 30     # a build this old …
+REMIND_CHECK_GAP_DAYS = 14     # … with no check this recent, earns a one-line note
+
+
+def build_age_days(build: str, now: float) -> int | None:
+    """Whole days since the build stamp's date; None when unstamped."""
+    import time as _time
+    b = (build or "").strip()
+    if not _STAMP_RE.match(b):
+        return None
+    y, mo, d = (int(x) for x in b[:10].split("."))
+    try:
+        stamped = _time.mktime((y, mo, d, 0, 0, 0, 0, 0, -1))
+    except (OverflowError, ValueError):
+        return None
+    return max(0, int((now - stamped) // 86400))
+
+
+def update_reminder(build: str, last_checked: float | None, now: float) -> dict:
+    """Whether to remind the researcher to press Check for updates: the
+    running build is REMIND_BUILD_AGE_DAYS old or more, and no check has been
+    made in the last REMIND_CHECK_GAP_DAYS. Computed locally; nothing is
+    contacted. A researcher who checked last week is not nagged."""
+    age = build_age_days(build, now)
+    since = None
+    if last_checked:
+        since = max(0, int((now - float(last_checked)) // 86400))
+    remind = (age is not None and age >= REMIND_BUILD_AGE_DAYS
+              and (since is None or since >= REMIND_CHECK_GAP_DAYS))
+    return {"build_age_days": age, "days_since_check": since, "remind": remind}
+
+
 def _github_page_url(value) -> str:
     """The release's page URL, only when it is a GitHub page of UPDATE_REPO.
     The interface renders it as a link, so anything else — another host, an
@@ -109,6 +143,27 @@ def _current_version() -> str:
         return (APP_ROOT / "VERSION").read_text().strip()
     except OSError:
         return "unknown"
+
+
+def _current_release() -> str:
+    """The release version ('1.6.3') package.sh wrote beside the build stamp,
+    from the changelog's top heading; 'unreleased' for an interim bundle.
+    A development checkout has no RELEASE file but does have the changelog:
+    it reports the last released version with a '+' when unreleased work
+    sits above it ('1.6.3+'). 'unknown' when neither file is there."""
+    try:
+        return (APP_ROOT / "RELEASE").read_text().strip() or "unknown"
+    except OSError:
+        pass
+    try:
+        text = (APP_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    except OSError:
+        return "unknown"
+    heads = re.findall(r"^## (\S+)", text, re.M)
+    released = next((h for h in heads if re.fullmatch(r"\d+\.\d+\.\d+", h)), None)
+    if not released:
+        return "unknown"
+    return released + ("+" if heads and heads[0] != released else "")
 
 
 def _member_paths(zf: zipfile.ZipFile) -> list:
@@ -207,7 +262,8 @@ def check_for_update() -> dict:
     asset = _bundle_asset(release)
     current = _current_version()
     out = {
-        "ok": True, "current": current, "tag": tag, "build": build,
+        "ok": True, "current": current, "release": _current_release(),
+        "tag": tag, "build": build,
         "release_url": _github_page_url(release.get("html_url")),
         "has_bundle": bool(asset),
         "asset_size": (asset or {}).get("size"),

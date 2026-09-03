@@ -9,6 +9,41 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.7.0 — 2026-09-03
+
+- The version you are running shows in the footer of every page and on the
+  Application card in Settings, with the build stamp beside it, and **Check
+  for updates** names it as well. Bundles now carry a `RELEASE` file that
+  `package.sh` writes from the changelog's top entry.
+- A reminder to check for updates. When the build you are running is a
+  month or more old and no check has been made in two weeks, the Projects
+  page says so in one line, once per launch, with the path to the check;
+  **Dismiss** hides it until the next start. It is worked out on your
+  computer from the build's date and makes no request, so the privacy
+  claim is unchanged. The Application card in Settings records when you
+  last checked.
+- A polish pass over the interface. Settings offers only the controls a
+  state allows and keeps its policy text behind "How updates work" and
+  "Moving the folder"; the project page names settings by the wizard's
+  own question labels, methods by name, dates without seconds, and sizes
+  as words rather than "0k chars"; the report writes Yes and No where it
+  wrote true and false; the wizard's method cards say how many stages and
+  reviews a method has instead of spelling out the pipeline; Delete on a
+  project card is quiet until hovered. The content-analysis report no
+  longer prints raw data structures into its prose, and its frequency
+  figures appear once, in the table. A contrast pass on the palette: darker
+  ink, cards lifted by a soft shadow, and the mark's violet as the single
+  accent for the primary action and the active step.
+- Settings is one screen: the providers as a single panel of rows, each with
+  its status, its key hint, and its actions, and a key editor that opens in
+  the row; Data and Application side by side as two compact panels of facts.
+  Page titles are larger and section labels are small tracked eyebrows.
+  The same structure carries to Projects (a panel of rows, each with a
+  glyph for its method), the project page (runs and sources as rows, the
+  configuration as facts), the wizard's method cards (the glyphs), and the
+  run page. A checkout that was never packaged reports the last released
+  version with a plus sign, "1.6.3+", beside its build stamp.
+
 ## 1.6.3 — 2026-09-03
 
 - Security review of 2026-09-03, five fixes. Checkpoint spreadsheets write

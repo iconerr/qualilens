@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRef } from 'react'
-import { api, testKey, type Meta } from '../api'
+import { ageLabel, api, testKey, versionLabel, type Meta } from '../api'
 
 // After an update the server stops itself so ./run.sh can relaunch the new
 // build. This page has nothing to talk to until then, and when the new server
@@ -91,21 +91,23 @@ export default function Settings() {
   const [check, setCheck] = useState<{ phase: string; msg: string; newer?: boolean;
     releaseUrl?: string }>({ phase: 'idle', msg: '' })
   const updRef = useRef<HTMLInputElement>(null)
+  const [editing, setEditing] = useState<string | null>(null)   // the provider row whose key editor is open
 
   const checkForUpdates = async () => {
     setCheck({ phase: 'busy', msg: 'Asking GitHub for the latest release…' })
     try {
       const r = await api.checkUpdates()
       if (!r.ok) { setCheck({ phase: 'error', msg: r.error ?? 'The check failed.' }); return }
+      api.meta().then(setMeta).catch(() => { /* the 'last checked' line refreshes next visit */ })
       if (r.note) { setCheck({ phase: 'done', msg: r.note, releaseUrl: r.release_url }); return }
       if (r.newer && r.has_bundle) {
         setCheck({ phase: 'done', newer: true, releaseUrl: r.release_url,
-          msg: `Update available: ${r.tag} (build ${r.build}); you are running build ${r.current}.` })
+          msg: `Update available: ${r.tag} (build ${r.build}); you are running ${versionLabel(r.release, r.current)}.` })
       } else if (r.newer) {
         setCheck({ phase: 'done', releaseUrl: r.release_url,
           msg: `A newer release exists (${r.tag}) but carries no installable bundle — see the release page.` })
       } else {
-        setCheck({ phase: 'done', msg: `You are up to date (build ${r.current}).` })
+        setCheck({ phase: 'done', msg: `You are up to date: QualiLens ${versionLabel(r.release, r.current)}.` })
       }
     } catch (e: any) { setCheck({ phase: 'error', msg: String(e.message ?? e) }) }
   }
@@ -209,110 +211,145 @@ export default function Settings() {
 
   return (
     <div className="page">
-      <h1>Settings</h1>
-      <p className="sub">API keys are stored in the local database on this computer and sent only to
-        the provider they belong to. Audio/video transcription uses the OpenAI key (Whisper).</p>
+      <div className="page-head">
+        <h1>Settings</h1>
+        <p className="sub">Keys, data, and the application. All of it stays on this computer.</p>
+      </div>
       {error && <div className="error-box">{error}</div>}
-      {meta.providers.map(p => (
-        <div key={p.id} className="card">
-          <div className="row spread">
-            <h3 className="provider-name">
-              {saved[p.id]?.has_key && (
-                <span className="ok-check" title="Key saved — ready to analyze">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"
-                    strokeLinejoin="round" aria-hidden="true">
-                    <path d="M20 6 9 17l-5-5" />
-                  </svg>
+
+      <section className="panel">
+        <div className="panel-head">
+          <span className="eyebrow">Providers</span>
+          <span className="panel-note">A key goes only to the provider it belongs to. Recordings are
+            transcribed with the OpenAI key, whichever provider analyzes.</span>
+        </div>
+        {meta.providers.map(p => {
+          const has = !!saved[p.id]?.has_key
+          const draft = (drafts[p.id] ?? '').trim()
+          const open = editing === p.id
+          return (
+            <div key={p.id} className={`prow ${open ? 'open' : ''}`}>
+              <div className="prow-main">
+                <span className={`dot ${has ? 'ok' : ''}`} aria-hidden="true" />
+                <span className="prow-name">{p.label}</span>
+                <span className="prow-hint mono">{has ? (saved[p.id].key_hint || 'key saved') : 'no key'}</span>
+                <span className="prow-actions">
+                  {has ? <>
+                    <button className="small quiet" onClick={() => test(p.id)}>Test</button>
+                    <button className="small quiet" onClick={() => checkModels(p.id)}
+                      title="Compare this app's model catalog with the provider's live model list (free)">
+                      Check models</button>
+                    <button className="small quiet" onClick={() => clear(p.id)}>Remove</button>
+                    <button className="small" onClick={() => setEditing(open ? null : p.id)}>
+                      {open ? 'Cancel' : 'Replace key'}</button>
+                  </> : (
+                    <button className="small" onClick={() => setEditing(open ? null : p.id)}>
+                      {open ? 'Cancel' : 'Add key'}</button>
+                  )}
                 </span>
-              )}
-              {p.label}
-            </h3>
-            {saved[p.id]?.has_key
-              ? <span className="status-line ok">Ready to analyze
-                  {saved[p.id].key_hint && <> · key <code>{saved[p.id].key_hint}</code></>}</span>
-              : <span className="status-line none">No key saved</span>}
-          </div>
-          <div className="row mt">
-            <input type="password" style={{ maxWidth: 420 }}
-              placeholder={saved[p.id]?.has_key ? 'Replace key…' : 'Paste API key…'}
-              value={drafts[p.id] ?? ''}
-              onChange={e => setDrafts(d => ({ ...d, [p.id]: e.target.value }))} />
-            <button onClick={() => save(p.id)} disabled={!(drafts[p.id] ?? '').trim()}>Save</button>
-            <button onClick={() => test(p.id)}
-              disabled={!saved[p.id]?.has_key && !(drafts[p.id] ?? '').trim()}>Test</button>
-            <button className="danger" onClick={() => clear(p.id)} disabled={!saved[p.id]?.has_key}>Remove</button>
-            <button onClick={() => checkModels(p.id)} disabled={!saved[p.id]?.has_key}
-              title="Compare this app's model catalog with the provider's live model list (free)">
-              Check models
-            </button>
-          </div>
-          {status[p.id] && <p className="small muted" style={{ marginBottom: 0 }}>{status[p.id]}</p>}
-          {modelCheck[p.id]?.ok && (
-            <div className="mt">
-              <div className="row" style={{ gap: 8 }}>
-                {modelCheck[p.id].catalog.map((m: any) => (
-                  <span key={m.id} className={`badge ${m.available ? 'completed' : 'failed'}`}>
-                    {m.available ? '✓' : '✗'} {m.id}
-                  </span>
-                ))}
               </div>
-              {modelCheck[p.id].missing.length > 0 && (
-                <p className="small" style={{ marginTop: 6 }}>
-                  Models marked ✗ are absent from the provider’s live list. Update
-                  <code> backend/app/models.json</code> — instructions are in that file’s
-                  own <code>_readme</code> — or use a custom model id in the wizard meanwhile.
-                </p>
+              {open && (
+                <div className="prow-editor">
+                  <input type="password" autoFocus
+                    placeholder={has ? 'Paste the new key…' : 'Paste API key…'}
+                    value={drafts[p.id] ?? ''}
+                    onChange={e => setDrafts(d => ({ ...d, [p.id]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter' && draft) { save(p.id).then(() => setEditing(null)) } }} />
+                  <button className="primary" disabled={!draft}
+                    onClick={() => save(p.id).then(() => setEditing(null))}>Save</button>
+                  <button disabled={!draft} onClick={() => test(p.id)}
+                    title="Tests the typed key without saving it">Test first</button>
+                </div>
               )}
-              <details className="small muted" style={{ marginTop: 6 }}>
-                <summary>
-                  {modelCheck[p.id].live_count} models live at the provider — show ids
-                  {modelCheck[p.id].live.length < modelCheck[p.id].live_count &&
-                    ` (first ${modelCheck[p.id].live.length} shown)`}
-                </summary>
-                <p className="mono" style={{ maxHeight: 140, overflowY: 'auto' }}>
-                  {modelCheck[p.id].live.join(' · ')}
-                </p>
-              </details>
+              {status[p.id] && <p className="prow-status small muted">{status[p.id]}</p>}
+              {modelCheck[p.id]?.ok && (
+                <div className="prow-extra">
+                  <div className="row" style={{ gap: 8 }}>
+                    {modelCheck[p.id].catalog.map((m: any) => (
+                      <span key={m.id} className={`badge ${m.available ? 'completed' : 'failed'}`}>
+                        {m.available ? '✓' : '✗'} {m.id}
+                      </span>
+                    ))}
+                  </div>
+                  {modelCheck[p.id].missing.length > 0 && (
+                    <p className="small" style={{ marginTop: 6 }}>
+                      Models marked ✗ are absent from the provider’s live list. Update
+                      <code> backend/app/models.json</code> — instructions are in that file’s
+                      own <code>_readme</code> — or use a custom model id in the wizard meanwhile.
+                    </p>
+                  )}
+                  <details className="small muted" style={{ marginTop: 6 }}>
+                    <summary>
+                      {modelCheck[p.id].live_count} models live at the provider — show ids
+                      {modelCheck[p.id].live.length < modelCheck[p.id].live_count &&
+                        ` (first ${modelCheck[p.id].live.length} shown)`}
+                    </summary>
+                    <p className="mono" style={{ maxHeight: 140, overflowY: 'auto' }}>
+                      {modelCheck[p.id].live.join(' · ')}
+                    </p>
+                  </details>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      ))}
-      <div className="info-box">
-        ffmpeg {meta.ffmpeg ? 'is installed — video files can be processed.'
-          : 'was NOT found — install it (brew install ffmpeg) to analyze video files.'}
-      </div>
+          )
+        })}
+      </section>
 
-      <div className="card">
-        <h3 style={{ margin: 0 }}>Where your data live</h3>
-        <p className="desc" style={{ margin: '10px 0 0' }}>
-          Projects, uploaded files, and API keys are stored in <code>{meta.data_dir}</code>,
-          unencrypted, protected only by your computer's file permissions.
-          {meta.synced_folder
-            ? <> <b>This folder appears to sit inside a cloud-synced directory ({meta.synced_folder}),
-                so the sync service holds your participant data and keys as well.</b> To keep them on
-                this computer only, stop the app and start it with <code>QUALILENS_DATA_DIR=/path/outside/the/synced/tree ./run.sh</code>
-                (move the existing <code>data</code> folder there first). The manual's Data, Privacy, and
-                Governance chapter has the details.</>
-            : <> It does not appear to be inside a cloud-synced directory. <code>QUALILENS_DATA_DIR</code> moves it if you ever need to.</>}
-        </p>
-      </div>
-
-      <div className="card">
-        <div className="row spread">
-          <h3 style={{ margin: 0 }}>Application</h3>
-          <span className="badge pending mono">build {meta.version ?? 'unknown'}</span>
+      <div className="grid2">
+      <section className="panel">
+        <div className="panel-head"><span className="eyebrow">Data</span></div>
+        <div className="panel-body">
+          <table className="facts"><tbody>
+            <tr><td className="muted">Folder</td>
+              <td><code style={{ wordBreak: 'break-all' }}>{meta.data_dir}</code></td></tr>
+            <tr><td className="muted">Cloud sync</td>
+              <td>{meta.synced_folder
+                ? <b>inside {meta.synced_folder}, so the sync service holds your participant data and keys</b>
+                : 'not inside a synced folder'}</td></tr>
+            <tr><td className="muted">ffmpeg</td>
+              <td>{meta.ffmpeg ? 'installed, so video files can be processed'
+                : <>not found: install it (<code>brew install ffmpeg</code>) to analyze video</>}</td></tr>
+          </tbody></table>
+          <details className="small muted" style={{ marginTop: 10 }}>
+            <summary>Moving the folder</summary>
+            <p style={{ margin: '6px 0 0' }}>
+              The files are unencrypted, protected only by your computer's file permissions. To keep
+              them on this computer only, stop the app and start it with
+              <code> QUALILENS_DATA_DIR=/path/outside/the/synced/tree ./run.sh</code>, after moving the
+              existing <code>data</code> folder there. The manual's Data, Privacy, and Governance
+              chapter has the details.
+            </p>
+          </details>
         </div>
-        <p className="desc" style={{ margin: '10px 0' }}>
-          Updates are pull-only. <b>Check for updates</b> makes one request to
-          GitHub, only when you press it — nothing runs in the background, and
-          nothing is sent beyond the request itself. A bundle installs only if it
-          carries a valid signature from the QualiLens release key; an unsigned,
-          foreign, or altered bundle is refused. Your projects, API keys, and
-          uploaded data are never touched by an update — only the application's
-          own files are replaced, the previous version is kept as a backup, and
-          an update is refused while any run is executing or awaiting review.
-        </p>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head"><span className="eyebrow">Application</span></div>
+        <div className="panel-body">
+        <table className="facts"><tbody>
+          <tr><td className="muted">Version</td>
+            <td>{versionLabel(meta.release, meta.version)}</td></tr>
+          <tr><td className="muted">Updates checked</td>
+            <td>{meta.update_hint?.last_checked
+              ? `${ageLabel(meta.update_hint.days_since_check)} ago`
+              : 'never from this installation'}
+              {meta.update_hint?.remind && meta.update_hint.build_age_days != null &&
+                <span className="muted"> · this build is {ageLabel(meta.update_hint.build_age_days)} old, worth a check</span>}
+            </td></tr>
+        </tbody></table>
+        <details className="small muted" style={{ margin: '10px 0 12px' }}>
+          <summary>How updates work</summary>
+          <p style={{ margin: '6px 0 0' }}>
+            Updates are pull-only. <b>Check for updates</b> makes one request to GitHub, only when
+            you press it; nothing runs in the background, and nothing is sent beyond the request
+            itself. A bundle installs only if it carries a valid signature from the QualiLens
+            release key; an unsigned, foreign, or altered bundle is refused, and so is a build
+            older than this one unless you ask for it. Your projects, API keys, and uploaded data
+            are never touched: only the application's own files are replaced, the previous version
+            is kept as a backup, and an update is refused while any run is executing or awaiting
+            review. The build stamp is the date and time the release was packaged.
+          </p>
+        </details>
         <div className="row">
           <button onClick={checkForUpdates}
             disabled={check.phase === 'busy' || updState.phase === 'busy' || updState.phase === 'done'}>
@@ -324,9 +361,9 @@ export default function Settings() {
               {updState.phase === 'busy' ? 'Updating…' : 'Download and install'}
             </button>
           )}
-          <button onClick={() => updRef.current?.click()}
+          <button className="quiet" onClick={() => updRef.current?.click()}
             disabled={updState.phase === 'busy' || updState.phase === 'done'}>
-            Update from a downloaded zip…
+            From a downloaded zip…
           </button>
           <input ref={updRef} type="file" accept=".zip" style={{ display: 'none' }}
             onChange={e => applyUpdate(e.target.files?.[0])} />
@@ -341,6 +378,8 @@ export default function Settings() {
         {check.phase === 'error' && <p className="small muted" style={{ marginBottom: 0 }}>{check.msg}</p>}
         {updState.phase === 'done' && <div className="info-box mt">{updState.msg}</div>}
         {updState.phase === 'error' && <div className="error-box mt">{updState.msg}</div>}
+        </div>
+      </section>
       </div>
     </div>
   )

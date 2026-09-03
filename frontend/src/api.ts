@@ -18,7 +18,33 @@ export interface ProviderMeta {
 }
 export interface Meta {
   methods: MethodMeta[]; providers: ProviderMeta[]; ffmpeg: boolean; version?: string;
+  release?: string; running_build?: string; running_release?: string;
   data_dir?: string; synced_folder?: string;
+  update_hint?: UpdateHint;
+}
+export interface UpdateHint {
+  remind: boolean; dismissed: boolean;
+  build_age_days: number | null; days_since_check: number | null; last_checked: number | null;
+}
+
+// "3 days", "6 weeks", "4 months" — for the age of a build or of the last check
+export function ageLabel(days: number | null | undefined): string {
+  if (days == null) return ''
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'}`
+  if (days < 70) { const w = Math.round(days / 7); return `${w} week${w === 1 ? '' : 's'}` }
+  const m = Math.round(days / 30); return `${m} month${m === 1 ? '' : 's'}`
+}
+
+// "1.6.3 (build 2026.09.03-0711)" — the release version package.sh writes
+// beside the build stamp, when there is one; the build alone otherwise; a
+// checkout that was never packaged is a development build.
+export function versionLabel(release?: string | null, build?: string | null): string {
+  const r = release && release !== 'unknown' && release !== 'unreleased' ? release : ''
+  const b = build && build !== 'unknown' ? `build ${build}` : ''
+  if (r && b) return `${r} (${b})`
+  if (r) return r
+  if (b) return release === 'unreleased' ? `${b}, unreleased` : b
+  return 'development build'
 }
 
 export interface Source {
@@ -207,9 +233,10 @@ export const api = {
     return res.json() as Promise<SheetImport>
   },
   checkUpdates: () =>
-    j<{ ok: boolean; error?: string; current?: string; tag?: string; build?: string;
+    j<{ ok: boolean; error?: string; current?: string; release?: string; tag?: string; build?: string;
         newer?: boolean; has_bundle?: boolean; release_url?: string; note?: string }>(
       '/api/settings/check_updates', post()),
+  dismissUpdateHint: () => j<{ ok: boolean }>('/api/settings/dismiss_update_hint', post()),
   installUpdate: () =>
     j<{ ok: boolean; from_version: string; to_version: string; files_installed: number;
         backup: string; restart_required?: boolean; note?: string }>('/api/settings/install_update', post()),
@@ -217,6 +244,34 @@ export const api = {
 
 export const statusLabel = (s: string) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1).replaceAll('_', ' ') : s
+
+// The human names of things the API names by id.
+export const METHOD_LABELS: Record<string, string> = {
+  grounded_theory: 'Grounded Theory',
+  thematic: 'Thematic Analysis',
+  content_analysis: 'Content Analysis',
+  framework: 'Framework / Deductive',
+  literature_synthesis: 'Literature Synthesis',
+}
+export const methodLabel = (id: string) => METHOD_LABELS[id] ?? id.replaceAll('_', ' ')
+
+// "3 Sep 2026, 8:11 AM" — no seconds in a heading
+export const dateLabel = (ts: number) =>
+  new Date(ts * 1000).toLocaleString(undefined,
+    { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+export const dayLabel = (ts: number) =>
+  new Date(ts * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+
+// The size of a source as a reader thinks of it: "about 2,100 words"
+export const sizeLabel = (chars: number) =>
+  chars > 0 ? `about ${Math.max(1, Math.round(chars / 6)).toLocaleString()} words` : ''
+
+// A recorded setting, as prose: booleans as words, never "true"
+export const settingValue = (v: unknown): string => {
+  if (v === true || v === 'true') return 'Yes'
+  if (v === false || v === 'false') return 'No'
+  return String(v ?? '').trim()
+}
 
 export async function testKey(provider: string, model?: string, key?: string) {
   try {

@@ -1,26 +1,30 @@
 /* Copyright 2026 Ashita Aggarwal and Suraj Commuri
    SPDX-License-Identifier: Apache-2.0 */
 
-/* The instrument register (2026-09-02): a cool near-white ground, white
-   surfaces separated by a crisp line rather than by tint or shadow, one ink
-   for text and for the primary action, and colour reserved for three
-   meanings — done, waiting, wrong — plus the mark's violet on focus. Type is
+/* The instrument register (2026-09-02, contrast pass 2026-09-03): a near-
+   white ground, white surfaces lifted by a hairline and a soft shadow rather
+   than by tint, one ink for text, the mark's violet as the single accent —
+   the primary action, the active step, focus — and colour otherwise reserved
+   for three meanings: done, waiting, wrong. Type is
    Inter for the interface, JetBrains Mono for identifiers (model ids, build
    stamps, keys, the audit log), and a serif for the surfaces that are read
    rather than operated: the report and the coded-source reader. Both faces
    ship inside the app (main.tsx imports them); nothing is fetched. */
 :root {
-  --bg: #f4f4f6;
+  --bg: #f8f8fa;
   --panel: #ffffff;
-  --ink: #16171a;
-  --muted: #5c5f66;
-  --line: #dcdde2;
-  --line-strong: #c4c6cd;
-  --accent: #1a1b1f;
-  --accent-hover: #2d2f35;
-  --accent-soft: #ececef;
+  --ink: #101114;
+  --muted: #55585f;
+  --line: #e4e5ea;
+  --line-strong: #c9cbd2;
+  --accent: #6d2ee6;          /* the mark's violet, as the one accent */
+  --accent-hover: #5b23c9;
+  --accent-soft: #eeeef2;     /* neutral surface tint: code, info, hover */
+  --accent-tint: #f2ecff;     /* the accent's own tint: selection, active step */
   --focus: #863bff;
   --focus-soft: #ede3ff;
+  --shadow: 0 1px 2px rgba(16,17,20,.04), 0 1px 3px rgba(16,17,20,.06);
+  --shadow-hover: 0 4px 14px rgba(16,17,20,.08);
   --green: #1e7a4a;
   --green-soft: #e4f3ea;
   --amber: #8a5a0c;
@@ -83,18 +87,18 @@ kbd {
 .page { max-width: 1060px; margin: 0 auto; padding: 28px 24px 80px; }
 .page-wide { max-width: 1280px; }
 
-h1 { font-size: 24px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.02em; }
-h2 { font-size: 17px; font-weight: 600; margin: 28px 0 10px; letter-spacing: -0.01em; }
-h3, h4 { font-weight: 600; }
+h1 { font-size: 30px; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.03em; line-height: 1.15; }
+h2 { font-size: 17px; font-weight: 640; margin: 28px 0 10px; letter-spacing: -0.012em; }
+h3, h4 { font-weight: 620; letter-spacing: -0.005em; }
 .sub { color: var(--muted); margin: 0 0 26px; font-size: 14px; }
 
 .card {
-  background: var(--panel); border: 1px solid var(--line);
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
   border-radius: var(--radius); padding: 20px 22px; margin-bottom: 14px;
 }
-.card.clickable { cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.card.clickable { cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .15s; }
 .card.clickable:hover {
-  border-color: var(--line-strong); box-shadow: 0 2px 8px rgba(22,23,26,.06);
+  border-color: var(--line-strong); box-shadow: var(--shadow-hover); transform: translateY(-1px);
 }
 .card h3 { margin: 0 0 4px; font-size: 15.5px; }
 .card .desc { color: var(--muted); font-size: 13.5px; margin: 0; }
@@ -130,6 +134,10 @@ button.primary {
 }
 button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 button.danger { color: var(--red); }
+/* a quiet action: no chrome until hovered, for the things a card offers
+   but does not lead with (Delete, Remove) */
+button.quiet { border-color: transparent; background: transparent; color: var(--muted); }
+button.quiet:hover { color: var(--red); border-color: var(--line); background: var(--panel); }
 button.small { padding: 4px 10px; font-size: 12.5px; font-weight: 500; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 
@@ -165,8 +173,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   background: var(--accent-soft); color: var(--muted);
   transition: background .2s, color .2s;
 }
-.steps .step.active { color: var(--ink); border-color: var(--ink); }
-.steps .step.active .step-n { background: var(--ink); color: #fff; }
+.steps .step.active { color: var(--ink); border-color: var(--accent); }
+.steps .step.active .step-n { background: var(--accent); color: #fff; }
 .steps .step.done { color: var(--green); border-color: var(--green); }
 .steps .step.done .step-n { background: var(--green-soft); color: var(--green); }
 @media (max-width: 700px) { .steps .step span.step-label { display: none; } }
@@ -237,7 +245,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   transition: background .2s, box-shadow .2s;
 }
 .stage-item.done .dot { background: var(--green); }
-.stage-item.current .dot { background: var(--ink); box-shadow: 0 0 0 4px var(--accent-soft); }
+.stage-item.current .dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-tint); }
 .stage-item .s-label { font-weight: 500; font-size: 14px; }
 .stage-item.pending .s-label { color: var(--muted); font-weight: 400; }
 .stage-item .s-kind { font-size: 11.5px; color: var(--muted); }
@@ -437,3 +445,69 @@ textarea.growing {
 .run-row:hover { background: var(--accent-soft); }
 .run-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .run-row .chev { color: var(--muted); font-size: 18px; line-height: 1; }
+
+/* two-column facts (Settings → Application): label, value, no chrome */
+table.facts { border-collapse: collapse; font-size: 13.5px; }
+table.facts td { padding: 3px 18px 3px 0; vertical-align: top; }
+table.facts td:first-child { width: 170px; }
+
+/* ---- the panel system (Settings first, 2026-09-03): structure follows
+   content. A panel is one surface with a tracked eyebrow label; inside it,
+   a list is rows with dividers, facts are a two-column table, and a form
+   opens inline where it is needed. Cards are for things that are cards. */
+.page-head { margin-bottom: 26px; }
+.page-head .sub { margin-bottom: 0; }
+.eyebrow {
+  font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted);
+}
+.panel {
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
+  border-radius: var(--radius); margin-bottom: 16px; overflow: hidden;
+}
+.panel-head { display: flex; gap: 18px; align-items: baseline; padding: 14px 20px 10px; }
+.panel-note { font-size: 12.5px; color: var(--muted); }
+.panel-body { padding: 2px 20px 16px; }
+.grid2 { margin-bottom: 16px; }
+.grid2 .panel { margin-bottom: 0; }
+.prow { border-top: 1px solid var(--line); padding: 0 20px; }
+.prow.open { background: var(--bg); }
+.prow-main { display: flex; align-items: center; gap: 14px; min-height: 54px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); flex-shrink: 0; }
+.dot.ok { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+.prow-name { font-weight: 600; font-size: 14.5px; min-width: 180px; }
+.prow-hint { font-size: 12.5px; color: var(--muted); flex: 1; }
+.prow-actions { display: flex; gap: 4px; align-items: center; }
+.prow-editor { display: flex; gap: 10px; align-items: center; padding: 2px 0 14px 22px; }
+.prow-editor input { max-width: 460px; }
+.prow-status { margin: -4px 0 12px 22px; }
+.prow-extra { padding: 0 0 14px 22px; }
+table.facts td:first-child { width: 150px; }
+
+/* list rows inside a panel (projects, runs, sources) */
+.lrow { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-top: 1px solid var(--line); }
+.lrow:first-child { border-top: none; }
+.panel-head + .lrow { border-top: 1px solid var(--line); }
+.lrow.compact { padding: 9px 20px; }
+.lrow.clickable { cursor: pointer; transition: background .12s; }
+.lrow.clickable:hover { background: var(--bg); }
+.lrow.clickable:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.lrow-glyph { color: var(--muted); flex-shrink: 0; }
+.lrow.clickable:hover .lrow-glyph { color: var(--accent); }
+.lrow-main { flex: 1; min-width: 0; }
+.lrow-title { font-weight: 600; font-size: 14.5px; }
+.lrow-meta { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+.lrow-actions { display: flex; align-items: center; gap: 8px; }
+.lrow .chev { color: var(--line-strong); font-size: 18px; line-height: 1; }
+.lrow.clickable:hover .chev { color: var(--ink); }
+.panel-head.spread { justify-content: space-between; align-items: center; }
+h1.with-glyph { display: flex; align-items: center; gap: 12px; }
+h1.with-glyph .glyph { color: var(--accent); flex-shrink: 0; }
+/* the wizard's method cards: glyph beside the words */
+.method-card { display: flex; gap: 16px; align-items: flex-start; }
+.method-card-glyph { color: var(--ink); margin-top: 2px; flex-shrink: 0; }
+.card.clickable:hover .method-card-glyph { color: var(--accent); }
+
+/* the completed-run panel: a green rule at the left, not a green box */
+.card.done-card { border-left: 3px solid var(--green); }
+.panel-body.stagelist { padding-top: 6px; }

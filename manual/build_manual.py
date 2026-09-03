@@ -687,7 +687,8 @@ def build() -> tuple[str, str]:
     <article class="doc" id="content">
 {chr(10).join(body)}
       <footer class="colophon">
-        <p><b>QualiLens User Manual.</b> Copyright 2026 Ashita Aggarwal and Suraj
+        <p><b>QualiLens User Manual.</b> Copyright 2026
+        <a href="https://in.linkedin.com/in/drashita" target="_blank" rel="noopener">Ashita Aggarwal</a> and Suraj
         Commuri, released under the
         <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank"
            rel="noopener">Apache License 2.0</a>. Free to use, modify, and share,

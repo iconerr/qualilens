@@ -3,7 +3,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api } from '../api'
+import { settingValue, api } from '../api'
 import { FreqChart, GTModel, MatrixHeatmap, ThematicMap } from '../viz'
 
 export default function ReportPage() {
@@ -60,13 +60,12 @@ export default function ReportPage() {
       {rep.config && Object.keys(rep.config).length > 0 && (
         <section>
           <h2>Method configuration</h2>
-          <p className="desc">Every setup answer exactly as recorded for this run, frozen when the run
-            started. Reproduce these verbatim in a methods section — the option text carries the
-            methodological commitment.</p>
+          <p className="desc">The setup as recorded when the run started. Reproduce it verbatim in a
+            methods section: the option text carries the methodological commitment.</p>
           <table className="freq"><tbody>
             {Object.entries(rep.config).map(([k, v]: [string, any]) => (
               <tr key={k}><td className="muted" style={{ width: 240 }}>{rep.config_labels?.[k] ?? k}</td>
-                <td style={{ whiteSpace: 'pre-wrap' }}>{String(v ?? '').trim() || <span className="muted">(blank)</span>}</td></tr>
+                <td style={{ whiteSpace: 'pre-wrap' }}>{settingValue(v) || <span className="muted">(blank)</span>}</td></tr>
             ))}
             <tr><td className="muted">Provider and model</td><td className="mono">{rep.provider}/{rep.model}</td></tr>
           </tbody></table>
