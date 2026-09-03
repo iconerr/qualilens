@@ -348,7 +348,10 @@ def run_guard_fuzz():
              "192.168.0.5", "attacker.example", "127.0.0.1.attacker.example", "", "localhost.attacker.example",
              "LOCALHOST", "127.0.0.1:1", "0x7f000001", "127.1", "2130706433", "127.0.0.1@evil"]
     origins = [None, "http://127.0.0.1:8765", "http://localhost:8765", "https://evil.example", "null",
-               "http://127.0.0.1.evil.example", "http://[::1]:8765", "file://", "http://localhost.evil", ""]
+               "http://127.0.0.1.evil.example", "http://[::1]:8765", "file://", "http://localhost.evil", "",
+               # another local program's page on another port arrives WITH the cookie
+               "http://localhost:3000", "http://127.0.0.1:3000", "http://127.0.0.1", "HTTP://127.0.0.1:8765",
+               "https://127.0.0.1:8765", "http://127.0.0.1:8765/path"]
     tokens = [None, SESSION_TOKEN, "", SESSION_TOKEN[:-1], SESSION_TOKEN + "x", "x" * 43, SESSION_TOKEN.upper()]
     bad = 0; tried = 0
     for h in hosts:
@@ -370,9 +373,16 @@ def run_guard_fuzz():
                         if v.startswith("["):
                             return v[1:].split("]", 1)[0]
                         return v.rsplit(":", 1)[0] if v.count(":") == 1 else v
+                    def netloc(v):
+                        v = v.strip().lower()
+                        if "://" in v:
+                            v = v.split("://", 1)[1].split("/", 1)[0]
+                        return v
                     host_ok = bare(h) in ("127.0.0.1", "localhost", "::1")
-                    origin_ok = o is None or (o.strip().lower() not in ("null", "")
-                                              and bare(o) in ("127.0.0.1", "localhost", "::1"))
+                    # since 2026-09-03 an Origin must be the app's own origin EXACTLY:
+                    # http, and the same host:port the browser addressed (the Host header)
+                    origin_ok = o is None or (o.strip().lower().startswith("http://")
+                                              and netloc(h) != "" and netloc(o) == netloc(h))
                     tok_ok = t == SESSION_TOKEN
                     if path.startswith("/api"):
                         should = host_ok and origin_ok and tok_ok

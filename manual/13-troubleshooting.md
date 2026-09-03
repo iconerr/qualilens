@@ -33,12 +33,14 @@ A line reading `NOTICE: the data folder … appears to sit inside a cloud-synced
 | `Missing or stale session token — reload the QualiLens page` | The app was restarted while this tab stayed open, so the tab carries the previous launch's token; or the request did not come from a page QualiLens served | Normally you never see this: the page reloads itself once to fetch the new token. If the message shows, the reload did not help, which means the app is not running — start it with `./run.sh`, then reload. Staged checkpoint decisions survive a reload |
 | The **Update installed** page keeps waiting | The new build has not started yet, or an older copy of the app still holds the port | Start the app with `./run.sh`. If the launcher reports the port in use, stop the server it names and run the launcher again. The page reloads by itself once the new build answers; **Reload now** forces it |
 | `QualiLens answers only to 127.0.0.1 or localhost` | The address bar names the machine some other way (its LAN address, a hostname), or something on the machine forwarded the request | Open `http://127.0.0.1:8765` |
-| `Cross-site request refused` | A page from another site tried to use the app, or a browser extension rewrote the request's origin | Use the app from its own tab; the refusal is the protection working |
+| `Cross-site request refused` | A page from another site tried to use the app; or a page served by another program on this computer (a notebook server, a development server, on another port); or a browser extension rewrote the request's origin | Use the app from its own tab at `http://127.0.0.1:8765`; the refusal is the protection working |
+| `That bundle is build …, older than the installed build …` | The bundle you chose is a signed QualiLens build, but an earlier one than the build you are running | If you mean to roll back, answer the dialog that asks; the app then installs it. The **Download and install** path never installs an older build |
 
 ## Uploading documents
 
 | Message | Cause | Remedy |
 |---|---|---|
+| `… is larger than the … bound for text/audio/video files; refusing.` | The file exceeds the upload bound for its kind: 200 MB for documents, 2 GB for audio, 8 GB for video | Split the document, or compress or trim the recording, and upload again. Nothing of the refused file is kept |
 | `Unsupported file type: .xyz` | The extension is not one of the accepted types | Convert the file. The accepted list is in [The Wizard](02-the-wizard.md#what-you-can-upload) |
 | `Could not extract text from <file>` | The file is corrupt, password-protected, or not the format its extension claims | Open it in its own application, save a clean copy, and upload that |
 | `<file> contains no extractable text` | Most often a scanned PDF that holds page images and no text layer | Run the file through optical character recognition, or supply the transcript as text |

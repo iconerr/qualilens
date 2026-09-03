@@ -68,6 +68,7 @@ def _sheet(wb: Workbook, title: str, columns: list, first: bool = False):
     ws.title = title
     for i, (head, width, editable) in enumerate(columns, 1):
         c = ws.cell(row=1, column=i, value=head)
+        c.data_type = "s"                   # see _put
         c.font = _HEAD_FONT
         c.fill = _HEAD_FILL
         ws.column_dimensions[get_column_letter(i)].width = width
@@ -77,6 +78,12 @@ def _sheet(wb: Workbook, title: str, columns: list, first: bool = False):
 
 def _put(ws, row: int, col: int, value: Any, editable: bool = False):
     c = ws.cell(row=row, column=col, value="" if value is None else str(value))
+    # openpyxl stores any string that begins with "=" as a FORMULA. Names,
+    # definitions, and quotes are model output and verbatim document text,
+    # so a document containing "=HYPERLINK(…)" or "=WEBSERVICE(…)" would
+    # otherwise become a live formula on the researcher's machine the moment
+    # Excel opens the sheet. Every cell here is text; say so explicitly.
+    c.data_type = "s"
     c.alignment = _WRAP
     c.number_format = _TEXT
     return c

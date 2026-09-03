@@ -133,7 +133,18 @@ export default function Settings() {
       + 'it again with ./run.sh and this page reconnects on its own.')) return
     setUpdState({ phase: 'busy', msg: 'Validating and applying the bundle…' })
     try {
-      const r = await api.applyUpdate(f)
+      let r
+      try {
+        r = await api.applyUpdate(f)
+      } catch (e: any) {
+        // an older build than the one installed: a rollback only on request
+        if (!e?.rollback) throw e
+        if (!confirm(`${e.message}\n\nInstall this older build anyway?`)) {
+          setUpdState({ phase: 'idle', msg: '' }); return
+        }
+        setUpdState({ phase: 'busy', msg: 'Installing the older build as requested…' })
+        r = await api.applyUpdate(f, { allowDowngrade: true })
+      }
       setUpdState({ phase: 'done',
         msg: `Updated ${r.from_version} → ${r.to_version} (${r.files_installed} files; `
           + `previous version kept in ${r.backup}).` + (r.note ? ` ${r.note}` : '') })

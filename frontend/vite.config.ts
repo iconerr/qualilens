@@ -65,6 +65,10 @@ export default defineConfig({
         target: 'http://127.0.0.1:8765',
         changeOrigin: true,
         headers: { 'X-QualiLens-Token': process.env.QUALILENS_TOKEN ?? 'dev' },
+        // the browser's Origin here is the dev server's own (localhost:5173);
+        // the backend accepts only its exact origin, so the proxy drops the
+        // header — the token above still gates every call
+        configure: proxy => { proxy.on('proxyReq', req => { req.removeHeader('origin') }) },
       },
     },
   },

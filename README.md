@@ -123,10 +123,13 @@ is final. All projects persist in a local SQLite database
   folds the database's write-ahead log into the main file at startup, at every
   stage boundary and checkpoint, and at shutdown, to keep the at-rest file
   coherent for syncing.
-- The server answers only to `127.0.0.1`/`localhost`, refuses cross-site
-  requests, and requires a per-launch session token (injected into the page)
-  on every API call — a web page you happen to have open cannot reach your
-  data or your keys through the app.
+- The server answers only to `127.0.0.1`/`localhost`, refuses any request
+  whose origin is not exactly its own (another site, or another program on
+  this machine serving pages on another port), and requires a per-launch
+  session token (injected into the page) on every API call — a web page you
+  happen to have open cannot reach your data or your keys through the app.
+  Uploads are bounded and streamed to disk; an update bundle older than the
+  installed build is refused unless you ask for the rollback.
 
 ## Honest limitations
 

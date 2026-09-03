@@ -9,6 +9,22 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.6.3 — 2026-09-03
+
+- Security review of 2026-09-03, five fixes. Checkpoint spreadsheets write
+  every cell as text, so a name or quote beginning with `=` can no longer
+  become a live formula when Excel opens the sheet. The local guard now
+  requires the request's origin to equal the app's own origin exactly
+  (scheme, host, and port), closing the route by which a page served by
+  another program on this computer, on another port, could reach the API
+  with the session cookie. Uploads stream to disk under a bound per kind
+  (200 MB documents, 2 GB audio, 8 GB video) and document parsing runs off
+  the server's event loop, so a large PDF no longer freezes the interface.
+  A signed bundle older than the installed build is refused as a rollback —
+  the zip path asks first, the GitHub path never installs one. The release
+  page link is shown only when it is a GitHub page of the QualiLens
+  repository.
+
 ## 1.6.2 — 2026-09-02
 
 - The manual now shares the interface's register and type: the same ground,

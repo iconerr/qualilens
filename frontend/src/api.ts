@@ -175,13 +175,18 @@ export const api = {
       catalog?: { id: string; available: boolean }[];
       live_count?: number; live?: string[] }>>(
       '/api/settings/check_models', post({ provider })),
-  applyUpdate: async (file: File) => {
+  // A bundle older than the installed build answers 409: the error carries
+  // rollback=true so the screen can ask, then retry with allowDowngrade.
+  applyUpdate: async (file: File, opts?: { allowDowngrade?: boolean }) => {
     const fd = new FormData()
     fd.append('file', file)
+    if (opts?.allowDowngrade) fd.append('allow_downgrade', 'true')
     const res = await fetch('/api/settings/update', withToken({ method: 'POST', body: fd }))
     if (!res.ok) {
       if (reloadIfStaleToken(res)) return new Promise<never>(() => { /* reloading */ })
-      throw new Error(await errText(res))
+      const err = new Error(await errText(res)) as Error & { rollback?: boolean }
+      if (res.status === 409) err.rollback = true
+      throw err
     }
     return res.json() as Promise<{ ok: boolean; from_version: string; to_version: string;
       files_installed: number; backup: string; restart_required?: boolean; note?: string }>

@@ -12,7 +12,9 @@ the researcher has open can send requests to this port. Three guards close
 that door, applied to every request by the middleware below —
   * the Host header must name this machine (defeats DNS rebinding),
   * an Origin header, when a browser sends one, must be this app's own
-    origin (defeats cross-site requests of every shape), and
+    origin EXACTLY — scheme, host, and port (defeats cross-site requests of
+    every shape, including a page served by another local program on
+    another port, to which browsers would still send the cookie), and
   * every /api call must carry the per-launch session token, either in the
     X-QualiLens-Token header (the interface adds it to every fetch) or in
     the SameSite=Strict cookie set with index.html (used by plain download
@@ -33,6 +35,7 @@ from urllib.parse import quote, urlsplit
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from . import checkpoint_sheets, db, ingestion, llm, pipeline, report_docx, transcription, update
 from .methods import METHODS
@@ -68,6 +71,27 @@ def _hostname(value: str) -> str:
     return v.rsplit(":", 1)[0] if v.count(":") == 1 else v
 
 
+def _netloc(value: str) -> str:
+    """Normalized host[:port] from a Host header or an Origin URL."""
+    v = (value or "").strip().lower()
+    if "://" in v:
+        v = urlsplit(v).netloc
+    return v
+
+
+def _origin_is_self(origin: str, host: str) -> bool:
+    """True only when origin is THIS app's origin: the http scheme and exactly
+    the host:port the browser addressed (its Host header). A hostname check
+    alone is not enough — browsers ignore the port for cookies and for
+    SameSite, so a page served by another local program (a notebook server,
+    a dev server) on another port would otherwise arrive with the cookie."""
+    o = (origin or "").strip().lower()
+    if o == "null" or not o.startswith("http://"):
+        return False
+    h = _netloc(host)
+    return bool(h) and _netloc(o) == h
+
+
 def _token_ok(request: Request) -> bool:
     supplied = request.headers.get(TOKEN_HEADER) or request.cookies.get(TOKEN_COOKIE) or ""
     return bool(supplied) and secrets.compare_digest(supplied, SESSION_TOKEN)
@@ -80,8 +104,7 @@ async def local_only_guard(request: Request, call_next):
         return JSONResponse({"detail": "QualiLens answers only to 127.0.0.1 or localhost."},
                             status_code=421)
     origin = request.headers.get("origin")
-    if origin is not None and (origin.strip().lower() == "null"
-                               or _hostname(origin) not in LOCAL_HOSTS):
+    if origin is not None and not _origin_is_self(origin, request.headers.get("host", "")):
         return JSONResponse({"detail": "Cross-site request refused."}, status_code=403)
     path = request.url.path
     if path == "/api" or path.startswith("/api/"):
@@ -236,11 +259,13 @@ def _finish_update(result: dict) -> dict:
 
 
 @app.post("/api/settings/update")
-async def apply_app_update(file: UploadFile = File(...)):
+async def apply_app_update(file: UploadFile = File(...), allow_downgrade: str = Form("")):
     """Update the application in place from a downloaded QualiLens bundle.
     Projects, keys, and uploads are untouchable by design (allowlist); the
-    bundle must be signed by the release key. On success the server stops
-    itself so ./run.sh relaunches the new version."""
+    bundle must be signed by the release key. An older build than the one
+    installed answers 409 unless allow_downgrade is sent (the interface asks
+    first). On success the server stops itself so ./run.sh relaunches the
+    new version."""
     import tempfile
     _refuse_if_runs_active("update the app")
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
@@ -256,8 +281,11 @@ async def apply_app_update(file: UploadFile = File(...)):
                 tmp_path.unlink(missing_ok=True)
                 _err(413, "That file is larger than any QualiLens bundle; refusing.")
             tmp.write(chunk)
+    downgrade_ok = allow_downgrade.strip().lower() in ("1", "true", "yes")
     try:
-        result = update.apply_update(tmp_path)
+        result = await run_in_threadpool(update.apply_update, tmp_path, downgrade_ok)
+    except update.RollbackRefused as e:
+        _err(409, str(e))
     except update.UpdateError as e:
         _err(400, str(e))
     finally:
@@ -287,7 +315,9 @@ def install_update():
     with tempfile.TemporaryDirectory() as td:
         try:
             bundle = update.download_latest_bundle(Path(td))
-            result = update.apply_update(bundle)
+            result = update.apply_update(bundle)   # never a downgrade on this path
+        except update.RollbackRefused as e:
+            _err(409, str(e))
         except update.UpdateError as e:
             _err(400, str(e))
     return _finish_update(result)
@@ -426,6 +456,16 @@ def delete_project(project_id: str):
 
 # ---------------- sources ----------------
 
+# Upload bounds by kind. Text documents are read into the database and sent
+# to the model; recordings are transcribed in pieces. The bytes stream to
+# disk as they arrive — never into memory — and stop at the bound.
+MAX_SOURCE_BYTES = {"text": 200 << 20, "audio": 2 << 30, "video": 8 << 30}
+
+
+def _human_bytes(n: int) -> str:
+    return f"{n >> 30} GB" if n >= (1 << 30) else f"{n >> 20} MB"
+
+
 @app.post("/api/projects/{project_id}/sources")
 async def upload_source(project_id: str, file: UploadFile = File(...),
                         grp: str = Form("")):
@@ -449,19 +489,34 @@ async def upload_source(project_id: str, file: UploadFile = File(...),
         _err(400, str(e))
     sid = db.new_id()
     dest = db.UPLOADS_DIR / f"{sid}_{filename}"
-    content = await file.read()
-    dest.write_bytes(content)
+    limit = MAX_SOURCE_BYTES[kind]
+    written = 0
+    with open(dest, "wb") as out:
+        while True:
+            chunk = await file.read(1 << 20)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > limit:
+                break
+            out.write(chunk)
+    if written > limit:
+        dest.unlink(missing_ok=True)
+        _err(413, f"{filename} is larger than the {_human_bytes(limit)} bound for "
+                  f"{kind} files; refusing.")
 
     if kind == "text":
         try:
-            text, pages = ingestion.extract_text_with_pages(dest)
+            # parsing a PDF is CPU work: off the event loop, so the interface
+            # (progress polls, other uploads) stays responsive meanwhile
+            text, pages = await run_in_threadpool(ingestion.extract_text_with_pages, dest)
         except Exception as e:  # noqa: BLE001
             dest.unlink(missing_ok=True)
             _err(400, f"Could not extract text from {filename}: {e}")
         if not text.strip():
             dest.unlink(missing_ok=True)
             _err(400, f"{filename} contains no extractable text.")
-        meta = {"bytes": len(content)}
+        meta = {"bytes": written}
         if pages:
             meta["pages"] = pages   # PDF page map: char offsets -> page numbers
         conn.execute(
@@ -475,7 +530,7 @@ async def upload_source(project_id: str, file: UploadFile = File(...),
             "INSERT INTO sources(id,project_id,filename,kind,status,grp,meta,created_at) "
             "VALUES(?,?,?,?,?,?,?,?)",
             (sid, project_id, filename, kind, "transcribing", grp or None,
-             json.dumps({"bytes": len(content), "path": str(dest)}), db.now()))
+             json.dumps({"bytes": written, "path": str(dest)}), db.now()))
         conn.commit()
         threading.Thread(target=_transcribe_source, args=(sid, dest, kind),
                          daemon=True).start()
@@ -785,7 +840,8 @@ async def checkpoint_sheet_import(run_id: str, checkpoint_id: str, file: UploadF
         if len(data) > checkpoint_sheets.MAX_BYTES:
             _err(413, "That file is larger than any checkpoint workbook; refusing.")
     try:
-        parsed = checkpoint_sheets.parse_workbook(kind, payload, bytes(data), checkpoint_id)
+        parsed = await run_in_threadpool(checkpoint_sheets.parse_workbook,
+                                         kind, payload, bytes(data), checkpoint_id)
     except checkpoint_sheets.SheetError as e:
         _err(400, str(e))
     keep = db.UPLOADS_DIR / "checkpoints"

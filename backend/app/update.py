@@ -15,6 +15,11 @@ Safety model, in order of importance:
    this, not the marker files, is what proves a bundle is QualiLens.
 4. The previous application files are backed up first; any failure during
    extraction restores them automatically.
+5. A bundle whose build stamp is OLDER than the installed one is refused
+   (RollbackRefused) unless the caller says allow_downgrade — a signature
+   proves the authors made a bundle, not that it is the one they publish
+   now, so a republished old release must not install itself as "latest".
+   The GitHub path never allows a downgrade; the zip path asks first.
 
 The optional release check is PULL-ONLY and user-initiated: pressing the
 button makes one GET to GitHub's releases endpoint for UPDATE_REPO; nothing
@@ -48,6 +53,8 @@ MAX_BUNDLE_BYTES = 200 * 1024 * 1024          # the zip itself, either path
 MAX_UNPACKED_BYTES = 600 * 1024 * 1024        # sum of members' declared sizes
 MAX_MEMBER_COUNT = 20000
 _BUILD_RE = re.compile(r"build\s+(\d{4}\.\d{2}\.\d{2}-\d{4})")
+# a VERSION stamp: YYYY.MM.DD, optionally -HHMM (compares lexicographically)
+_STAMP_RE = re.compile(r"^\d{4}\.\d{2}\.\d{2}(-\d{4})?$")
 
 APP_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -75,6 +82,26 @@ BACKUP_DIR = APP_ROOT / ".update-backup"
 
 class UpdateError(Exception):
     pass
+
+
+class RollbackRefused(UpdateError):
+    """The bundle is a valid, signed QualiLens build — but an older one."""
+
+
+def is_older_build(candidate: str, installed: str) -> bool:
+    """True when both are build stamps and candidate predates installed.
+    Anything unstamped ('unknown', a test label) cannot be compared and is
+    not called a rollback."""
+    c, i = (candidate or "").strip(), (installed or "").strip()
+    return bool(_STAMP_RE.match(c) and _STAMP_RE.match(i)) and c < i
+
+
+def _github_page_url(value) -> str:
+    """The release's page URL, only when it is a GitHub page of UPDATE_REPO.
+    The interface renders it as a link, so anything else — another host, an
+    odd scheme — is dropped rather than shown."""
+    url = str(value or "")
+    return url if url.startswith(f"https://github.com/{UPDATE_REPO}/") else ""
 
 
 def _current_version() -> str:
@@ -181,7 +208,7 @@ def check_for_update() -> dict:
     current = _current_version()
     out = {
         "ok": True, "current": current, "tag": tag, "build": build,
-        "release_url": str(release.get("html_url") or ""),
+        "release_url": _github_page_url(release.get("html_url")),
         "has_bundle": bool(asset),
         "asset_size": (asset or {}).get("size"),
     }
@@ -237,10 +264,12 @@ def download_latest_bundle(dest_dir: Path) -> Path:
     return dest
 
 
-def apply_update(zip_path: Path) -> dict:
+def apply_update(zip_path: Path, allow_downgrade: bool = False) -> dict:
     """Validate and apply the bundle at zip_path. Returns a summary dict.
-    Raises UpdateError with a user-facing message on any refusal; restores
-    the previous files on any mid-flight failure."""
+    Raises UpdateError with a user-facing message on any refusal (a
+    RollbackRefused when the only objection is that the bundle is an older
+    build than the installed one); restores the previous files on any
+    mid-flight failure."""
     from_version = _current_version()
     try:
         if Path(zip_path).stat().st_size > MAX_BUNDLE_BYTES:
@@ -283,6 +312,12 @@ def apply_update(zip_path: Path) -> dict:
         for m, rel in to_install:
             if rel == "VERSION":
                 to_version = zf.read(m).decode("utf-8", "replace").strip()
+        if is_older_build(to_version, from_version) and not allow_downgrade:
+            raise RollbackRefused(
+                f"That bundle is build {to_version}, older than the installed build "
+                f"{from_version}. A signed bundle proves the authors made it, not that "
+                "it is current; installing an older build is a rollback and is refused "
+                "unless you ask for it explicitly.")
 
         # back up everything we are about to replace
         stamp = time.strftime("%Y%m%d-%H%M%S")
