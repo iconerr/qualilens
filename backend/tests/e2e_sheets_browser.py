@@ -31,9 +31,10 @@ import io, os, sys, json, time, pathlib
 sys.path.insert(0, os.environ["QL_TREE"] + "/backend")
 import app.db as db
 DATA = pathlib.Path(os.environ["QUALILENS_DATA_DIR"]); db.DATA_DIR = DATA; db.DB_PATH = DATA/"qualilens.db"; db.UPLOADS_DIR = DATA/"uploads"; db.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+import app.keystore as keystore; keystore.SECRET_FILE = DATA/"secret.key"
 os.environ["QUALILENS_TEST"] = "1"
 src = open(os.environ["QL_TREE"] + "/backend/tests/e2e_methods.py").read().split("llm_mod.chat = fake_chat",1)[0]
-src = src.replace('_db.DB_PATH = _pl.Path(_td) / "e2e.db"',"").replace('_db.UPLOADS_DIR = _pl.Path(_td) / "uploads"',"").replace("_db.UPLOADS_DIR.mkdir(exist_ok=True)","")
+src = src.replace('_db.DB_PATH = _pl.Path(_td) / "e2e.db"',"").replace('_db.UPLOADS_DIR = _pl.Path(_td) / "uploads"',"").replace("_db.UPLOADS_DIR.mkdir(exist_ok=True)","").replace('_keystore.SECRET_FILE = _pl.Path(_td) / "secret.key"',"")
 ns = {"__file__": os.environ["QL_TREE"] + "/backend/tests/e2e_methods.py"}; exec(compile(src,"h","exec"), ns)
 import app.llm as llm; llm.chat = ns["fake_chat"]
 from starlette.testclient import TestClient
@@ -54,7 +55,7 @@ ids = {"ta": mk("Vendor Selection Interviews", "thematic", {"research_question":
        "ls": mk("Trust in Vendor Relationships", "literature_synthesis", {"research_question": "q"}, ("Alpha 2021.txt", "Beta 2022.txt"))}
 (DATA/"ids.json").write_text(json.dumps(ids))
 '''
-env = dict(os.environ, QUALILENS_DATA_DIR=str(DATA), QL_TREE=TREE)
+env = dict(os.environ, QUALILENS_DATA_DIR=str(DATA), QUALILENS_SECRET_FILE=str(DATA/"secret.key"), QL_TREE=TREE)
 subprocess.run([PY, "-c", seed], env=env, check=True, capture_output=True)
 ids = json.load(open(DATA / "ids.json"))
 

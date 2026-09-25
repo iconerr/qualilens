@@ -4,7 +4,9 @@ A local web application for LLM-assisted qualitative data analysis. Your data,
 your API keys, and the coding database stay in a folder on your computer, and
 the only network traffic is direct calls to the LLM provider you choose. (If
 that folder is inside a cloud-synced directory, the sync service holds it too
-— set `QUALILENS_DATA_DIR` to keep it out; the app says so at startup.)
+— set `QUALILENS_DATA_DIR` to keep it out; the app says so at startup.) API
+keys are encrypted at rest, and the secret that unlocks them lives outside
+that folder, so a synced or copied database carries no usable key.
 
 ## Starting the app
 
@@ -118,8 +120,10 @@ is final. All projects persist in a local SQLite database
   files. **This is where your analyses live; back it up if the project
   matters.** If this folder sits inside a Dropbox-synced directory it is
   convenient for backup, but the sync service then holds raw participant data
-  and API keys; never run the app from two machines against the same synced
-  database, and let the sync finish before starting the app elsewhere. The app
+  (the API keys in the database are encrypted with a secret kept outside the
+  folder, so the copy carries no usable key); never run the app from two
+  machines against the same synced database, and let the sync finish before
+  starting the app elsewhere. The app
   folds the database's write-ahead log into the main file at startup, at every
   stage boundary and checkpoint, and at shutdown, to keep the at-rest file
   coherent for syncing.
@@ -130,6 +134,11 @@ is final. All projects persist in a local SQLite database
   happen to have open cannot reach your data or your keys through the app.
   Uploads are bounded and streamed to disk; an update bundle older than the
   installed build is refused unless you ask for the rollback.
+- The data folder and the database are readable by your account only, and a
+  removed key leaves the file rather than lingering in freed space. The key
+  secret lives at `~/Library/Application Support/QualiLens/secret.key` on
+  macOS or `~/.config/qualilens/secret.key` on Linux and WSL;
+  `QUALILENS_SECRET_FILE` moves it.
 
 ## Honest limitations
 
@@ -194,7 +203,7 @@ environment built on another machine and rebuilds it automatically.
 ## Running the tests
 
 ```bash
-cd backend && .venv/bin/python -m pytest tests/test_fixes.py tests/test_hardening.py tests/test_sheets.py -q && .venv/bin/python tests/e2e_grounded_theory.py && .venv/bin/python tests/e2e_methods.py
+cd backend && .venv/bin/python -m pytest tests/test_fixes.py tests/test_hardening.py tests/test_sheets.py tests/test_keystore.py -q && .venv/bin/python tests/e2e_grounded_theory.py && .venv/bin/python tests/e2e_methods.py
 ```
 
 All tests run against scratch databases with a mocked model — no API keys or

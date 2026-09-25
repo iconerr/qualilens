@@ -12,10 +12,12 @@ import io, json, time, sys
 import pathlib as _pl, sys as _sys, tempfile as _tf
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent))
 import app.db as _db
+import app.keystore as _keystore
 _td = _tf.mkdtemp(prefix="qualilens_e2e_")
 _db.DB_PATH = _pl.Path(_td) / "e2e.db"
 _db.UPLOADS_DIR = _pl.Path(_td) / "uploads"
 _db.UPLOADS_DIR.mkdir(exist_ok=True)
+_keystore.SECRET_FILE = _pl.Path(_td) / "secret.key"
 
 import app.llm as llm_mod
 

@@ -73,7 +73,7 @@ models, and Remove once one is.
 | Control | What it does |
 |---|---|
 | Key field | Accepts a pasted key. The field is masked, and an already-saved key shows as a placeholder rather than being displayed back to you. |
-| Save | Writes the key to the local database. The card then shows a check beside the provider's name and Ready to analyze, with a hint of the form `sk-ant…4f2a` — the first six and last four characters. |
+| Save | Encrypts the key and writes it to the local database. The card then shows a check beside the provider's name and Ready to analyze, with a hint of the form `sk-ant…4f2a` — the first six and last four characters. |
 | Test | Sends one very short request to the provider and reports whether it answered. It appears as soon as you type a key: if you have typed a new key but not saved it, Test uses the typed key, so a failing candidate never overwrites a working saved key. |
 | Check models | Compares the models this app offers with the provider's live list; the section below explains it. |
 | Remove | Clears the stored key for that provider. It stays quiet until you point at it. |
@@ -96,9 +96,11 @@ model choice starts failing, and before you pass the app to a colleague.
 
 ### Where keys are stored
 
-Your keys live in the `settings` table of the local SQLite database, stored as plain text. They are not encrypted, and they are not held in your system keychain. Anyone with read access to `qualilens.db` can read them.
+Your keys live in the `settings` table of the local SQLite database, encrypted. The secret that encrypts them is a small file that QualiLens creates the first time it needs one, outside the data folder, in a place no sync service follows: `~/Library/Application Support/QualiLens/secret.key` on macOS, `~/.config/qualilens/secret.key` on Linux and WSL. The Settings screen names the file in use. `QUALILENS_SECRET_FILE` moves it, the same way `QUALILENS_DATA_DIR` moves the data folder. Keys are not held in your system keychain.
 
-Two practical consequences follow. Your keys are synced along with everything else if the data folder sits inside a cloud-synced directory — the app says so at startup and on the Settings screen when it detects one, and the next section says how to move the folder out. And you should use Remove before you share the folder or hand the computer to someone else, then re-enter the keys afterward.
+Three practical consequences follow. A copy of the database carries no usable key: if the data folder sits inside a cloud-synced directory, the sync service holds the encrypted keys but not the secret, and someone you hand the folder to cannot use them. A database opened on another computer, or after the secret file was replaced, shows its keys as **unreadable** in Settings, with the reason; paste each key again, or Remove it. And anyone who uses your own account on your own computer can read both files, so the encryption is no substitute for locking the screen: use Remove before you hand the computer to someone else, then re-enter the keys afterward.
+
+Remove does what it says. The value leaves the database file rather than lingering in freed space. The data folder and the database are readable by your account only.
 
 ## What happens on the first launch
 
@@ -185,7 +187,7 @@ The data folder need not sit inside the app folder. Start the app with the `QUAL
 QUALILENS_DATA_DIR="$HOME/QualiLensData" ./run.sh
 ```
 
-Move the existing `backend/data` folder to the new location first, or you will start with an empty database. The Settings screen names the folder in use. Do this whenever the app folder lives inside Dropbox, iCloud Drive, OneDrive, or another synced directory and your data must not: the database holds raw participant data and API keys in plain text, and a synced folder hands both to the sync service.
+Move the existing `backend/data` folder to the new location first, or you will start with an empty database. The Settings screen names the folder in use. Do this whenever the app folder lives inside Dropbox, iCloud Drive, OneDrive, or another synced directory and your data must not: the database holds raw participant data in plain text, and a synced folder hands them to the sync service. (The API keys in it are encrypted, and the secret that unlocks them is not in that folder.)
 
 ## A warning about cloud-synced folders
 

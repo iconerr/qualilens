@@ -55,16 +55,21 @@ The one thing QualiLens guarantees is that your data go to that provider and to 
 | `backend/data/qualilens.db` | Every project, the full text of every source, every code, every excerpt with its quote, every checkpoint decision, every logged event, and every report | Holds your raw data in full |
 | `backend/data/uploads/` | The original documents and recordings you uploaded | Holds your raw data in full |
 | `backend/data/uploads/checkpoints/` | Spreadsheets you uploaded at checkpoints, one per upload, named by checkpoint and content hash | Holds your codebook decisions and notes as you wrote them |
+| `~/Library/Application Support/QualiLens/secret.key` on macOS; `~/.config/qualilens/secret.key` on Linux and WSL | The secret that encrypts your API keys, created the first time one is needed | Unlocks the keys in any copy of the database; readable by your account only |
 
-`backend/data` is the default; `QUALILENS_DATA_DIR` moves both to a folder of your choosing, and the Settings screen names the folder in use.
+`backend/data` is the default; `QUALILENS_DATA_DIR` moves the database and the uploads to a folder of your choosing, and `QUALILENS_SECRET_FILE` moves the secret the same way. The Settings screen names the folder and the file in use. The folder and the database are readable by your account only; QualiLens sets that at every start.
 
-Anyone with read access to those two paths has your data. Everything in that table is synced as well if the data folder sits inside a cloud-synced directory — the app says so at startup and in Settings when it detects one. Keep the data folder outside the synced tree if your protocol requires the data to stay on one machine ([Getting Started](01-getting-started.md#moving-the-data-folder)).
+Anyone with read access to the data folder has your data. Everything in it is synced as well if it sits inside a cloud-synced directory — the app says so at startup and in Settings when it detects one. The secret is not in it. Keep the data folder outside the synced tree if your protocol requires the data to stay on one machine ([Getting Started](01-getting-started.md#moving-the-data-folder)).
 
 ## API keys
 
-Your keys are stored as plain text in the `settings` table of the database. They are not encrypted, and they are not held in a system keychain. Anyone who can read the database file can read your keys, and a synced folder syncs them.
+Your keys are stored in the `settings` table of the database, encrypted (Fernet: AES-128 in CBC mode with an HMAC-SHA256 tag). The secret that encrypts them is a file outside the data folder, named in the table above and on the Settings screen, created the first time QualiLens needs it and readable by your account only. Keys are not held in a system keychain.
 
-Two habits follow. Use **Remove** in Settings before you hand the computer or the folder to anyone. And prefer a key scoped to this work, with its own spending limit, over a key that reaches your whole account.
+What this protects against, and what it does not. A copy of the database — synced, backed up, or handed over — carries no usable key without the secret, and the secret is not in the synced folder. Anyone who runs as your own account on your own computer can read both files, so the encryption does not protect a key from someone at your unlocked machine, and it does not protect the participant data at all, which remain plain text. This chapter says so because an ethics application must not claim more.
+
+A database opened where the secret differs — on another computer, or after the secret file was replaced — shows each key as unreadable in Settings, with the reason. Paste the key again, or Remove it.
+
+Two habits still follow. Use **Remove** in Settings before you hand the computer to anyone; the value then leaves the database file rather than lingering in freed space. And prefer a key scoped to this work, with its own spending limit, over a key that reaches your whole account.
 
 ## What deletion actually deletes
 
@@ -82,7 +87,7 @@ Use this operation when a participant withdraws and you must remove their data c
 
 ### Removing a key
 
-**Remove** in Settings clears the stored value for that provider. It does not touch any project.
+**Remove** in Settings clears the stored value for that provider and compacts the database file, so the value leaves the file rather than lingering in freed space. It does not touch any project.
 
 ### What is retained by design
 
@@ -100,7 +105,7 @@ These are the facts a committee will ask for, stated in the terms committees use
 
 **De-identification.** The software performs none. Whatever is in the transcript is what is transmitted, including names, places, and any other identifier a participant spoke aloud. De-identify before upload if your protocol requires it. Note that upload is the only point at which de-identification can happen.
 
-**Storage and access.** Study data are held in a single database file and an uploads folder in the project directory, unencrypted, protected by the operating system's file permissions. State whether that directory is synced to a cloud service. The study data are held by that service as well if it is.
+**Storage and access.** Study data are held in a single database file and an uploads folder in the project directory, unencrypted, protected by the operating system's file permissions: the folder and the database are readable by the researcher's account only. The researcher's API keys in that database are encrypted with a secret held outside the folder. State whether that directory is synced to a cloud service. The study data are held by that service as well if it is.
 
 **Retention and destruction.** Data persist until deleted. Deleting a project removes all of it, including derived analyses, logs, and reports. Removing an individual source leaves quotes in previously generated reports and in the event log. Honor a withdrawal request by deleting the project.
 

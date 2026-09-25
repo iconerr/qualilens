@@ -24,7 +24,7 @@ A running server keeps the code it loaded when it started, however the folder ch
 
 The launcher checks for the built artifacts rather than the folders. A first run that failed part way therefore retries cleanly on the next launch, rather than skipping the step that failed.
 
-A line reading `NOTICE: the data folder … appears to sit inside a cloud-synced directory` is information, not an error: it says the sync service holds your database and keys as well, and points to `QUALILENS_DATA_DIR` in [Getting Started](01-getting-started.md#moving-the-data-folder). A line reading `WARNING: frontend/dist was built from different sources than frontend/src` means the interface on disk is older than its source; run `cd frontend && npm run build` or `./package.sh`.
+A line reading `NOTICE: the data folder … appears to sit inside a cloud-synced directory` is information, not an error: it says the sync service holds your database as well (the API keys in it are encrypted, and the secret that unlocks them is not in that folder), and points to `QUALILENS_DATA_DIR` in [Getting Started](01-getting-started.md#moving-the-data-folder). A line reading `NOTICE: N saved API key(s) were encrypted in place` appears once, on the first start after updating to 1.8, and names the secret file. A line reading `NOTICE: the key secret … appears to sit inside a cloud-synced directory` says that file is itself being synced, which defeats its purpose; `QUALILENS_SECRET_FILE` moves it. A line reading `WARNING: The secret that encrypts your API keys could not be created` means the app could not write that file: keys cannot be saved until it can, and the line names the path and the variable that moves it. A line reading `WARNING: frontend/dist was built from different sources than frontend/src` means the interface on disk is older than its source; run `cd frontend && npm run build` or `./package.sh`.
 
 ## The page refuses to talk to the app
 
@@ -53,7 +53,7 @@ A line reading `NOTICE: the data folder … appears to sit inside a cloud-synced
 
 | Message | Cause | Remedy |
 |---|---|---|
-| `Audio/video transcription requires an OpenAI API key (used for Whisper). Add one in Settings.` | No OpenAI key is saved, whichever provider runs the analysis | Save an OpenAI key in Settings, then press Retry on the source |
+| `Audio/video transcription requires an OpenAI API key (used for Whisper). Add one in Settings.` | No OpenAI key is saved, whichever provider runs the analysis, or the saved one is unreadable on this computer (Settings says so) | Save an OpenAI key in Settings, then press Retry on the source |
 | `ffmpeg is required to extract audio from video files.` | A video was uploaded and ffmpeg is not installed | Install ffmpeg, then Retry. Settings shows whether the app can see it |
 | `This audio file exceeds the transcription API's size limit and ffmpeg is not available to split it.` | The recording is over roughly 24 MB and cannot be chunked | Install ffmpeg and Retry, or compress the audio yourself before uploading |
 | `The transcription service does not accept .aac files and ffmpeg is not available to convert it.` | An `.aac` recording needs re-encoding first | Install ffmpeg and Retry, or convert the recording to `.mp3` or `.m4a` and upload that |
@@ -110,6 +110,7 @@ These appear as a failed run, with the error printed on the Run screen. You can 
 | Message | Cause | Remedy |
 |---|---|---|
 | `No API key configured for provider '<x>'.` | The key was removed after the project was created | Save a key in Settings, then Resume |
+| `A key is saved but cannot be read with this computer's secret…` | The database came from another computer, or the secret file that encrypts the keys was replaced | Open Settings, press **Replace key** for that provider and paste the key again, then Resume |
 | `HTTP 401` | The key is invalid, revoked, or belongs to a different provider | Test the key in Settings, replace it, then Resume |
 | `HTTP 403` or a message about model access | Your account cannot reach the selected model | Choose a different model. The model is fixed for the project, so this means a new project |
 | `<provider> did not accept the model id '<m>' — the provider may have retired or renamed it` | The provider no longer serves that model id | Press **Check models** in Settings to see which catalog models are still live, then start a new project with a current model, or type a custom model id in the wizard |

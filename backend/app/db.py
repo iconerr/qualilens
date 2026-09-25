@@ -20,15 +20,34 @@ from pathlib import Path
 
 # Where projects, keys, and uploads live. QUALILENS_DATA_DIR moves them out
 # of the application folder — the right choice when that folder sits inside
-# a cloud-synced directory, since the database holds raw participant data
-# and API keys in plain text.
+# a cloud-synced directory, since the database holds raw participant data in
+# plain text. (API keys in it are encrypted; the secret that unlocks them
+# lives outside this folder — see keystore.py.)
+#
+# The folder is the researcher's alone: 0700 on the folder, 0600 on the
+# database and its sidecars, so no other account on a shared computer can
+# read them. Applied at every start, since a folder created by an older
+# build, or copied by hand, carries whatever mode it was given.
+
+
+def private(path: Path, mode: int) -> None:
+    """chmod, best effort: a filesystem that carries no POSIX modes (some
+    external drives and network shares) refuses it, and that is not fatal."""
+    try:
+        os.chmod(path, mode)
+    except OSError:
+        pass
+
+
 _env_dir = (os.environ.get("QUALILENS_DATA_DIR") or "").strip()
 DATA_DIR = Path(_env_dir).expanduser().resolve() if _env_dir \
     else Path(__file__).resolve().parent.parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+private(DATA_DIR, 0o700)
 DB_PATH = DATA_DIR / "qualilens.db"
 UPLOADS_DIR = DATA_DIR / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
+private(UPLOADS_DIR, 0o700)
 
 # folder names that mark a cloud-synced tree; used only for a startup notice
 SYNC_MARKERS = ("dropbox", "icloud", "onedrive", "google drive", "googledrive",
@@ -157,14 +176,31 @@ def get_conn() -> sqlite3.Connection:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         conn.execute(f"PRAGMA application_id={APPLICATION_ID}")
+        # deleted and overwritten content is zeroed rather than left in
+        # freed space, so a removed key (or any deleted row) does not linger
+        # in the file for anyone who reads it raw
+        conn.execute("PRAGMA secure_delete=ON")
         _local.conn = conn
     return conn
+
+
+def tighten_files() -> None:
+    """0700 on the folder holding the database, 0600 on the database and
+    the sidecars SQLite keeps beside it. SQLite gives a new sidecar the
+    database file's own mode, so tightening the main file first covers the
+    ones created later; existing sidecars from an older build get theirs."""
+    private(DB_PATH.parent, 0o700)
+    for suffix in ("", "-wal", "-shm", "-journal"):
+        f = DB_PATH.with_name(DB_PATH.name + suffix)
+        if f.exists():
+            private(f, 0o600)
 
 
 def init_db() -> None:
     conn = get_conn()
     conn.executescript(SCHEMA)
     conn.commit()
+    tighten_files()
     if not get_setting("lineage"):
         set_setting("lineage", LINEAGE)
     # This database may live in a cloud-synced folder (e.g. Dropbox). Keep the
@@ -176,9 +212,10 @@ def init_db() -> None:
     hint = synced_folder_hint()
     if hint:
         print(f"NOTICE: the data folder {DATA_DIR} appears to sit inside a cloud-synced "
-              f"directory ('{hint}'). It holds raw participant data and API keys in plain "
-              "text, and the sync service holds them too. Set QUALILENS_DATA_DIR to a "
-              "folder outside the synced tree to keep them on this computer only "
+              f"directory ('{hint}'). It holds raw participant data in plain text, and the "
+              "sync service holds them too (your API keys in it are encrypted, and the "
+              "secret that unlocks them is not in that folder). Set QUALILENS_DATA_DIR to "
+              "a folder outside the synced tree to keep the data on this computer only "
               "(manual: Data, Privacy, and Governance).", flush=True)
 
 
@@ -191,6 +228,27 @@ def checkpoint_wal(mode: str = "TRUNCATE") -> None:
         get_conn().execute(f"PRAGMA wal_checkpoint({mode})")
     except sqlite3.Error:
         pass  # best-effort hygiene; never block startup/shutdown on it
+
+
+def scrub() -> None:
+    """After a secret is removed or rewritten: rebuild the main file so the
+    pages that held the old value leave it, then fold and empty the
+    write-ahead log so its stale page images leave the sidecar. secure_delete
+    already zeroes freed content on every connection; this makes sure the
+    zeroed pages, not the old ones, are what the file holds. Runs on its own
+    short-timeout connection so a live run is never held up for more than a
+    couple of seconds, and never raises: a busy database simply keeps the
+    zeroed content until the next scrub or exit."""
+    for statement in ("VACUUM", "PRAGMA wal_checkpoint(TRUNCATE)"):
+        try:
+            c = sqlite3.connect(DB_PATH, timeout=2)
+            try:
+                c.execute("PRAGMA secure_delete=ON")
+                c.execute(statement)
+            finally:
+                c.close()
+        except sqlite3.Error:
+            pass
 
 
 def new_id() -> str:

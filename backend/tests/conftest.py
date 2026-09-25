@@ -12,11 +12,13 @@ import tempfile
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import app.db as db  # noqa: E402
+import app.keystore as keystore  # noqa: E402
 
 _tmpdir = tempfile.mkdtemp(prefix="qualilens_test_")
 db.DB_PATH = pathlib.Path(_tmpdir) / "test.db"
 db.UPLOADS_DIR = pathlib.Path(_tmpdir) / "uploads"
 db.UPLOADS_DIR.mkdir(exist_ok=True)
+keystore.SECRET_FILE = pathlib.Path(_tmpdir) / "secret.key"   # never the researcher's
 os.environ["QUALILENS_TEST"] = "1"
 
 import pytest  # noqa: E402

@@ -11,7 +11,7 @@ import json
 import threading
 import traceback
 
-from . import db, llm
+from . import db, keystore, llm
 from .methods import METHODS
 from .methods.base import Cancelled, RunContext
 
@@ -78,7 +78,14 @@ def _load_ctx(run_id: str) -> RunContext:
     config = dict(snap) if isinstance(snap, dict) and snap else project["config"]
     provider = config.get("provider", "anthropic")
     model = (config.get("model") or "").strip() or llm.catalog()[provider]["default_model"]
-    api_key = db.get_setting(f"api_key_{provider}", "")
+    api_key = keystore.get_api_key(provider)
+    if not api_key:
+        # a key that is saved but unreadable here (another computer's
+        # database, a replaced secret) fails the run with the reason, not
+        # with "no key configured"
+        problem = keystore.status(provider)["problem"]
+        if problem:
+            raise llm.LLMError(problem)
     ctx = RunContext(run_id, project, sources, config, provider, model, api_key)
     ctx.state = state
     return ctx

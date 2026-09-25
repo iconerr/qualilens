@@ -9,6 +9,30 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.8.0 — 2026-09-24
+
+- API keys are encrypted at rest. Each saved key is stored as ciphertext,
+  and the secret that unlocks it is a small file outside the data folder —
+  `~/Library/Application Support/QualiLens/secret.key` on macOS,
+  `~/.config/qualilens/secret.key` on Linux and WSL, or wherever
+  `QUALILENS_SECRET_FILE` points — created the first time it is needed and
+  readable by your account only. A synced, backed-up, or copied database
+  therefore carries no usable key. Keys saved by an earlier build are
+  encrypted in place on the first start, and the app says so. A database
+  opened on another computer, or after the secret was replaced, shows its
+  keys as unreadable in Settings with the reason; paste them again or
+  Remove them. Settings names the secret file beside the data folder and
+  warns when either sits in a cloud-synced directory.
+- The data folder is readable by your account only, and so are the
+  database and its sidecar files, set at every start. Deleted and
+  overwritten content is zeroed inside the database rather than left in
+  freed space, and Remove compacts the file, so a removed key leaves it
+  rather than lingering.
+- The manual's Getting Started, Troubleshooting, and Data, Privacy, and
+  Governance chapters say what the encryption protects against and what it
+  does not: the participant data remain plain text, and someone using your
+  own account on your own computer can read both files.
+
 ## 1.7.1 — 2026-09-03
 
 - An installation updated to 1.7.0 by an older build showed only its build

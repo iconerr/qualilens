@@ -298,8 +298,8 @@ export default function Wizard() {
                 <span className="lbl">API key {providerMeta.has_key && <span className="muted">(saved — leave blank to keep)</span>}</span>
                 <input type="password" value={keyDraft} onChange={e => setKeyDraft(e.target.value)}
                   placeholder={providerMeta.has_key ? '••••••••  (already saved)' : 'Paste your API key'} />
-                <span className="hint">Stored in plain text in this app's local database and sent only to {providerMeta.label}.
-                  {' '}If the data folder is inside a cloud-synced directory, the sync service holds it too — Settings says where it lives.</span>
+                <span className="hint">Stored encrypted in this app's local database and sent only to {providerMeta.label}.
+                  {' '}The secret that unlocks it stays on this computer, outside the data folder — Settings says where both live.</span>
               </label>
               <div className="row">
                 <button onClick={doTestKey} disabled={testing}>{testing ? 'Testing…' : 'Test key'}</button>

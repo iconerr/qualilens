@@ -5,7 +5,8 @@
 
 FastAPI backend: serves the JSON API and, in production, the built frontend.
 Everything runs on the researcher's machine; API keys live in the local
-SQLite database and calls go straight to the chosen provider.
+SQLite database, encrypted with a secret kept outside the data folder (see
+keystore.py), and calls go straight to the chosen provider.
 
 Binding to 127.0.0.1 keeps the network out, not the browser: any web page
 the researcher has open can send requests to this port. Three guards close
@@ -37,11 +38,25 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import checkpoint_sheets, db, ingestion, llm, pipeline, report_docx, transcription, update
+from . import (checkpoint_sheets, db, ingestion, keystore, llm, pipeline, report_docx,
+               transcription, update)
 from .methods import METHODS
 
 app = FastAPI(title="QualiLens")
 db.init_db()
+# keys saved by a build before 1.8 are plaintext rows: encrypt them now, and
+# say so; a secret that cannot be created is reported here and in Settings
+_migrated = keystore.migrate_plaintext()
+if _migrated:
+    print(f"NOTICE: {_migrated} saved API key(s) were encrypted in place; the secret "
+          f"that unlocks them is {keystore.SECRET_FILE} (manual: Data, Privacy, and "
+          "Governance).", flush=True)
+if keystore.secret_problem():
+    print(f"WARNING: {keystore.secret_problem()}", flush=True)
+elif db.synced_folder_hint(keystore.SECRET_FILE.parent):
+    print(f"NOTICE: the key secret {keystore.SECRET_FILE} appears to sit inside a "
+          f"cloud-synced directory, which defeats its purpose. Set QUALILENS_SECRET_FILE "
+          "to a path outside the synced tree.", flush=True)
 pipeline.reconcile_on_startup()
 
 # ---------------- local-only guard ----------------
@@ -175,7 +190,7 @@ def get_meta():
         ],
         # read fresh so a models.json edit is live on the next page load
         "providers": [
-            {"id": pid, **info, "has_key": bool(db.get_setting(f"api_key_{pid}"))}
+            {"id": pid, **info, "has_key": keystore.status(pid)["has_key"]}
             for pid, info in llm.catalog().items()
         ],
         "ffmpeg": transcription.ffmpeg_available(),
@@ -186,6 +201,10 @@ def get_meta():
         "update_hint": _update_hint(),
         "data_dir": str(db.DATA_DIR),
         "synced_folder": db.synced_folder_hint(),
+        # where the secret that encrypts the keys lives, and whether it can
+        "secret_file": str(keystore.SECRET_FILE),
+        "secret_synced": db.synced_folder_hint(keystore.SECRET_FILE.parent),
+        "secret_problem": keystore.secret_problem(),
     }
 
 
@@ -193,12 +212,10 @@ def get_meta():
 
 @app.get("/api/settings")
 def get_settings():
-    out = {}
-    for pid in llm.PROVIDERS:
-        key = db.get_setting(f"api_key_{pid}")
-        out[pid] = {"has_key": bool(key),
-                    "key_hint": (key[:6] + "…" + key[-4:]) if len(key) > 12 else ""}
-    return out
+    """Per provider: whether a usable key is saved, its hint (first six and
+    last four characters), and — when one is saved that this computer's
+    secret cannot read — why. The key itself never leaves the server."""
+    return {pid: keystore.status(pid) for pid in llm.PROVIDERS}
 
 
 @app.put("/api/settings/keys")
@@ -207,9 +224,12 @@ def put_keys(body: dict):
         if pid not in llm.PROVIDERS or not isinstance(key, str):
             continue
         if key == "__clear__":
-            db.set_setting(f"api_key_{pid}", "")
+            keystore.clear_api_key(pid)
         elif key.strip():
-            db.set_setting(f"api_key_{pid}", key.strip())
+            try:
+                keystore.set_api_key(pid, key)
+            except keystore.KeyStoreError as e:
+                _err(500, str(e))
     return get_settings()
 
 
@@ -220,7 +240,7 @@ def test_key(body: dict):
         _err(400, "Unknown provider")
     # an explicitly supplied key is tested WITHOUT being saved, so trying a
     # new key never clobbers a saved working one
-    key = _s(body, "key") or db.get_setting(f"api_key_{pid}")
+    key = _s(body, "key") or keystore.get_api_key(pid)
     if not key:
         _err(400, "No key saved for this provider")
     model = _s(body, "model") or llm.catalog()[pid]["default_model"]
@@ -245,9 +265,10 @@ def check_models(body: dict):
     for pid, info in llm.catalog().items():
         if only and pid != only:
             continue
-        key = db.get_setting(f"api_key_{pid}")
+        key = keystore.get_api_key(pid)
         if not key:
-            out[pid] = {"ok": False, "error": "No API key saved."}
+            out[pid] = {"ok": False,
+                        "error": keystore.status(pid)["problem"] or "No API key saved."}
             continue
         try:
             live = [m for m in llm.list_models(pid, key) if m]
@@ -585,7 +606,7 @@ def _transcribe_source(sid: str, path: Path, kind: str) -> None:
         conn.commit()
 
     try:
-        key = db.get_setting("api_key_openai")
+        key = keystore.get_api_key("openai")
         text = transcription.transcribe(path, kind, key, progress_cb=progress)
         if not text.strip():
             raise transcription.TranscriptionError("Transcription returned no text.")

@@ -34,6 +34,7 @@ PORT = int(os.environ.get("QL_PORT", "8831"))
 ORIGIN = f"http://127.0.0.1:{PORT}"
 PY = os.environ.get("QL_PYTHON", sys.executable)
 ENV = dict(os.environ, QUALILENS_DATA_DIR=tempfile.mkdtemp(prefix="ql_update_e2e_"))
+ENV["QUALILENS_SECRET_FILE"] = os.path.join(ENV["QUALILENS_DATA_DIR"], "secret.key")
 with zipfile.ZipFile(BUNDLE) as z:
     NEW = z.read("QualiLens/VERSION").decode().strip()
 OLD = open(f"{TREE}/VERSION").read().strip()

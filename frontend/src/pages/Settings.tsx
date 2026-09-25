@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRef } from 'react'
-import { ageLabel, api, testKey, versionLabel, type Meta } from '../api'
+import { ageLabel, api, testKey, versionLabel, type KeyStatus, type Meta } from '../api'
 
 // After an update the server stops itself so ./run.sh can relaunch the new
 // build. This page has nothing to talk to until then, and when the new server
@@ -82,7 +82,7 @@ function UpdateWaiting({ detail }: { detail: string }) {
 
 export default function Settings() {
   const [meta, setMeta] = useState<Meta | null>(null)
-  const [saved, setSaved] = useState<Record<string, { has_key: boolean; key_hint: string }>>({})
+  const [saved, setSaved] = useState<Record<string, KeyStatus>>({})
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [status, setStatus] = useState<Record<string, string>>({})
   const [modelCheck, setModelCheck] = useState<Record<string, any>>({})
@@ -225,14 +225,18 @@ export default function Settings() {
         </div>
         {meta.providers.map(p => {
           const has = !!saved[p.id]?.has_key
+          // a key is saved that this computer's secret cannot read (the
+          // database came from another computer, or the secret was replaced)
+          const problem = saved[p.id]?.problem ?? ''
           const draft = (drafts[p.id] ?? '').trim()
           const open = editing === p.id
           return (
             <div key={p.id} className={`prow ${open ? 'open' : ''}`}>
               <div className="prow-main">
-                <span className={`dot ${has ? 'ok' : ''}`} aria-hidden="true" />
+                <span className={`dot ${has ? 'ok' : problem ? 'warn' : ''}`} aria-hidden="true" />
                 <span className="prow-name">{p.label}</span>
-                <span className="prow-hint mono">{has ? (saved[p.id].key_hint || 'key saved') : 'no key'}</span>
+                <span className="prow-hint mono">{has ? (saved[p.id].key_hint || 'key saved')
+                  : problem ? 'key unreadable' : 'no key'}</span>
                 <span className="prow-actions">
                   {has ? <>
                     <button className="small quiet" onClick={() => test(p.id)}>Test</button>
@@ -242,10 +246,11 @@ export default function Settings() {
                     <button className="small quiet" onClick={() => clear(p.id)}>Remove</button>
                     <button className="small" onClick={() => setEditing(open ? null : p.id)}>
                       {open ? 'Cancel' : 'Replace key'}</button>
-                  </> : (
+                  </> : <>
+                    {problem && <button className="small quiet" onClick={() => clear(p.id)}>Remove</button>}
                     <button className="small" onClick={() => setEditing(open ? null : p.id)}>
-                      {open ? 'Cancel' : 'Add key'}</button>
-                  )}
+                      {open ? 'Cancel' : problem ? 'Replace key' : 'Add key'}</button>
+                  </>}
                 </span>
               </div>
               {open && (
@@ -262,6 +267,7 @@ export default function Settings() {
                 </div>
               )}
               {status[p.id] && <p className="prow-status small muted">{status[p.id]}</p>}
+              {problem && !status[p.id] && <p className="prow-status small">{problem}</p>}
               {modelCheck[p.id]?.ok && (
                 <div className="prow-extra">
                   <div className="row" style={{ gap: 8 }}>
@@ -304,8 +310,17 @@ export default function Settings() {
               <td><code style={{ wordBreak: 'break-all' }}>{meta.data_dir}</code></td></tr>
             <tr><td className="muted">Cloud sync</td>
               <td>{meta.synced_folder
-                ? <b>inside {meta.synced_folder}, so the sync service holds your participant data and keys</b>
+                ? <b>inside {meta.synced_folder}, so the sync service holds your participant data</b>
                 : 'not inside a synced folder'}</td></tr>
+            <tr><td className="muted">Key secret</td>
+              <td><code style={{ wordBreak: 'break-all' }}>{meta.secret_file}</code>
+                {meta.secret_problem
+                  ? <div className="error-box mt" style={{ marginBottom: 0 }}>{meta.secret_problem}</div>
+                  : meta.secret_synced
+                    ? <div><b>inside {meta.secret_synced}, which defeats its purpose</b>: set{' '}
+                        <code>QUALILENS_SECRET_FILE</code> to a path outside the synced tree</div>
+                    : <div className="small muted">encrypts the saved API keys; stays on this computer</div>}
+              </td></tr>
             <tr><td className="muted">ffmpeg</td>
               <td>{meta.ffmpeg ? 'installed, so video files can be processed'
                 : <>not found: install it (<code>brew install ffmpeg</code>) to analyze video</>}</td></tr>
@@ -313,11 +328,13 @@ export default function Settings() {
           <details className="small muted" style={{ marginTop: 10 }}>
             <summary>Moving the folder</summary>
             <p style={{ margin: '6px 0 0' }}>
-              The files are unencrypted, protected only by your computer's file permissions. To keep
-              them on this computer only, stop the app and start it with
-              <code> QUALILENS_DATA_DIR=/path/outside/the/synced/tree ./run.sh</code>, after moving the
-              existing <code>data</code> folder there. The manual's Data, Privacy, and Governance
-              chapter has the details.
+              The participant data in the folder are unencrypted, protected by your computer's file
+              permissions (the folder is readable by your account only). The API keys in it are
+              encrypted with the secret named above, which is not in the folder, so a copy of the
+              database carries no usable key. To keep the data on this computer only, stop the app and
+              start it with <code>QUALILENS_DATA_DIR=/path/outside/the/synced/tree ./run.sh</code>,
+              after moving the existing <code>data</code> folder there. The manual's Data, Privacy,
+              and Governance chapter has the details.
             </p>
           </details>
         </div>

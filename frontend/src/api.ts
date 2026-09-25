@@ -20,8 +20,14 @@ export interface Meta {
   methods: MethodMeta[]; providers: ProviderMeta[]; ffmpeg: boolean; version?: string;
   release?: string; running_build?: string; running_release?: string;
   data_dir?: string; synced_folder?: string;
+  // the secret that encrypts the saved API keys: where it lives, whether that
+  // place looks cloud-synced, and why it is unusable when it is
+  secret_file?: string; secret_synced?: string; secret_problem?: string;
   update_hint?: UpdateHint;
 }
+// A provider's saved key as Settings sees it: never the key itself. `problem`
+// is set when a key is saved that this computer's secret cannot read.
+export interface KeyStatus { has_key: boolean; key_hint: string; problem?: string }
 export interface UpdateHint {
   remind: boolean; dismissed: boolean;
   build_age_days: number | null; days_since_check: number | null; last_checked: number | null;
@@ -151,7 +157,7 @@ const post = (body?: unknown) =>
 
 export const api = {
   meta: () => j<Meta>('/api/meta'),
-  settings: () => j<Record<string, { has_key: boolean; key_hint: string }>>('/api/settings'),
+  settings: () => j<Record<string, KeyStatus>>('/api/settings'),
   saveKeys: (keys: Record<string, string>) =>
     j('/api/settings/keys', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(keys) }),
   projects: () => j<Project[]>('/api/projects'),

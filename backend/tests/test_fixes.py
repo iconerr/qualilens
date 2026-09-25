@@ -766,6 +766,7 @@ def test_package_script_manifest_and_relative_path():
             assert forbidden not in joined, f"bundle must not contain {forbidden}"
         for required in ("QualiLens/run.sh", "QualiLens/LICENSE", "QualiLens/NOTICE",
                          "QualiLens/backend/app/main.py",
+                         "QualiLens/backend/app/keystore.py",
                          "QualiLens/backend/app/methods/literature_synthesis.py",
                          "QualiLens/frontend/dist/index.html",
                          "QualiLens/frontend/dist/manual.html",
