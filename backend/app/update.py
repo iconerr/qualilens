@@ -262,9 +262,26 @@ def _bundle_asset(release: dict) -> dict | None:
     return None
 
 
+def _release_notes(body) -> str:
+    """The release's notes as one line of plain text for the Settings screen:
+    the first paragraph only, markdown emphasis and link syntax dropped,
+    capped — the release page carries the rest. Text, never markup: the
+    interface renders it as a string."""
+    text = str(body or "").replace("\r\n", "\n").strip()
+    first = re.split(r"\n\s*\n", text, 1)[0] if text else ""
+    first = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", first)   # [text](url) -> text
+    first = re.sub(r"^\s*(#+|>)\s*", "", first, flags=re.M)   # heading and quote markers
+    first = re.sub(r"[*_`]+", "", first)                     # emphasis and code
+    first = re.sub(r"\s+", " ", first).strip()
+    return first[:600]
+
+
 def check_for_update() -> dict:
     """Compare the latest published release's build stamp with the installed
-    VERSION. Build stamps (YYYY.MM.DD-HHMM) compare lexicographically."""
+    VERSION. Build stamps (YYYY.MM.DD-HHMM) compare lexicographically. The
+    answer carries the release's first paragraph of notes, so Settings can
+    say what changed beside "Update available" — from the same response,
+    with no further request."""
     release = fetch_latest_release()
     tag = str(release.get("tag_name") or "")
     m = _BUILD_RE.search(f"{release.get('name') or ''}\n{release.get('body') or ''}")
@@ -277,6 +294,7 @@ def check_for_update() -> dict:
         "release_url": _github_page_url(release.get("html_url")),
         "has_bundle": bool(asset),
         "asset_size": (asset or {}).get("size"),
+        "notes": _release_notes(release.get("body")),
     }
     if not build:
         out["newer"] = False

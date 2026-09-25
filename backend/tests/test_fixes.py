@@ -1337,7 +1337,9 @@ def test_docx_renders_concept_matrix_extraction_table_and_page_anchors():
 def test_check_updates_compares_build_stamps(monkeypatch):
     from app import update
     rel = {"tag_name": "v9.9.9", "name": "v9.9.9 — build 9999.01.01-0000",
-           "body": "", "html_url": "https://github.com/iconerr/qualilens/releases/tag/v9.9.9",
+           "body": "**Keys** are now [encrypted](https://example.org) at rest,\r\n"
+                   "and the data folder is `private`.\r\n\r\nUpdate from Settings.",
+           "html_url": "https://github.com/iconerr/qualilens/releases/tag/v9.9.9",
            "assets": [{"name": "QualiLens.zip", "size": 5_000_000,
                        "browser_download_url":
                            "https://github.com/iconerr/qualilens/releases/download/v9.9.9/QualiLens.zip"}]}
@@ -1345,6 +1347,15 @@ def test_check_updates_compares_build_stamps(monkeypatch):
     body = client.post('/api/settings/check_updates').json()
     assert body["ok"] and body["newer"] and body["has_bundle"]
     assert body["build"] == "9999.01.01-0000" and body["tag"] == "v9.9.9"
+    # the notes shown beside "Update available": the first paragraph, as
+    # plain text, from the response the check already fetched
+    assert body["notes"] == "Keys are now encrypted at rest, and the data folder is private."
+    # hostile or oversized notes stay text and stay short
+    rel_h = dict(rel, body="<script>alert(1)</script> " + "x" * 5000)
+    monkeypatch.setattr(update, "fetch_latest_release", lambda: rel_h)
+    notes = client.post('/api/settings/check_updates').json()["notes"]
+    assert notes.startswith("<script>alert(1)</script>") and len(notes) <= 600
+    monkeypatch.setattr(update, "fetch_latest_release", lambda: rel)
     # the same build as installed is not an update
     rel2 = dict(rel, name=f"v0.0.1 — build {update._current_version()}")
     monkeypatch.setattr(update, "fetch_latest_release", lambda: rel2)

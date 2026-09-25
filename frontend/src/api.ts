@@ -241,7 +241,8 @@ export const api = {
   },
   checkUpdates: () =>
     j<{ ok: boolean; error?: string; current?: string; release?: string; tag?: string; build?: string;
-        newer?: boolean; has_bundle?: boolean; release_url?: string; note?: string }>(
+        newer?: boolean; has_bundle?: boolean; release_url?: string; note?: string;
+        notes?: string }>(   // the release's first paragraph of notes, plain text
       '/api/settings/check_updates', post()),
   dismissUpdateHint: () => j<{ ok: boolean }>('/api/settings/dismiss_update_hint', post()),
   installUpdate: () =>

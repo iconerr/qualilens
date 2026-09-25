@@ -117,7 +117,9 @@ updates** asks GitHub for the latest published
 QualiLens release and compares it with your installation. The check is
 pull-only and happens only when you press the button: one request goes to
 GitHub, nothing of yours goes with it, and nothing ever runs in the
-background. When a newer release exists, **Download and install** fetches
+background. When a newer release exists, the first paragraph of its release
+notes appears under the result, so you can see what changed before you
+install; the release page link carries the rest. **Download and install** fetches
 its bundle and applies it through the same validated updater described
 next; when you are current, the card says so. The card also records when
 you last checked. When a build is a month or more old and no check has been

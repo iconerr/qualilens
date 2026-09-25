@@ -89,7 +89,7 @@ export default function Settings() {
   const [error, setError] = useState('')
   const [updState, setUpdState] = useState<{ phase: string; msg: string }>({ phase: 'idle', msg: '' })
   const [check, setCheck] = useState<{ phase: string; msg: string; newer?: boolean;
-    releaseUrl?: string }>({ phase: 'idle', msg: '' })
+    releaseUrl?: string; notes?: string }>({ phase: 'idle', msg: '' })
   const updRef = useRef<HTMLInputElement>(null)
   const [editing, setEditing] = useState<string | null>(null)   // the provider row whose key editor is open
 
@@ -100,11 +100,13 @@ export default function Settings() {
       if (!r.ok) { setCheck({ phase: 'error', msg: r.error ?? 'The check failed.' }); return }
       api.meta().then(setMeta).catch(() => { /* the 'last checked' line refreshes next visit */ })
       if (r.note) { setCheck({ phase: 'done', msg: r.note, releaseUrl: r.release_url }); return }
+      // what changed rides along with the check itself (the release's first
+      // paragraph of notes), so the decision can be made here
       if (r.newer && r.has_bundle) {
-        setCheck({ phase: 'done', newer: true, releaseUrl: r.release_url,
+        setCheck({ phase: 'done', newer: true, releaseUrl: r.release_url, notes: r.notes,
           msg: `Update available: ${r.tag} (build ${r.build}); you are running ${versionLabel(r.release, r.current)}.` })
       } else if (r.newer) {
-        setCheck({ phase: 'done', releaseUrl: r.release_url,
+        setCheck({ phase: 'done', releaseUrl: r.release_url, notes: r.notes,
           msg: `A newer release exists (${r.tag}) but carries no installable bundle — see the release page.` })
       } else {
         setCheck({ phase: 'done', msg: `You are up to date: QualiLens ${versionLabel(r.release, r.current)}.` })
@@ -386,11 +388,12 @@ export default function Settings() {
             onChange={e => applyUpdate(e.target.files?.[0])} />
         </div>
         {check.phase === 'done' && (
-          <p className="small muted" style={{ marginBottom: 0 }}>
-            {check.msg}
-            {check.releaseUrl && <>{' '}
-              <a href={check.releaseUrl} target="_blank" rel="noopener">release page ↗</a></>}
-          </p>
+          <div className="small" style={{ marginBottom: 0 }}>
+            <p className="muted" style={{ margin: 0 }}>{check.msg}</p>
+            {check.notes && <p style={{ margin: '4px 0 0' }}>{check.notes}</p>}
+            {check.releaseUrl && <p className="muted" style={{ margin: '4px 0 0' }}>
+              <a href={check.releaseUrl} target="_blank" rel="noopener">release page ↗</a></p>}
+          </div>
         )}
         {check.phase === 'error' && <p className="small muted" style={{ marginBottom: 0 }}>{check.msg}</p>}
         {updState.phase === 'done' && <div className="info-box mt">{updState.msg}</div>}

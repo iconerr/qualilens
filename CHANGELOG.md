@@ -9,6 +9,17 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.8.1 — 2026-09-24
+
+- Check for updates now says what changed. When a newer release exists,
+  the first paragraph of its release notes appears under the result in
+  Settings, so the decision to install can be made there; the release page
+  link carries the rest. The notes ride along with the check's own answer,
+  so the privacy claim is unchanged: one request to GitHub, only when you
+  press the button.
+- The website has a What's New page, written from this changelog, so what
+  each release changed is readable without visiting GitHub.
+
 ## 1.8.0 — 2026-09-24
 
 - API keys are encrypted at rest. Each saved key is stored as ciphertext,
