@@ -16,6 +16,13 @@
     "can price the model the project chose; a model with no entry uses the",
     "default. Prices are the authors' reading of public list prices at the",
     "time of editing and are not guaranteed — check the provider's page.",
+    "Google: the 3.6, 3.7 and 3.8 Flash prices are introductory until",
+    "2026-12-31 ($1.50 / $7.50 from 2027-01-01) — update the default then.",
+    "The 2.5 prices are kept, unlisted, for projects that still use them.",
+    "Check models asks Google about each listed model for free, because",
+    "Google keeps listing models it refuses to some projects (the 2.5",
+    "models, for projects new to them). paid_only names models a free key",
+    "has zero quota for, which no free check can see; the wizard marks them.",
     "If this file is missing or invalid, the app falls back to defaults",
     "compiled into backend/app/llm.py. An in-app update replaces this file;",
     "an edited copy is saved as <data folder>/models.json.previous so your",
@@ -54,17 +61,39 @@
   },
   "google": {
     "label": "Google (Gemini)",
-    "default_model": "gemini-2.5-pro",
+    "default_model": "gemini-3.6-flash",
     "models": [
-      "gemini-2.5-pro",
-      "gemini-2.5-flash"
+      "gemini-3.6-flash",
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-pro-preview"
     ],
     "pricing_usd_per_mtok": {
       "default": [
+        0.75,
+        3.75
+      ],
+      "gemini-3.5-flash-lite": [
+        0.3,
+        2.5
+      ],
+      "gemini-3.1-pro-preview": [
+        2.0,
+        12.0
+      ],
+      "gemini-2.5-pro": [
         1.25,
         10.0
+      ],
+      "gemini-2.5-flash": [
+        0.3,
+        2.5
       ]
-    }
+    },
+    "paid_only": [
+      "gemini-3.1-pro-preview"
+    ]
   },
   "mistral": {
     "label": "Mistral",

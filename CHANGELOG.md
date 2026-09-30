@@ -9,6 +9,49 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.8.2 — 2026-09-30
+
+- Gemini works again for new Google projects. Google now offers the
+  Gemini 2.5 models only to projects that used them before and refuses them
+  to others as "no longer available to new users"; the catalog offered only
+  those models, so a new Google key failed at Test and at the first call of
+  a run. The catalog now offers `gemini-3.6-flash` (the default),
+  `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.5-flash-lite`, and
+  `gemini-3.1-pro-preview`, with per-model prices; the wizard marks the
+  last `— paid tier only`, since a free key has no quota for it. A project
+  already set to a 2.5 model keeps it, and its estimate keeps 2.5 prices.
+- Check models catches a model Google lists but refuses. Google's model
+  list still includes the 2.5 models for projects that cannot use them, so
+  the check reported them as live. For Google it now also asks about each
+  catalog model through Google's free token-counting endpoint, marks a
+  refused model ✗ with Google's reason, and the wizard disables it. Continue
+  on the wizard's model step runs the same check before it creates the
+  project, whenever a key was just typed or no check has finished.
+- Gemini errors say what happened. A refused model says so and names the
+  model Google suggests, instead of suggesting it was retired, and says
+  when that suggestion is paid-only. A model with no free-tier quota —
+  `gemini-3.1-pro-preview` on a free key — fails at once with the steps to
+  Google's paid tier, instead of after a minute of retries; a spent daily
+  quota says when it resets; a paid project is pointed to a higher tier
+  rather than to billing; and a per-minute limit waits as long as Google
+  asks. An answer Gemini stopped for safety or recitation is refused as
+  incomplete rather than parsed.
+- Gemini token counts include thinking. Gemini bills the tokens it spends
+  thinking as output but reports them apart from the answer, and the Run
+  screen, the report, and the audit log counted only the answer — a
+  sixfold undercount on one call we measured. They now count both, and each
+  call's audit entry records the thinking share. Reports from earlier
+  Gemini runs understate output tokens for the same reason.
+- Gemini 3 models run at Google's default temperature, as Google advises,
+  and the audit log says so; the older Gemini models keep the temperature
+  QualiLens sets.
+- The wizard's custom-model field no longer suggests Google's speech,
+  image, music, robotics, and agent models, which cannot do a coding pass.
+- The manual and the wizard describe Google's free tier. Outside the EEA,
+  Switzerland, and the UK, on a key whose project is not on Google's paid
+  tier, Google may use what you send to improve its products and human
+  reviewers may read it, so it is unsuitable for confidential data.
+
 ## 1.8.1 — 2026-09-24
 
 - Check for updates now says what changed. When a newer release exists,

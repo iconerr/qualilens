@@ -257,7 +257,9 @@ def check_models(body: dict):
     """Compare this app's model catalog with each provider's LIVE model list
     (their free list-models endpoint, called with the user's own key). This is
     how a maintainer learns a catalog entry has been retired — no telemetry,
-    no token spend."""
+    no token spend. For Google, whose list keeps models it refuses to some
+    projects, each listed catalog model is also asked through the free
+    countTokens endpoint; a refused one is reported with Google's reason."""
     only = _s(body, "provider")
     if only and only not in llm.PROVIDERS:
         _err(400, f"Unknown provider '{only}'")
@@ -276,11 +278,19 @@ def check_models(body: dict):
             out[pid] = {"ok": False, "error": str(e)[:300]}
             continue
         live_set = set(live)
+        try:
+            refused = llm.unavailable_models(
+                pid, key, [m for m in info["models"] if m in live_set])
+        except Exception:  # noqa: BLE001 — the probe is advisory
+            refused = {}
         out[pid] = {
             "ok": True,
-            "catalog": [{"id": m, "available": m in live_set}
+            "catalog": [{"id": m, "available": m in live_set and m not in refused,
+                         "reason": refused.get(m, "" if m in live_set
+                                               else "not in the provider's live list")}
                         for m in info["models"]],
-            "missing": [m for m in info["models"] if m not in live_set],
+            "missing": [m for m in info["models"] if m not in live_set or m in refused],
+            "refused": refused,
             "live_count": len(live),
             "live": live[:200],
         }
@@ -708,7 +718,8 @@ def estimate(project_id: str):
     cat = llm.catalog()
     model = (config.get("model") or "").strip() or cat.get(provider, {}).get("default_model", "")
     p_in, p_out = llm.price_for(provider, model, cat)
-    priced_by_model = model in cat.get(provider, {}).get("pricing_by_model", {})
+    priced_by_model = (llm.price_key(provider, model)
+                       in cat.get(provider, {}).get("pricing_by_model", {}))
     cost = est_in / 1e6 * p_in + est_out / 1e6 * p_out
     return {"n_sources": len(sources), "total_chars": total_chars,
             "est_input_tokens": est_in, "est_output_tokens": est_out,

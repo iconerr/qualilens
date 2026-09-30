@@ -15,6 +15,8 @@ export interface MethodMeta {
 }
 export interface ProviderMeta {
   id: string; label: string; default_model: string; models: string[]; has_key: boolean;
+  // models a free key has zero quota for (no free check can see quota)
+  paid_only?: string[];
 }
 export interface Meta {
   methods: MethodMeta[]; providers: ProviderMeta[]; ffmpeg: boolean; version?: string;
@@ -205,7 +207,9 @@ export const api = {
       `/api/runs/${runId}/codes/${codeId}/excerpts`),
   checkModels: (provider?: string) =>
     j<Record<string, { ok: boolean; error?: string; missing?: string[];
-      catalog?: { id: string; available: boolean }[];
+      catalog?: { id: string; available: boolean; reason?: string }[];
+      // listed by the provider but refused to this key, with the reason
+      refused?: Record<string, string>;
       live_count?: number; live?: string[] }>>(
       '/api/settings/check_models', post({ provider })),
   // A bundle older than the installed build answers 409: the error carries

@@ -173,6 +173,8 @@ export default function Settings() {
     try {
       await api.saveKeys({ [pid]: v })
       setDrafts(d => ({ ...d, [pid]: '' }))
+      // what the provider refuses depends on the key: the old key's check no longer applies
+      setModelCheck(m => ({ ...m, [pid]: undefined }))
       setStatus(s => ({ ...s, [pid]: 'Saved.' }))
       load()
     } catch (e: any) { setStatus(s => ({ ...s, [pid]: `Save failed: ${String(e.message ?? e)}` })) }
@@ -181,6 +183,7 @@ export default function Settings() {
   const clear = async (pid: string) => {
     try {
       await api.saveKeys({ [pid]: '__clear__' })
+      setModelCheck(m => ({ ...m, [pid]: undefined }))
       setStatus(s => ({ ...s, [pid]: 'Cleared.' }))
       load()
     } catch (e: any) { setStatus(s => ({ ...s, [pid]: `Remove failed: ${String(e.message ?? e)}` })) }
@@ -192,9 +195,13 @@ export default function Settings() {
       const r = await api.checkModels(pid)
       setModelCheck(m => ({ ...m, [pid]: r[pid] }))
       const res = r[pid]
+      const refused = Object.keys(res.refused ?? {}).length
+      const gone = (res.missing ?? []).length - refused
       setStatus(s => ({ ...s, [pid]: res.ok
         ? (res.missing!.length
-            ? `${res.missing!.length} catalog model(s) NOT in the provider's live list — likely retired.`
+            ? [gone && `${gone} catalog model(s) NOT in the provider's live list — likely retired.`,
+               refused && `${refused} catalog model(s) listed by the provider but refused to this key.`]
+                .filter(Boolean).join(' ')
             : 'All catalog models are live at the provider.')
         : `Check failed: ${res.error}` }))
     } catch (e: any) { setStatus(s => ({ ...s, [pid]: `Check failed: ${String(e.message ?? e)}` })) }
@@ -274,14 +281,34 @@ export default function Settings() {
                 <div className="prow-extra">
                   <div className="row" style={{ gap: 8 }}>
                     {modelCheck[p.id].catalog.map((m: any) => (
-                      <span key={m.id} className={`badge ${m.available ? 'completed' : 'failed'}`}>
+                      <span key={m.id} className={`badge ${m.available ? 'completed' : 'failed'}`}
+                        title={m.reason || undefined}>
                         {m.available ? '✓' : '✗'} {m.id}
                       </span>
                     ))}
                   </div>
-                  {modelCheck[p.id].missing.length > 0 && (
+                  {(p.paid_only ?? []).length > 0 && (
+                    <p className="small muted" style={{ marginTop: 6 }}>
+                      {(p.paid_only ?? []).join(', ')} {(p.paid_only ?? []).length === 1 ? 'needs' : 'need'} the
+                      provider’s paid tier: a free key has no quota for {(p.paid_only ?? []).length === 1 ? 'it' : 'them'},
+                      which this check cannot see. Test in the wizard with that model to confirm.
+                    </p>
+                  )}
+                  {Object.keys(modelCheck[p.id].refused ?? {}).length > 0 && (
+                    <div className="small" style={{ marginTop: 6 }}>
+                      <p>The provider lists these models but refuses them to this key, so they are
+                        disabled in the wizard. The provider’s reason for each:</p>
+                      {Object.entries(modelCheck[p.id].refused as Record<string, string>).map(([id, why]) => (
+                        <p key={id} className="muted"><code>{id}</code>: {why}
+                          {why.includes('no longer available to new users') &&
+                            ' It is not retired: projects that used it before can still call it.'}</p>
+                      ))}
+                    </div>
+                  )}
+                  {modelCheck[p.id].missing.length > Object.keys(modelCheck[p.id].refused ?? {}).length && (
                     <p className="small" style={{ marginTop: 6 }}>
-                      Models marked ✗ are absent from the provider’s live list. Update
+                      {Object.keys(modelCheck[p.id].refused ?? {}).length > 0 ? 'The other models' : 'Models'}
+                      {' '}marked ✗ are absent from the provider’s live list. Update
                       <code> backend/app/models.json</code> — instructions are in that file’s
                       own <code>_readme</code> — or use a custom model id in the wizard meanwhile.
                     </p>

@@ -94,6 +94,14 @@ marked ✗ is no longer served: pick a different one in the wizard, or type
 any current model id under **Custom model id…** there. Run the check when a
 model choice starts failing, and before you pass the app to a colleague.
 
+Google's list is not the whole story. Google keeps listing some models it
+refuses to projects that have not used them before (the Gemini 2.5 models
+among them), so for Google the check also asks about each model in the
+catalog through Google's free token-counting endpoint. A model Google lists
+but refuses to your key is marked ✗ with Google's reason, and the wizard
+disables it. The same model may still work for a colleague whose project
+used it earlier.
+
 ### Where keys are stored
 
 Your keys live in the `settings` table of the local SQLite database, encrypted. The secret that encrypts them is a small file that QualiLens creates the first time it needs one, outside the data folder, in a place no sync service follows: `~/Library/Application Support/QualiLens/secret.key` on macOS, `~/.config/qualilens/secret.key` on Linux and WSL. The Settings screen names the file in use. `QUALILENS_SECRET_FILE` moves it, the same way `QUALILENS_DATA_DIR` moves the data folder. Keys are not held in your system keychain.

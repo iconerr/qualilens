@@ -114,7 +114,12 @@ These appear as a failed run, with the error printed on the Run screen. You can 
 | `HTTP 401` | The key is invalid, revoked, or belongs to a different provider | Test the key in Settings, replace it, then Resume |
 | `HTTP 403` or a message about model access | Your account cannot reach the selected model | Choose a different model. The model is fixed for the project, so this means a new project |
 | `<provider> did not accept the model id '<m>' — the provider may have retired or renamed it` | The provider no longer serves that model id | Press **Check models** in Settings to see which catalog models are still live, then start a new project with a current model, or type a custom model id in the wizard |
+| `Google no longer offers <m> to new users` | Google keeps the model, the Gemini 2.5 models among them, only for projects that used it before. It is not retired, so Google may still list it | Start a new project with a current Gemini model; the message names the one Google suggests. **Check models** in Settings marks the models your key cannot use |
+| `<m> is not on Google's free tier` | The key's project is on Google's free tier, which gives no quota for this model (`gemini-3.1-pro-preview` is one); QualiLens fails at once rather than retrying | Upgrade the project to Google's paid tier (link a billing account and prepay at least $5; AI Studio's Projects page shows the tier), then Resume, or start a new project with a model on the free tier |
+| `This project's Google tier gives no quota for <m>` | The project is on a paid tier that does not include this model | Start a new project with another model, or ask Google for access or a higher tier |
+| `This project's daily Google quota for <m> is used up` | A per-day quota is spent; it resets at midnight Pacific time | Resume after the reset. On the free tier the paid tier raises the quota; on a paid tier, ask Google for a higher one |
 | `HTTP 429` | Rate limited, after the app had already retried up to five times with increasing delays and honored the provider's own retry hint | Wait and Resume. On a large corpus, a cheaper or less contended model finishes more reliably |
+| `HTTP 503` with `high demand` or `UNAVAILABLE` | The provider was overloaded throughout the retries; Google's newest Flash models are the likeliest | Wait and Resume. The model is fixed for the project, so a model that stays overloaded means a new project with another model |
 | `HTTP 402` or a message about credit | The account has no funds | Add credit, then Resume |
 | `Network error` or `Exhausted retries` | The connection dropped, or the provider was unreachable throughout the retries | Check connectivity and Resume |
 
@@ -131,6 +136,8 @@ These are QualiLens refusing output it cannot trust, rather than the provider fa
 `JSON repair was itself truncated; giving up` means the repair call also failed. Resume the run.
 
 `Gemini returned no candidates (block reason: ...)` means a safety filter blocked the response. Qualitative data about health, violence, or abuse can trigger this. Resume once. A different provider is the practical remedy if the same segment blocks repeatedly.
+
+`Gemini stopped without a complete answer (finish reason: ...)` means Gemini began an answer and then stopped it. `SAFETY` and `PROHIBITED_CONTENT` mean a content filter stopped it; `RECITATION` means Google withheld it for repeating source text too closely, which long verbatim quotes from published papers can trigger in a literature synthesis. QualiLens refuses the partial answer rather than parsing it. Resume once, and use a different provider if the same segment stops again.
 
 ### Errors from the analysis stages
 

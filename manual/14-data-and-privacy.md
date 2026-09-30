@@ -25,14 +25,14 @@ Analysis calls carry your data to the provider whose key you supplied, over a di
 | Report narrative | The final structure with names, definitions, counts, and sample quotes |
 | Transcription | The recording itself, uploaded to OpenAI's speech-to-text service, as extracted audio for video and in ten-minute chunks for large files |
 | Test key | A single trivial message carrying no data of yours |
-| Check models | Your API key to its own provider's free list-models endpoint, and nothing else |
+| Check models | Your API key to its own provider's free list-models endpoint; for Google, also the word "ok" to its free token-counting endpoint, once for each model in the catalog. Nothing else |
 | Check for updates | Nothing of yours — one request to GitHub asking for the latest QualiLens release, made only when you press the button |
 
 Your research question and every setup answer travel with most calls. Anything identifying that you typed into those fields therefore travels too.
 
 Your API key is sent to its own provider as an authorization header, and to nobody else.
 
-The sampling settings each call ran with — the temperature where QualiLens sets one, and the token budget — are recorded on the call's audit entry, because they differ by provider: Anthropic's models and OpenAI's reasoning models run at the provider's default temperature, the others at the value recorded.
+The sampling settings each call ran with — the temperature where QualiLens sets one, and the token budget — are recorded on the call's audit entry, because they differ by provider: Anthropic's models, OpenAI's reasoning models, and Google's Gemini 3 and later run at the provider's default temperature, the others at the value recorded. The token counts include the tokens a model spends thinking before it answers, which providers bill as output.
 
 One thing you should know about what travels: the text of your sources is placed inside the prompt as data. Every prompt tells the model that the text between the fences is data and never an instruction, and no stage acts on anything the model says outside the JSON it is asked for. A document that contains instruction-like text — most plausibly a paper downloaded from the web in a literature synthesis — could still influence how the model reads it. Nothing in QualiLens can be made to act by such text; what it can do is colour an extraction, which the extraction review exists to catch.
 
@@ -45,6 +45,8 @@ The server binds to 127.0.0.1, so QualiLens is reachable only from the computer 
 ## What the provider does with it
 
 Your agreement with the provider governs that, rather than this software, and the terms differ between providers and between account tiers. Three questions matter. How long does the provider retain your inputs? May it use them to improve its models? Is an enterprise or zero-retention arrangement available to you? Settle all three with the provider before you upload human subjects data. QualiLens cannot answer them for you. Get a data processing agreement from the provider you intend to name if your protocol requires one.
+
+One tier difference is stark enough to state here. Google's Gemini API terms (last modified 28 April 2026) treat a key as a free, unpaid service unless its Google Cloud project is linked to an active billing account, and Google's billing page adds that reaching the paid tier means linking a billing account and prepaying at least $5; AI Studio's Projects page shows which tier each project is on. Outside the European Economic Area, Switzerland, and the United Kingdom, Google may use what you send on the unpaid service to improve its products, human reviewers may read it, and the terms ask you not to send sensitive, confidential, or personal information. On the paid service, Google says it does not use prompts or responses to improve its products, and inside those three regions the terms apply that paid-service rule to free keys as well. Outside them, a free Gemini key is therefore unsuitable for interview transcripts or other identifiable data: move the key's project to the paid tier first. Inside them, confirm with your data protection officer that the terms cover what your protocol promises. Check the current terms at ai.google.dev before you name Google in a protocol, since they change.
 
 The one thing QualiLens guarantees is that your data go to that provider and to nobody else.
 

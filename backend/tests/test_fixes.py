@@ -916,6 +916,295 @@ def test_mistral_invalid_model_gets_diagnosis(monkeypatch):
         llm.chat("mistral", "mistral-medium-2312", "sk-x", "s", "u")
 
 
+# ---------- Gemini: models refused to new projects, quotas, thinking ----------
+
+class _Resp:
+    def __init__(self, status, body, headers=None):
+        self.status_code, self._body, self.headers = status, body, headers or {}
+        self.text = json.dumps(body)
+
+    def json(self):
+        return self._body
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+
+def _fake_client(handler, calls=None):
+    """An httpx.Client stand-in whose get/post answer from handler(method,
+    url, json); each call's url and keyword arguments land in calls."""
+    class C:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+        def get(self, url, **k):
+            if calls is not None:
+                calls.append((url, k))
+            return handler("GET", url, k.get("json"))
+
+        def post(self, url, **k):
+            if calls is not None:
+                calls.append((url, k))
+            return handler("POST", url, k.get("json"))
+    return C
+
+
+_RESTRICTED_404 = ("HTTP 404: {'error': {'code': 404, 'message': 'This model models/gemini-2.5-pro "
+                   "is no longer available to new users. Please update your code to use "
+                   "models/gemini-3.1-pro-preview for the latest features and improvements.', "
+                   "'status': 'NOT_FOUND'}}")
+
+
+def _google_429(message, quota_ids, retry="18s"):
+    return {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": message, "details": [
+        {"@type": "type.googleapis.com/google.rpc.QuotaFailure",
+         "violations": [{"quotaId": q} for q in quota_ids]},
+        {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": retry}]}}
+
+
+def test_google_list_models_keeps_only_text_models(monkeypatch):
+    listed = [("gemini-3.6-flash", ["generateContent", "countTokens"]),
+              ("gemini-flash-latest", ["generateContent"]),
+              ("gemini-3.8-flash-tts", ["generateContent"]),
+              ("gemini-3.1-flash-image", ["generateContent"]),
+              ("gemini-2.5-computer-use-preview-10-2025", ["generateContent"]),
+              ("gemini-robotics-er-2-preview", ["generateContent"]),
+              ("gemma-4-31b-it", ["generateContent"]),
+              ("lyria-3.5", ["generateContent"]),
+              ("deep-research-preview-04-2026", ["generateContent"]),
+              ("gemini-embedding-001", ["embedContent"])]
+    body = {"models": [{"name": f"models/{n}", "supportedGenerationMethods": m} for n, m in listed]}
+    monkeypatch.setattr(llm.httpx, "Client", _fake_client(lambda *a: _Resp(200, body)))
+    assert llm.list_models("google", "k") == ["gemini-3.6-flash", "gemini-flash-latest"]
+
+
+def test_google_model_refused_to_new_users_gets_plain_diagnosis(monkeypatch):
+    def refused(*a, **k):
+        raise llm.LLMError(_RESTRICTED_404)
+    monkeypatch.setattr(llm, "_chat_impl", refused)
+    with pytest.raises(llm.LLMError) as ei:
+        llm.chat("google", "gemini-2.5-pro", "k", "s", "u")
+    msg = str(ei.value)
+    assert "no longer offers gemini-2.5-pro to new users" in msg
+    # Google's suggestion is paid-only: a free key is pointed at the default
+    assert ("Google suggests gemini-3.1-pro-preview, which is not on Google's free tier; "
+            "on a free key choose one that is, such as gemini-3.6-flash") in msg
+    assert "Check models shows which catalog models Google refuses" in msg
+    assert "retired or renamed" not in msg          # it is neither
+    assert "Original error" in msg and "NOT_FOUND" in msg
+
+
+def test_unavailable_models_asks_google_for_free(monkeypatch):
+    calls = []
+    statuses = {"gemini-2.5-pro": 404, "gemini-denied": 403, "gemini-busy": 503,
+                "gemini-limited": 429, "gemini-broken": 500, "gemini-badkey": 400}
+
+    def handler(method, url, body):
+        if "gemini-flaky" in url:
+            raise llm.httpx.ConnectError("down")
+        for mid, status in statuses.items():
+            if f"/{mid}:countTokens" in url:
+                return _Resp(status, {"error": {"code": status, "message": f"{mid} says {status}"}})
+        return _Resp(200, {"totalTokens": 1})
+    monkeypatch.setattr(llm.httpx, "Client", _fake_client(handler, calls))
+    models = ["gemini-3.6-flash", "gemini-flaky", *statuses]
+    out = llm.unavailable_models("google", "the-key", models)
+    # only a refusal (403/404) counts; overload, rate limits and server
+    # errors prove nothing about access, so those models stay usable
+    assert out == {"gemini-2.5-pro": "gemini-2.5-pro says 404",
+                   "gemini-denied": "gemini-denied says 403"}
+    probed = [u for u, _ in calls]
+    assert all(u.endswith(":countTokens") and "key=" not in u for u in probed)
+    assert all(k["headers"]["x-goog-api-key"] == "the-key" for _, k in calls)
+    assert len(calls) == len(models)                  # the flaky one was asked too
+    # the other providers' lists are taken at their word: no calls at all
+    calls.clear()
+    assert llm.unavailable_models("anthropic", "k", ["claude-x"]) == {}
+    assert calls == []
+
+
+def test_check_models_marks_google_models_refused_to_this_key(monkeypatch):
+    client.put('/api/settings/keys', json={"google": "test-google-key"})
+    try:
+        catalog = llm.catalog()["google"]["models"]
+        refused_id, gone_id = catalog[0], catalog[-1]
+        live = [m for m in catalog if m != gone_id]
+        probed = []
+
+        def fake_probe(p, k, ms):
+            probed.append(list(ms))
+            return {refused_id: "no longer available to new users"} if refused_id in ms else {}
+        monkeypatch.setattr(llm, "list_models", lambda p, k: list(live))
+        monkeypatch.setattr(llm, "unavailable_models", fake_probe)
+        res = client.post('/api/settings/check_models', json={"provider": "google"}).json()["google"]
+        assert probed == [live]                        # only listed models are probed
+        assert res["ok"] and set(res["missing"]) == {refused_id, gone_id}
+        assert res["refused"] == {refused_id: "no longer available to new users"}
+        by_id = {c["id"]: c for c in res["catalog"]}
+        assert by_id[refused_id]["available"] is False and "new users" in by_id[refused_id]["reason"]
+        assert by_id[gone_id]["available"] is False
+        assert by_id[gone_id]["reason"] == "not in the provider's live list"
+        assert all(c["available"] for m, c in by_id.items() if m not in (refused_id, gone_id))
+        # the probe is advisory: if it fails, the list's answer stands
+        def broken(*a):
+            raise RuntimeError("probe down")
+        monkeypatch.setattr(llm, "unavailable_models", broken)
+        res = client.post('/api/settings/check_models', json={"provider": "google"}).json()["google"]
+        assert res["ok"] and res["missing"] == [gone_id] and res["refused"] == {}
+    finally:
+        client.put('/api/settings/keys', json={"google": "__clear__"})
+
+
+def test_google_quota_that_cannot_recover_fails_fast(monkeypatch):
+    slept = []
+    monkeypatch.setattr(llm.time, "sleep", slept.append)
+    zero_free = _google_429("Quota exceeded for metric: generate_content_free_tier_requests, "
+                            "limit: 0, model: gemini-3.1-pro",
+                            ["GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+                             "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"])
+    daily_paid = _google_429("Quota exceeded for metric: generate_content_requests, limit: 250",
+                             ["GenerateRequestsPerDayPerProjectPerModel"])
+    daily_free = _google_429("Quota exceeded, limit: 20",
+                             ["GenerateRequestsPerDayPerProjectPerModel-FreeTier"])
+    for body, kind, free in ((zero_free, "zero", True), (daily_paid, "daily", False),
+                             (daily_free, "daily", True)):
+        monkeypatch.setattr(llm.httpx, "Client", _fake_client(lambda *a, b=body: _Resp(429, b)))
+        with pytest.raises(llm.LLMError) as ei:
+            llm._post_with_retry("https://generativelanguage.googleapis.com/x", {}, {})
+        assert (ei.value.quota, ei.value.free_tier) == (kind, free)
+    assert slept == []                                # none was waited out
+
+    # chat() turns them into plain advice, and the paid tier is offered only
+    # to a project that is on the free tier
+    def raise_quota(kind, free):
+        def f(*a, **k):
+            e = llm.LLMError("HTTP 429: {...}")
+            e.quota, e.free_tier = kind, free
+            raise e
+        return f
+    cases = [("zero", True, "gemini-3.1-pro-preview",
+              ["not on Google's free tier", "prepay at least $5", "such as gemini-3.6-flash"], []),
+             ("zero", False, "gemini-3.1-pro-preview",
+              ["tier gives no quota", "higher tier"], ["prepay"]),
+             ("daily", True, "gemini-3.6-flash",
+              ["midnight Pacific", "prepay at least $5"], []),
+             ("daily", False, "gemini-3.6-flash",
+              ["midnight Pacific", "higher tier"], ["prepay"])]
+    for kind, free, model, present, absent in cases:
+        monkeypatch.setattr(llm, "_chat_impl", raise_quota(kind, free))
+        with pytest.raises(llm.LLMError) as ei:
+            llm.chat("google", model, "k", "s", "u")
+        msg = str(ei.value)
+        assert all(p in msg for p in present), (kind, free, msg)
+        assert not any(a in msg for a in absent), (kind, free, msg)
+
+
+def test_per_minute_429_honors_googles_retry_delay_and_others_still_retry(monkeypatch):
+    slept = []
+    monkeypatch.setattr(llm.time, "sleep", slept.append)
+    ok = {"candidates": []}
+    per_minute = _google_429("Quota exceeded, limit: 15", ["GenerateRequestsPerMinutePerProjectPerModel"],
+                             retry="7.5s")
+    answers = iter([_Resp(429, per_minute), _Resp(200, ok)])
+    monkeypatch.setattr(llm.httpx, "Client", _fake_client(lambda *a: next(answers)))
+    assert llm._post_with_retry("https://generativelanguage.googleapis.com/x", {}, {}) == ok
+    assert slept == [7.5]
+    # an OpenAI-shaped 429 carries no google.rpc details: plain backoff, as before
+    slept.clear()
+    openai_429 = {"error": {"message": "Rate limit reached", "type": "requests", "code": "rate_limit_exceeded"}}
+    answers = iter([_Resp(429, openai_429), _Resp(200, ok)])
+    monkeypatch.setattr(llm.httpx, "Client", _fake_client(lambda *a: next(answers)))
+    assert llm._post_with_retry("https://api.openai.com/x", {}, {}) == ok
+    assert slept == [2]
+
+
+def test_gemini_bills_thinking_and_refuses_incomplete_answers(monkeypatch):
+    seen = {}
+    reply = {}
+
+    def fake_post(url, headers, payload, retries=5):
+        seen["url"], seen["payload"] = url, payload
+        return reply
+    monkeypatch.setattr(llm, "_post_with_retry", fake_post)
+    reply.update({"candidates": [{"finishReason": "STOP", "content": {"parts": [
+        {"text": "thinking out loud", "thought": True},
+        {"text": '{"codes": []}', "thoughtSignature": "abc"}]}}],
+        "usageMetadata": {"promptTokenCount": 80, "candidatesTokenCount": 147, "thoughtsTokenCount": 793}})
+    text, u = llm.chat("google", "models/gemini-3.6-flash", "k", "s", "u", max_tokens=100, temperature=0.2)
+    assert text == '{"codes": []}'                         # thought parts never reach the parser
+    assert u["output_tokens"] == 147 + 793 and u["thinking_tokens"] == 793
+    # a pasted 'models/' prefix is not doubled in the URL
+    assert seen["url"] == ("https://generativelanguage.googleapis.com/v1beta/models/"
+                           "gemini-3.6-flash:generateContent")
+    assert "temperature" not in seen["payload"]["generationConfig"]
+    assert u["sampling"]["temperature"] == "provider default"
+    # an older family, prefixed, keeps the temperature QualiLens sets
+    llm.chat("google", "models/gemini-2.5-flash", "k", "s", "u", max_tokens=100, temperature=0.2)
+    assert seen["url"].endswith("/v1beta/models/gemini-2.5-flash:generateContent")
+    assert seen["payload"]["generationConfig"]["temperature"] == 0.2
+    # a filtered or withheld answer may be partial: refused, and still billed
+    for reason in ("SAFETY", "RECITATION", "PROHIBITED_CONTENT"):
+        reply["candidates"][0]["finishReason"] = reason
+        with pytest.raises(llm.LLMError, match=f"finish reason: {reason}") as ei:
+            llm.chat("google", "gemini-3.6-flash", "k", "s", "u")
+        assert ei.value.usage["output_tokens"] == 147 + 793
+    reply["candidates"] = []
+    reply["promptFeedback"] = {"blockReason": "SAFETY"}
+    with pytest.raises(llm.LLMError, match="no candidates") as ei:
+        llm.chat("google", "gemini-3.6-flash", "k", "s", "u")
+    assert ei.value.usage["input_tokens"] == 80
+
+
+def test_repaired_gemini_json_keeps_both_calls_thinking(monkeypatch):
+    answers = iter([
+        {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": "{codes: [}"}]}}],
+         "usageMetadata": {"promptTokenCount": 100, "candidatesTokenCount": 20, "thoughtsTokenCount": 300}},
+        {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": '{"codes": []}'}]}}],
+         "usageMetadata": {"promptTokenCount": 50, "candidatesTokenCount": 10, "thoughtsTokenCount": 40}}])
+    monkeypatch.setattr(llm, "_post_with_retry", lambda *a, **k: next(answers))
+    out, u = llm.chat_json("google", "gemini-3.6-flash", "k", "s", "u")
+    assert out == {"codes": []} and u["repair_call"] is True
+    assert u["input_tokens"] == 150
+    assert u["output_tokens"] == 20 + 300 + 10 + 40 and u["thinking_tokens"] == 340
+
+
+def test_google_prices_follow_the_model_the_project_uses():
+    cat = llm.catalog()
+    assert llm.price_for("google", "gemini-3.6-flash", cat) == (0.75, 3.75)
+    assert llm.price_for("google", "models/gemini-3.1-pro-preview", cat) == (2.0, 12.0)
+    # unlisted, but a project that still uses 2.5 is priced as 2.5
+    assert llm.price_for("google", "gemini-2.5-pro", cat) == (1.25, 10.0)
+    assert llm.price_key("google", " models/gemini-2.5-flash ") == "gemini-2.5-flash"
+    assert llm.price_key("openai", "models/x") == "models/x"   # only Google's ids carry it
+
+
+def test_paid_only_models_reach_the_wizard(tmp_path, monkeypatch):
+    meta = client.get('/api/meta').json()
+    google = next(p for p in meta["providers"] if p["id"] == "google")
+    assert google["paid_only"] == ["gemini-3.1-pro-preview"]
+    assert all(p["paid_only"] == [] for p in meta["providers"] if p["id"] != "google")
+    # a malformed entry is ignored, never fatal
+    edited = tmp_path / "models.json"
+    edited.write_text(json.dumps({"google": {"models": ["g-1"], "paid_only": "g-1"}}))
+    monkeypatch.setattr(llm, "CATALOG_PATH", edited)
+    assert llm.catalog()["google"]["paid_only"] == []
+    # and the compiled-in fallback carries the same list and prices
+    edited.write_text("{not json")
+    fb = llm.catalog()["google"]
+    assert fb["paid_only"] == ["gemini-3.1-pro-preview"]
+    assert llm.price_for("google", "gemini-2.5-pro", llm.catalog()) == (1.25, 10.0)
+
+
+def test_shipped_google_catalog_offers_no_restricted_model():
+    """The 2.5 models are refused to new Google projects; the catalog must
+    not offer them, nor fall back to them if models.json is unreadable."""
+    for cat in (llm.catalog()["google"], llm._FALLBACK_CATALOG["google"]):
+        assert not any(m.startswith("gemini-2.") for m in cat["models"])
+        assert cat["default_model"] == "gemini-3.6-flash"
+
+
 # ---------- in-place app update ----------
 
 # a throwaway release key for the tests; the real one never ships

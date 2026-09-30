@@ -64,8 +64,10 @@ Every method uses the same providers. You choose the provider and model once per
 |---|---|---|
 | Anthropic (Claude) | `claude-sonnet-5`, `claude-opus-5`, `claude-haiku-4-5-20251001` | `claude-sonnet-5` |
 | OpenAI (GPT) | `gpt-5.1`, `gpt-5`, `gpt-4.1`, `gpt-4o` | `gpt-5.1` |
-| Google (Gemini) | `gemini-2.5-pro`, `gemini-2.5-flash` | `gemini-2.5-pro` |
+| Google (Gemini) | `gemini-3.6-flash`, `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-pro-preview` | `gemini-3.6-flash` |
 | Mistral | `mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest` | `mistral-large-latest` |
+
+Two notes on Google. Google no longer offers the Gemini 2.5 models to projects that have not used them before, so the catalog offers the Gemini 3 line instead; a project that already uses a 2.5 model keeps it, and an account that still has access can type a 2.5 id under **Custom model id…**. `gemini-3.1-pro-preview`, marked `— paid tier only` in the wizard, is not on Google's free tier: it needs a key whose project is on Google's paid tier, which means linking a billing account and prepaying at least $5 (AI Studio's Projects page shows each project's tier), and as a preview Google may withdraw it at short notice. The Flash models run on a free key, but read the note on Google's free tier in [Data, Privacy, and Governance](14-data-and-privacy.md) before you send it confidential data.
 
 Three considerations bear on your choice. None of them is about which AI model is best in the abstract.
 

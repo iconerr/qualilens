@@ -58,7 +58,7 @@ Three controls sit on this screen. Continue does more work here than on any othe
 
 **Analysis provider** lists the four providers. A provider with a key already saved is marked `— Ready` in the list.
 
-**Model** lists the models QualiLens offers for that provider, and it defaults to the provider's default model. Choosing a provider resets the model to that default. The model you pick performs every coding, grouping, and narrative call in the run.
+**Model** lists the models QualiLens offers for that provider, and it defaults to the provider's default model. Choosing a provider resets the model to that default. The model you pick performs every coding, grouping, and narrative call in the run. Once a key is saved, the list is checked against the provider, as **Check models** does in Settings: a model the provider no longer offers, or lists but refuses to your key, is marked and disabled, and Continue will not accept it. A model marked `— paid tier only` needs a key on the provider's paid tier; a free key has no quota for it, which that check cannot see, so press **Test key** with it selected. A custom model id is not checked.
 
 **API key** accepts a pasted key. The label tells you when a key is already saved, and you can leave the field blank to keep that key. Anything you type replaces the saved key when you press Continue.
 
@@ -66,7 +66,7 @@ Three controls sit on this screen. Continue does more work here than on any othe
 
 ### What Continue does here
 
-Pressing Continue on this step performs four actions in order. It saves the API key if you typed one. It assembles your configuration from the setup answers plus the provider and model. It creates the project in the database. It advances you to the Data step.
+Pressing Continue on this step performs up to five actions in order. It saves the API key if you typed one. Unless you chose a custom model id, it checks the model against the provider when you typed a key, or when no check has finished yet; the button reads `Checking models…` meanwhile. If the provider no longer offers the model, or refuses it to this key, Continue stops there with a message saying so: any key you typed is already saved, so choose another model and press Continue again. If the check itself fails, for example because you are offline, Continue carries on. It then assembles your configuration from the setup answers plus the provider and model, creates the project in the database, and advances you to the Data step.
 
 Two consequences follow. Your project now exists and appears on the Projects list even if you abandon the wizard at the next step, and you can delete it from there. And the project is updated rather than duplicated if you press Back from a later step, change your answers, and press Continue through this step again. The run therefore uses what you last saw rather than the first snapshot.
 
@@ -150,8 +150,10 @@ The character count of all ready sources is converted to tokens at four characte
 |---|---|---|
 | Anthropic | $3.00 | $15.00 |
 | OpenAI | $2.50 | $10.00 |
-| Google | $1.25 | $10.00 |
+| Google | $0.75 | $3.75 |
 | Mistral | $2.00 | $6.00 |
+
+The Google row is the price of the default Gemini Flash models, which Google calls introductory until 31 December 2026; from 1 January 2027 it is $1.50 and $7.50. `gemini-3.5-flash-lite` ($0.30 and $2.50) and `gemini-3.1-pro-preview` ($2.00 and $12.00, for prompts up to 200,000 tokens) carry their own prices in the catalog, and so do `gemini-2.5-pro` ($1.25 and $10.00) and `gemini-2.5-flash` ($0.30 and $2.50) for projects that still use them.
 
 Four things the estimate does not know are worth holding in mind. It uses the built-in price table rather than the price your account actually pays, so a discounted or a premium rate will move the real figure; the table prices each provider as a whole unless `backend/app/models.json` lists a price for the model you chose, and the estimate box says which of the two it used. It assumes one pass through the pipeline, so a run you resume after a failure, or a second run over the same project, costs again for the stages that repeat. It does not model reasoning tokens, which several current AI models spend internally and bill as output. And it cannot know how verbose your chosen model will be.
 

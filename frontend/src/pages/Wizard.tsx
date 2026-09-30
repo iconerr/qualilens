@@ -22,7 +22,11 @@ export default function Wizard() {
   const [model, setModel] = useState('')
   const [customModel, setCustomModel] = useState(false)
   const [modelTouched, setModelTouched] = useState(false)
-  const [liveCheck, setLiveCheck] = useState<{ missing: string[]; live: string[] } | null>(null)
+  // missing = not in the live list, or listed but refused to this key (refused, with the reason)
+  const [liveCheck, setLiveCheck] = useState<{ missing: string[]; live: string[];
+                                               refused: Record<string, string> } | null>(null)
+  const [busy, setBusy] = useState(false)   // Continue is working
+  const busyRef = useRef(false)             // the same, before React re-renders
   const [keyDraft, setKeyDraft] = useState('')
   const [keyStatus, setKeyStatus] = useState<{ ok: boolean; msg: string } | null>(null)
   const [testing, setTesting] = useState(false)
@@ -48,6 +52,10 @@ export default function Wizard() {
   const hasMedia = sources.some(s => s.kind !== 'text')
   const transcribing = sources.some(s => s.status === 'transcribing')
   const readyCount = sources.filter(s => s.status === 'ready').length
+  // catalog models the live check ruled out: listed but refused, or gone
+  const refusedIds = liveCheck ? liveCheck.missing.filter(m => m in liveCheck.refused) : []
+  const goneIds = liveCheck ? liveCheck.missing.filter(m => !(m in liveCheck.refused)) : []
+  const paidOnly = providerMeta?.paid_only ?? []
 
   // With a saved key, verify the catalog against the provider's live model
   // list (free) so the dropdown can flag retired entries and the custom
@@ -58,22 +66,25 @@ export default function Wizard() {
     let alive = true
     api.checkModels(provider).then(r => {
       const res = r[provider]
-      if (alive && res?.ok) setLiveCheck({ missing: res.missing ?? [], live: res.live ?? [] })
+      if (alive && res?.ok) setLiveCheck({ missing: res.missing ?? [], live: res.live ?? [],
+                                           refused: res.refused ?? {} })
     }).catch(() => { /* advisory only — the wizard works without it */ })
     return () => { alive = false }
   }, [provider, providerMeta?.has_key])
 
-  // If the preselected default is absent from the live list and the user has
-  // not chosen anything yet, move the selection to the first live catalog
-  // model rather than letting the run fail later.
+  // If the preselected default is unavailable and the user has not chosen
+  // anything yet, move the selection to the first available catalog model
+  // rather than letting the run fail later. Only on this step: once the
+  // project exists, a silent change would make the review screen name a
+  // model the project does not use.
   useEffect(() => {
-    if (!liveCheck || modelTouched || customModel || !providerMeta) return
+    if (step !== 2 || busy || !liveCheck || modelTouched || customModel || !providerMeta) return
     const current = model || providerMeta.default_model
     if (liveCheck.missing.includes(current)) {
       const alt = providerMeta.models.find(m => !liveCheck.missing.includes(m))
       if (alt) setModel(alt)
     }
-  }, [liveCheck, modelTouched, customModel, providerMeta, model])
+  }, [step, busy, liveCheck, modelTouched, customModel, providerMeta, model])
 
   // poll while transcription is running
   useEffect(() => {
@@ -103,6 +114,11 @@ export default function Wizard() {
       if (!provider) return 'Choose a provider.'
       if (customModel && !model.trim())
         return 'Enter the custom model id (or pick one from the list).'
+      // a typed custom id is the documented escape hatch, so only a listed
+      // choice the live check has ruled out is refused here
+      const chosen = model.trim() || providerMeta?.default_model || ''
+      if (!customModel && liveCheck?.missing.includes(chosen))
+        return `${chosen} is not available to this key. Choose another model, or a custom model id.`
       if (!providerMeta?.has_key && !keyDraft.trim())
         return 'Enter an API key for the selected provider.'
     }
@@ -117,15 +133,34 @@ export default function Wizard() {
   }
 
   const next = async () => {
+    // Continue can now wait several seconds on the model check; a second
+    // click meanwhile would create the project twice
+    if (busyRef.current) return
     const v = validateStep()
     if (v) { setError(v); return }
     setError('')
+    busyRef.current = true; setBusy(true)
     try {
       if (step === 2) {
-        if (keyDraft.trim()) {
+        const savedKey = !!keyDraft.trim()
+        if (savedKey) {
           await api.saveKeys({ [provider]: keyDraft.trim() })
           setKeyDraft('')
           setMeta(await api.meta())
+        }
+        // check the chosen model before the project is created: a key pasted
+        // here has had no check yet, and a saved key's may still be on its way
+        if (!customModel && (savedKey || !liveCheck)) {
+          const res = (await api.checkModels(provider).catch(() => null))?.[provider]
+          const chosen = model.trim() || providerMeta?.default_model || ''
+          if (res?.ok) {
+            setLiveCheck({ missing: res.missing ?? [], live: res.live ?? [], refused: res.refused ?? {} })
+            if ((res.missing ?? []).includes(chosen)) {
+              setError(`${savedKey ? 'Key saved. ' : ''}${chosen} is not available to this key; ` +
+                       'choose another model and press Continue again.')
+              return
+            }
+          }
         }
         const cfg = { ...answers, provider, model: model.trim() || providerMeta?.default_model || '' }
         if (!projectId) {
@@ -140,6 +175,7 @@ export default function Wizard() {
       if (step === 3) setEstimate(await api.estimate(projectId))
       setStep(s => s + 1)
     } catch (e: any) { setError(String(e.message ?? e)) }
+    finally { busyRef.current = false; setBusy(false) }
   }
 
   const doTestKey = async () => {
@@ -238,7 +274,7 @@ export default function Wizard() {
         <div className="card">
           <label className="field">
             <span className="lbl">Analysis provider</span>
-            <select value={provider} onChange={e => { setProvider(e.target.value); setModel(''); setCustomModel(false); setKeyStatus(null) }}>
+            <select value={provider} disabled={busy} onChange={e => { setProvider(e.target.value); setModel(''); setCustomModel(false); setKeyStatus(null) }}>
               <option value="">Choose…</option>
               {meta.providers.map(p => (
                 <option key={p.id} value={p.id}>{p.label}{p.has_key ? ' — Ready' : ''}</option>
@@ -250,6 +286,7 @@ export default function Wizard() {
               <label className="field">
                 <span className="lbl">Model</span>
                 <select value={customModel ? '__custom__' : (model || providerMeta.default_model)}
+                  disabled={busy}
                   onChange={e => {
                     setModelTouched(true)
                     if (e.target.value === '__custom__') { setCustomModel(true); setModel('') }
@@ -257,9 +294,12 @@ export default function Wizard() {
                   }}>
                   {providerMeta.models.map(m => {
                     const retired = liveCheck?.missing.includes(m)
+                    const refused = !!liveCheck && m in liveCheck.refused
                     return (
                       <option key={m} value={m} disabled={retired}>
-                        {m}{retired ? ' — not offered by the provider (retired?)' : ''}
+                        {m}{refused ? ' — not available to this key'
+                          : retired ? ' — not offered by the provider (retired?)'
+                          : paidOnly.includes(m) ? ' — paid tier only' : ''}
                       </option>
                     )
                   })}
@@ -267,7 +307,7 @@ export default function Wizard() {
                 </select>
                 {customModel && (
                   <>
-                    <input type="text" value={model} style={{ marginTop: 6 }}
+                    <input type="text" value={model} style={{ marginTop: 6 }} disabled={busy}
                       list="ql-live-models"
                       onChange={e => { setModelTouched(true); setModel(e.target.value) }}
                       placeholder={liveCheck
@@ -280,19 +320,38 @@ export default function Wizard() {
                 )}
                 {liveCheck && liveCheck.missing.length > 0 && (
                   <span className="hint" style={{ color: 'var(--amber)' }}>
-                    Verified against the provider just now: {liveCheck.missing.join(', ')}{' '}
-                    {liveCheck.missing.length === 1 ? 'is' : 'are'} no longer offered and
-                    {' '}{liveCheck.missing.length === 1 ? 'has' : 'have'} been disabled above.
+                    Verified against the provider just now:
+                    {goneIds.length > 0 && <> {goneIds.join(', ')}{' '}
+                      {goneIds.length === 1 ? 'is' : 'are'} no longer offered.</>}
+                    {refusedIds.length > 0 && <> {refusedIds.join(', ')}{' '}
+                      {refusedIds.length === 1 ? 'is' : 'are'} listed but refused to this key.</>}
+                    {' '}{liveCheck.missing.length === 1 ? 'It has' : 'They have'} been disabled above.
                   </span>
                 )}
                 {liveCheck && liveCheck.missing.length === 0 && (
                   <span className="hint" style={{ color: 'var(--green)' }}>
-                    ✓ All listed models verified against the provider just now.
+                    ✓ The provider offers every listed model to this key, checked just now.
+                    {' '}Quota is not checked; Test key does that.
+                  </span>
+                )}
+                {!customModel && paidOnly.includes(model || providerMeta.default_model) && (
+                  <span className="hint" style={{ color: 'var(--amber)' }}>
+                    {model || providerMeta.default_model} is not on the provider’s free tier: a free key
+                    has no quota for it, which the check above cannot see. Press Test key to confirm
+                    your key can use it before you continue.
                   </span>
                 )}
                 <span className="hint">The model that will perform coding and synthesis.
-                  {' '}If a listed model has been retired by the provider, Settings → Check
+                  {' '}If a listed model has been retired, or is refused to your key, Settings → Check
                   models will say so; a custom id works immediately.</span>
+                {provider === 'google' && (
+                  <span className="hint">Outside the EEA, Switzerland, and the UK, on Google’s free
+                    tier Google may use what you send to improve its products, and human reviewers
+                    may read it. A key is on the free tier until AI Studio shows its project on the
+                    paid tier (upgrading means linking a billing account and prepaying at least $5).
+                    Use a paid-tier key for confidential or identifiable data; the manual’s chapter
+                    on data and privacy has the details.</span>
+                )}
               </label>
               <label className="field">
                 <span className="lbl">API key {providerMeta.has_key && <span className="muted">(saved — leave blank to keep)</span>}</span>
@@ -381,8 +440,9 @@ export default function Wizard() {
       )}
 
       <div className="row spread mt">
-        <button onClick={() => { setError(''); setStep(s => Math.max(0, s - 1)) }} disabled={step === 0}>Back</button>
-        {step < 4 && <button className="primary" onClick={next}>Continue</button>}
+        <button onClick={() => { setError(''); setStep(s => Math.max(0, s - 1)) }} disabled={step === 0 || busy}>Back</button>
+        {step < 4 && <button className="primary" onClick={next} disabled={busy}>
+          {busy && step === 2 ? 'Checking models…' : 'Continue'}</button>}
       </div>
     </div>
   )
