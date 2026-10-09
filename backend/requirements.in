@@ -1,0 +1,22 @@
+# Copyright 2026 Ashita Aggarwal and Suraj Commuri
+# SPDX-License-Identifier: Apache-2.0
+#
+# The packages QualiLens depends on directly. requirements.txt is generated
+# from this file: it pins every package, direct and indirect, with the
+# SHA-256 hash of each file PyPI publishes for it, so pip installs nothing
+# else and nothing altered (run.sh, CI). Edit this file, then regenerate:
+#
+#   uv pip compile backend/requirements.in --universal --python-version 3.11 \
+#       --generate-hashes -o backend/requirements.txt
+#
+# --universal resolves one file for every Python from 3.11 and every platform.
+fastapi==0.141.1
+uvicorn==0.52.4
+httpx==0.28.1
+python-multipart==0.0.32
+python-docx==1.2.0
+pypdf==6.19.0
+pytest==9.1.1
+matplotlib==3.11.1
+cryptography==50.0.1
+openpyxl==3.1.5

@@ -9,6 +9,43 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.9.0 — 2026-10-08
+
+- Other accounts on a shared computer can no longer reach your projects
+  through the app. The page the app served handed its session token to
+  whoever asked for it, and a connection to the app does not say which
+  account on the computer made it, so on a shared Mac or a lab server
+  another account could read your projects and use your keys. The launcher
+  now opens a launch page readable by your account only, which signs your
+  browser in, and the app gives the token to no one else. A tab opened by
+  address in a browser that has not been signed in shows how to open
+  QualiLens, and the launcher's Terminal window names the launch page.
+- Word reports and checkpoint spreadsheets no longer fail on control
+  characters. A form feed in a source, which PDF-to-text tools write at
+  every page break, made the Word export and the checkpoint spreadsheet
+  fail for the whole run. Such characters are now cleaned when a source is
+  added and again when either file is written, which covers sources added
+  before this release.
+- QualiLens handles untrusted files more cautiously. A .docx or a
+  checkpoint workbook that would unpack to an implausible size is refused
+  before it is opened, and ffmpeg may read a recording only from disk,
+  never from the network.
+- QualiLens now uses pypdf 6.19.0, which fixes eight published flaws that
+  let a crafted PDF make text extraction run for a very long time or
+  exhaust memory.
+- Dependencies are pinned with hashes. Python packages, including the ones
+  QualiLens uses indirectly, are installed at fixed versions and checked
+  against the hash of the published file, and the launcher builds the
+  interface of a GitHub clone with `npm ci`.
+- Intel Macs are not supported. A library QualiLens needs for encryption
+  and for checking update signatures stopped publishing builds for Intel
+  Macs, so installation there has failed since 1.5.0 with a misleading
+  message. The launcher now says so plainly, and it tells someone running
+  an Intel Python on an Apple-silicon Mac how to fix that.
+- Settings links to What's New. Beside the version in the Application card,
+  **What's new** opens the website's page of what each release changed, so
+  the record is one click from the app.
+
 ## 1.8.2 — 2026-09-30
 
 - Gemini works again for new Google projects. Google now offers the

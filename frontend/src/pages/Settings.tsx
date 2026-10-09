@@ -3,20 +3,24 @@
 
 import { useEffect, useState } from 'react'
 import { useRef } from 'react'
-import { ageLabel, api, testKey, versionLabel, type KeyStatus, type Meta } from '../api'
+import { adoptToken, ageLabel, api, testKey, versionLabel, type KeyStatus, type Meta } from '../api'
 
 // After an update the server stops itself so ./run.sh can relaunch the new
 // build. This page has nothing to talk to until then, and when the new server
 // comes up it mints a new session token that this page does not hold. So the
-// page waits, polls the root URL (which needs no token), and the moment a
-// server answers with a different build stamp than the one this page was
-// served by, reloads itself — which is exactly what the human would otherwise
-// be told to do, and the step that used to strand people on a token error.
+// page waits and polls the root URL, which needs no token and names the build.
+// When a server answers with a different build stamp than the one this page
+// was served by, the page signs in with the new token, which the server
+// includes once this browser holds the new cookie. The launch page ./run.sh
+// opens sets that cookie a moment after the server is up. Without this step
+// the human would be told to reload, and that step used to strand people on
+// a token error.
 const THIS_BUILD = document.querySelector('meta[name="ql-build"]')?.getAttribute('content') ?? ''
 
 function UpdateWaiting({ detail }: { detail: string }) {
   const [secs, setSecs] = useState(0)
   const [sameBuildFor, setSameBuildFor] = useState(0)
+  const [newBuildUp, setNewBuildUp] = useState(false)
   useEffect(() => {
     let alive = true
     const tick = async () => {
@@ -27,7 +31,12 @@ function UpdateWaiting({ detail }: { detail: string }) {
         if (res.ok) {
           const html = await res.text()
           const build = /<meta name="ql-build" content="([^"]*)"/.exec(html)?.[1] ?? ''
-          if (build && build !== THIS_BUILD) { window.location.reload(); return }
+          if (build && build !== THIS_BUILD) {
+            const token = /<meta name="ql-token" content="([^"]*)"/.exec(html)?.[1] ?? ''
+            if (token) { alive = false; adoptToken(token); return }
+            setNewBuildUp(true)            // up, but the launch page has not signed this browser in yet
+            return
+          }
           setSameBuildFor(t => t + 2)      // a server answered, but not a new build (yet)
         }
       } catch { /* connection refused: the app is between stop and relaunch */ }
@@ -35,7 +44,6 @@ function UpdateWaiting({ detail }: { detail: string }) {
     const id = window.setInterval(tick, 2000)
     return () => { alive = false; window.clearInterval(id) }
   }, [])
-  const origin = window.location.origin
   return (
     <div className="page" style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -57,9 +65,12 @@ function UpdateWaiting({ detail }: { detail: string }) {
         <b>This page reconnects on its own</b> once the new build is up; nothing else to do.
       </p>
       <p className="small muted" style={{ margin: 0 }}>
-        Waiting for the new build… {secs > 0 && <span className="mono">{secs}s</span>}
+        {newBuildUp
+          ? <>The new build is running. This page follows once the tab <code>./run.sh</code> opened
+              has loaded.</>
+          : <>Waiting for the new build… {secs > 0 && <span className="mono">{secs}s</span>}</>}
       </p>
-      {(secs >= 60 || sameBuildFor >= 20) && (
+      {!newBuildUp && (secs >= 60 || sameBuildFor >= 20) && (
         <div className="warn-box" style={{ maxWidth: 520, textAlign: 'left' }}>
           {sameBuildFor >= 20
             ? <>A server is answering, but it runs the same build as before. If you relaunched
@@ -68,8 +79,8 @@ function UpdateWaiting({ detail }: { detail: string }) {
                 again in the updated folder.</>
             : <>Not reconnecting yet. If the launcher says the port is already in use, an older
                 server is still running — stop it with the command it prints, then run{' '}
-                <code>./run.sh</code> again. Once the app says it is running, this page
-                reloads; if it does not, open <a href={origin}>{origin}</a> in a new tab.</>}
+                <code>./run.sh</code> again. Once the app says it is running, it opens in a
+                new tab, and this page follows.</>}
         </div>
       )}
       <div className="row" style={{ gap: 10 }}>
@@ -374,7 +385,10 @@ export default function Settings() {
         <div className="panel-body">
         <table className="facts"><tbody>
           <tr><td className="muted">Version</td>
-            <td>{versionLabel(meta.release, meta.version)}</td></tr>
+            <td>{versionLabel(meta.release, meta.version)}
+              {' · '}<a href="https://qualilens.org/docs/whats-new" target="_blank" rel="noopener"
+                style={{ whiteSpace: 'nowrap' }}
+                title="What each release changed, on the QualiLens website">What’s new ↗</a></td></tr>
           <tr><td className="muted">Updates checked</td>
             <td>{meta.update_hint?.last_checked
               ? (meta.update_hint.days_since_check === 0 ? 'today' : `${ageLabel(meta.update_hint.days_since_check)} ago`)

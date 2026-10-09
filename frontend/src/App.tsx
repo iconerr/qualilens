@@ -10,7 +10,8 @@ import RunPage from './pages/Run'
 import ReportPage from './pages/Report'
 import SourceReader from './pages/SourceReader'
 import Settings from './pages/Settings'
-import { versionLabel } from './api'
+import NotSignedIn from './NotSignedIn'
+import { signedIn, versionLabel } from './api'
 
 const QL_LINEAGE = 'ql-a2f4467befc3477b9caea1866a2af37e'
 
@@ -73,6 +74,8 @@ function CoreCategoryEgg({ onDone }: { onDone: () => void }) {
 export default function App() {
   const [egg, setEgg] = useState(false)
   useKonami(() => setEgg(true))
+  // a tab without the session token can reach nothing but the manual
+  const ok = signedIn()
   return (
     <>
       <header className="topbar">
@@ -93,19 +96,23 @@ export default function App() {
           <a href="/manual.html" target="_blank" rel="noopener"
             title="Opens the manual in a new tab; your work here stays where it is">
             Manual<span className="ext" aria-hidden="true">↗</span></a>
-          <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>Settings</NavLink>
-          <NavLink to="/new" className="nav-primary">New analysis</NavLink>
+          {ok && <>
+            <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>Settings</NavLink>
+            <NavLink to="/new" className="nav-primary">New analysis</NavLink>
+          </>}
         </nav>
       </header>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/new" element={<Wizard />} />
-        <Route path="/projects/:id" element={<ProjectPage />} />
-        <Route path="/runs/:id" element={<RunPage />} />
-        <Route path="/runs/:id/report" element={<ReportPage />} />
-        <Route path="/runs/:runId/sources/:sourceId" element={<SourceReader />} />
-        <Route path="/settings" element={<Settings />} />
-      </Routes>
+      {ok ? (
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/new" element={<Wizard />} />
+          <Route path="/projects/:id" element={<ProjectPage />} />
+          <Route path="/runs/:id" element={<RunPage />} />
+          <Route path="/runs/:id/report" element={<ReportPage />} />
+          <Route path="/runs/:runId/sources/:sourceId" element={<SourceReader />} />
+          <Route path="/settings" element={<Settings />} />
+        </Routes>
+      ) : <NotSignedIn />}
       <footer className="footer" data-ql={QL_LINEAGE}>
         QualiLens <span className="mono" title="The version you are running; Settings has the update check">{RUNNING}</span> ·
         © 2026 <a href="https://in.linkedin.com/in/drashita" target="_blank" rel="noopener">Ashita Aggarwal</a> &amp; Suraj Commuri ·

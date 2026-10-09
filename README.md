@@ -15,7 +15,8 @@ that folder, so a synced or copied database carries no usable key.
 ```
 
 The first run builds the environment (a minute or two); afterwards it starts
-instantly. The app opens at http://127.0.0.1:8765. Stop it with Ctrl-C.
+instantly. The launcher opens the app in your browser at http://127.0.0.1:8765
+and signs that browser in. Stop it with Ctrl-C.
 
 ## What it does
 
@@ -130,10 +131,13 @@ is final. All projects persist in a local SQLite database
 - The server answers only to `127.0.0.1`/`localhost`, refuses any request
   whose origin is not exactly its own (another site, or another program on
   this machine serving pages on another port), and requires a per-launch
-  session token (injected into the page) on every API call — a web page you
-  happen to have open cannot reach your data or your keys through the app.
-  Uploads are bounded and streamed to disk; an update bundle older than the
-  installed build is refused unless you ask for the rollback.
+  session token on every API call, so a web page you happen to have open
+  cannot reach your data or your keys through the app. The token reaches
+  your browser through a launch page that `run.sh` opens, a file readable
+  by your account only, and the app gives it to no one else, so another
+  account on the same computer cannot use the app to read your projects.
+  Uploads are bounded and streamed to disk, and an update bundle older than
+  the installed build is refused unless you ask for the rollback.
 - The data folder and the database are readable by your account only, and a
   removed key leaves the file rather than lingering in freed space. The key
   secret lives at `~/Library/Application Support/QualiLens/secret.key` on
@@ -160,6 +164,9 @@ is final. All projects persist in a local SQLite database
   constrained by prompt and checked by a citation guard and a quote guard,
   which catch citation-shaped and quotation-shaped text that matches no
   uploaded paper — not a mention without a year.
+- Intel Macs are not supported. The library QualiLens uses for its key
+  store and for checking update signatures no longer publishes builds for
+  them.
 
 ## Keeping the model list current
 
@@ -193,8 +200,9 @@ this folder (manuals, memos, transcripts) are excluded by construction. The
 interface is rebuilt whenever its sources have changed since the last build,
 the manual is rebuilt every time, and the bundle is signed with the release
 key (the in-app updater refuses bundles that are unsigned, signed by another
-key, or altered). Recipients need only Python 3.11+ on macOS or Linux (WSL on
-Windows); they unzip and run `./run.sh`.
+key, or altered). Recipients need only Python 3.11 or later on a Mac with
+Apple silicon or on Linux (WSL on Windows), and they unzip and run
+`./run.sh`.
 
 Never share the project folder directly: `backend/data/` holds your API keys
 and participant data. If a folder is copied anyway, `run.sh` detects a Python

@@ -18,11 +18,20 @@ that door, applied to every request by the middleware below —
     another port, to which browsers would still send the cookie), and
   * every /api call must carry the per-launch session token, either in the
     X-QualiLens-Token header (the interface adds it to every fetch) or in
-    the SameSite=Strict cookie set with index.html (used by plain download
-    links). The token is minted at startup and injected into index.html, so
-    nothing outside this app ever learns it.
+    the SameSite=Strict cookie (used by plain download links).
+
+How the token reaches the browser matters as much as the guards. A
+connection to 127.0.0.1 says nothing about which account on the computer
+made it, so a token handed to whoever asks for / reaches every account on
+a shared machine, and with it the data the data folder's 0700 mode keeps
+from them. That was the case until 2026-10-08. Now ./run.sh opens a launch
+page (write_launch_page): a file readable by this account only, which sends
+the browser to /?token=…. That response carries the token and sets the
+cookie, and index.html carries the token for no one else (_index_html).
 """
 
+import atexit
+import contextlib
 import json
 import os
 import re
@@ -42,8 +51,28 @@ from . import (checkpoint_sheets, db, ingestion, keystore, llm, pipeline, report
                transcription, update)
 from .methods import METHODS
 
-app = FastAPI(title="QualiLens")
+# Work for the moment the server stops. atexit is not enough: after a graceful
+# shutdown on SIGTERM (the updater's own stop, or `kill <pid>`), uvicorn
+# re-raises the signal with its default action, which ends the process
+# without running atexit handlers. The lifespan's end does run first.
+_ON_SHUTDOWN: list = []
+
+
+@contextlib.asynccontextmanager
+async def _lifespan(_app):
+    yield
+    for task in _ON_SHUTDOWN:
+        try:
+            task()
+        except Exception:  # noqa: BLE001 — stopping must not fail on cleanup
+            pass
+
+
+app = FastAPI(title="QualiLens", lifespan=_lifespan)
 db.init_db()
+# fold the write-ahead log as the server stops (atexit does so too, but only
+# on Ctrl-C); PASSIVE, so a run thread still writing cannot hold up the stop
+_ON_SHUTDOWN.append(lambda: db.checkpoint_wal("PASSIVE"))
 # keys saved by a build before 1.8 are plaintext rows: encrypt them now, and
 # say so; a secret that cannot be created is reported here and in Settings
 _migrated = keystore.migrate_plaintext()
@@ -67,6 +96,40 @@ SESSION_TOKEN = (os.environ.get("QUALILENS_TOKEN") or "").strip() or secrets.tok
 TOKEN_HEADER = "x-qualilens-token"
 TOKEN_COOKIE = "qualilens_token"
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def write_launch_page(path: Path, port: int) -> None:
+    """The page ./run.sh opens in the browser. It sends the browser to this
+    server with the session token, which signs that browser in (_index_html).
+    It is created readable by this account only, in a folder run.sh made
+    private, and removed at exit. The token travels this way, not on the
+    command line of the program that opens the browser, because any account
+    on the computer can read a command line."""
+    url = f"http://127.0.0.1:{int(port)}/?token={quote(SESSION_TOKEN, safe='')}"
+    page = ('<!doctype html><meta charset="utf-8">'
+            f'<meta http-equiv="refresh" content="0;url={url}">'
+            '<title>Opening QualiLens…</title>'
+            '<p style="font-family:sans-serif">Opening QualiLens… If nothing happens, '
+            f'<a href="{url}">continue to QualiLens</a>.</p>\n')
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(page)
+    remove = lambda: Path(path).unlink(missing_ok=True)  # noqa: E731
+    _ON_SHUTDOWN.append(remove)
+    atexit.register(remove)
+
+
+# ./run.sh names the launch page's path (in a folder it created, mode 0700)
+# and the port; a server started any other way writes none
+LAUNCH_FILE = (os.environ.get("QUALILENS_LAUNCH_FILE") or "").strip()
+if LAUNCH_FILE:
+    _launch_port = (os.environ.get("QUALILENS_PORT") or "8765").strip()
+    try:
+        write_launch_page(Path(LAUNCH_FILE), int(_launch_port))
+    except (OSError, ValueError) as e:
+        print(f"WARNING: the launch page could not be written to {LAUNCH_FILE} ({e}). Open "
+              f"http://127.0.0.1:{_launch_port}/?token={quote(SESSION_TOKEN, safe='')} in "
+              "your browser; that address signs it in to QualiLens.", flush=True)
 
 # The build this process loaded. A running server keeps the code it started
 # with, however the folder changes afterwards, so this is read once, here —
@@ -128,9 +191,18 @@ def _origin_is_self(origin: str, host: str) -> bool:
     return bool(h) and _netloc(o) == h
 
 
+def _same_token(supplied) -> bool:
+    """supplied is the session token. Compared as bytes: compare_digest
+    refuses a str holding non-ASCII characters, which a header, cookie, or
+    query can carry, and that refusal was a 500 (2026-10-08)."""
+    if not supplied or not isinstance(supplied, str):
+        return False
+    return secrets.compare_digest(supplied.encode("utf-8", "surrogatepass"),
+                                  SESSION_TOKEN.encode("utf-8"))
+
+
 def _token_ok(request: Request) -> bool:
-    supplied = request.headers.get(TOKEN_HEADER) or request.cookies.get(TOKEN_COOKIE) or ""
-    return bool(supplied) and secrets.compare_digest(supplied, SESSION_TOKEN)
+    return _same_token(request.headers.get(TOKEN_HEADER) or request.cookies.get(TOKEN_COOKIE))
 
 
 @app.middleware("http")
@@ -1103,21 +1175,34 @@ if FRONTEND_DIST.exists():
 
     _DIST_BASE = FRONTEND_DIST.resolve()
 
-    def _index_html() -> HTMLResponse:
-        """index.html with the session token injected; never cached, so a
-        restart (new token) is picked up by the next page load. The cookie
-        lets plain <a href> downloads authenticate without a header."""
+    def _index_html(request: Request) -> HTMLResponse:
+        """index.html, never cached, so a restart (new token) is picked up by
+        the next page load. The session token is injected only for a browser
+        that holds it already: one the launch page sent here with ?token=…,
+        which also gets the cookie, or one carrying the cookie (any tab of a
+        browser a launch page signed in). Any other visitor, including another
+        account on this computer, gets the interface without the token, and
+        the interface says how to open QualiLens. The cookie lets plain
+        <a href> downloads authenticate without a header. The build stamps
+        stay public, because ./run.sh reads them to name the build that
+        holds the port."""
         html = (_DIST_BASE / "index.html").read_text(encoding="utf-8")
-        meta = (f'<meta name="ql-token" content="{SESSION_TOKEN}">'
-                f'<meta name="ql-build" content="{STARTED_BUILD}">'
-                f'<meta name="ql-release" content="{STARTED_RELEASE}">')
+        via_link = _same_token(request.query_params.get("token"))
+        signed_in = via_link or _same_token(request.cookies.get(TOKEN_COOKIE))
+        meta = ((f'<meta name="ql-token" content="{SESSION_TOKEN}">' if signed_in else "")
+                + f'<meta name="ql-build" content="{STARTED_BUILD}">'
+                + f'<meta name="ql-release" content="{STARTED_RELEASE}">')
         html = html.replace("</head>", meta + "</head>", 1) if "</head>" in html else meta + html
-        resp = HTMLResponse(html, headers={"Cache-Control": "no-store"})
-        resp.set_cookie(TOKEN_COOKIE, SESSION_TOKEN, httponly=True, samesite="strict", path="/")
+        # the launch address carries the token until the page takes it out of
+        # the address bar; no address of this app goes to another site
+        resp = HTMLResponse(html, headers={"Cache-Control": "no-store",
+                                           "Referrer-Policy": "same-origin"})
+        if via_link:
+            resp.set_cookie(TOKEN_COOKIE, SESSION_TOKEN, httponly=True, samesite="strict", path="/")
         return resp
 
     @app.get("/{full_path:path}")
-    def spa(full_path: str):
+    def spa(full_path: str, request: Request):
         if full_path == "api" or full_path.startswith("api/"):
             _err(404, "Unknown API route")
         # confine strictly to the built frontend directory — never serve
@@ -1127,7 +1212,7 @@ if FRONTEND_DIST.exists():
                 and _DIST_BASE in target.parents
                 and target.name != "index.html"):
             return FileResponse(target)
-        return _index_html()
+        return _index_html(request)
 
     def _warn_if_build_stale() -> None:
         """A dist built from older sources than the ones beside it is the

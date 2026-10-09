@@ -10,12 +10,18 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt, RGBColor
 
+from .untrusted import xml_safe_deep
+
 ACCENT = RGBColor(0x1F, 0x3A, 0x5F)
 MUTED = RGBColor(0x66, 0x66, 0x66)
 AMBER_TEXT = RGBColor(0x92, 0x60, 0x0A)
 
 
 def build_docx(payload: dict) -> bytes:
+    # a Word document is XML: a control character anywhere in the payload (a
+    # form feed in a quote, from a source stored before intake cleaned them)
+    # would fail the whole export, so every string is made XML-safe first
+    payload = xml_safe_deep(payload)
     doc = Document()
     # generator identification in the document properties (the visible
     # counterpart is the colophon at the end of the report)

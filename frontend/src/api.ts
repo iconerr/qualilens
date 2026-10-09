@@ -103,13 +103,54 @@ export interface Run extends RunSummary {
   pending_checkpoint: Checkpoint | null; has_report: boolean;
 }
 
-// The per-launch session token the server injects into index.html. Every
-// API request carries it; the server refuses /api calls without it, which is
-// what keeps other web pages (and DNS-rebinding hosts) out of this app.
-const TOKEN =
-  (typeof document !== 'undefined'
-    ? document.querySelector('meta[name="ql-token"]')?.getAttribute('content')
-    : null) ?? ''
+// The per-launch session token. Every API request carries it; the server
+// refuses /api calls without it, which keeps other web pages, DNS-rebinding
+// hosts, and other accounts on this computer out of the app. The server puts
+// it into index.html only for a browser that holds it already: one sent here
+// with ?token=… by the launch page ./run.sh opens, or one carrying the cookie
+// that visit set. The tab also keeps the token in sessionStorage, because a
+// browser may withhold that SameSite=Strict cookie when it reloads a page it
+// first reached from the launch file (a cross-site navigation).
+const TOKEN_KEY = 'ql-token'
+
+function takeToken(): string {
+  if (typeof document === 'undefined') return ''
+  const served = document.querySelector('meta[name="ql-token"]')?.getAttribute('content') ?? ''
+  let token = served
+  try {
+    if (served) sessionStorage.setItem(TOKEN_KEY, served)
+    else token = sessionStorage.getItem(TOKEN_KEY) ?? ''
+  } catch { /* storage unavailable: the served token is all there is */ }
+  // the launch address carries the token in its query: take it out of the
+  // address bar and the history entry now that the page holds it
+  try {
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('token')) {
+      url.searchParams.delete('token')
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
+    }
+  } catch { /* cosmetic */ }
+  return token
+}
+const TOKEN = takeToken()
+
+// Whether this tab can reach the API at all. Without a token the interface
+// says how to open QualiLens instead (NotSignedIn). The Vite dev server's
+// proxy adds the token itself, so a development page never needs one.
+export const signedIn = () => TOKEN !== '' || import.meta.env.DEV
+
+// What the server says to this browser now: its token when the browser
+// holds the cookie (another tab was signed in since this one loaded), else ''.
+// Adopting it and reloading signs this tab in.
+export async function tokenFromServer(): Promise<string> {
+  const res = await fetch('/', { cache: 'no-store', credentials: 'same-origin' })
+  if (!res.ok) return ''
+  return /<meta name="ql-token" content="([^"]*)"/.exec(await res.text())?.[1] ?? ''
+}
+export function adoptToken(token: string) {
+  try { sessionStorage.setItem(TOKEN_KEY, token) } catch { /* the cookie still serves the reload */ }
+  window.location.reload()
+}
 
 function withToken(init?: RequestInit): RequestInit {
   const headers = new Headers(init?.headers ?? {})
@@ -121,7 +162,9 @@ function withToken(init?: RequestInit): RequestInit {
 // longer knows: the app was restarted (an update, a relaunch) and the page
 // survived it — Safari restores tabs with their old script state for days.
 // The only remedy is the one the old error message asked the human for, so
-// do it for them: reload once, which fetches index.html and the new token.
+// do it for them: forget the dead token and reload once, which fetches
+// index.html and the new token — the browser holds it when ./run.sh's launch
+// page has signed it in again; otherwise the page says how to open QualiLens.
 // The guard stops a loop if reloading did not help (then the error shows).
 const STALE_KEY = 'ql-stale-reload'
 function reloadIfStaleToken(res: Response): boolean {
@@ -130,6 +173,7 @@ function reloadIfStaleToken(res: Response): boolean {
     const last = Number(sessionStorage.getItem(STALE_KEY) ?? 0)
     if (Date.now() - last < 15000) return false
     sessionStorage.setItem(STALE_KEY, String(Date.now()))
+    sessionStorage.removeItem(TOKEN_KEY)
   } catch { /* storage unavailable: still reload once per page life */ }
   window.location.reload()
   return true

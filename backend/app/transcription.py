@@ -95,7 +95,13 @@ def _split_audio(audio_path: Path, tmp: Path) -> list:
 
 
 def _run_ffmpeg(args: list) -> None:
-    proc = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *args],
+    # ffmpeg reads a file by its content, not its name: a playlist saved as
+    # .mp4 can name segments on a web server, and older ffmpeg builds fetch
+    # them, so a recording would make QualiLens contact a stranger's host.
+    # The input may use the file protocol only. (args begin with -i, so this
+    # input option applies to the recording.)
+    proc = subprocess.run(["ffmpeg", "-y", "-loglevel", "error",
+                           "-protocol_whitelist", "file", *args],
                           capture_output=True, text=True)
     if proc.returncode != 0:
         raise TranscriptionError(f"ffmpeg failed: {proc.stderr[:400]}")

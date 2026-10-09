@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 
 ## What you need before the first launch
 
+QualiLens runs on Macs with Apple silicon (M1 or later) and on Linux, and on Windows through WSL. Intel Macs are not supported, because a library the app needs for encryption and for checking update signatures is no longer published for them.
+
 What you need on your computer depends on how you received it.
 
 **If you received QualiLens as a zip bundle** (the file a colleague sends, or a release download), the interface is already built inside the bundle. You need only Python.
@@ -38,10 +40,11 @@ Open a terminal in the QualiLens folder and run the launcher.
 ./run.sh
 ```
 
-The first run creates a Python environment, installs the backend dependencies, and builds the interface. Expect that to take a minute or two. Every launch after the first is much faster, because the launcher checks for the built artifacts and skips the steps already done. Once the server is up, the launcher prints the address and opens your browser at it.
+The first run creates a Python environment, installs the backend dependencies, and builds the interface. Expect that to take a minute or two. Every launch after the first is much faster, because the launcher checks for the built artifacts and skips the steps already done. Once the server is up, the launcher prints the address and opens QualiLens in your browser, signed in.
 
 ```
 QualiLens running at http://127.0.0.1:8765  (Ctrl-C to stop)
+The launch page that signs a browser in is /var/folders/…/qualilens.Ab12Cd/open.html
 ```
 
 Stop the app with Ctrl-C in the terminal where it is running. Closing the browser tab does not stop it, and neither does minimising or forgetting the terminal window: the server keeps running until you stop it or the computer restarts. Closing the browser during a long analysis stage is also safe, because the run continues in the background and its state is saved as the run proceeds.
@@ -58,9 +61,7 @@ QUALILENS_PORT=8790 ./run.sh
 
 The address is bound to 127.0.0.1. QualiLens is therefore reachable only from the computer it runs on, and nothing on your network can open it.
 
-Your browser is the one thing on that computer that could. A web page you have open in another tab can send requests to any local port, and a page that has been made to resolve to 127.0.0.1 could try to read from it. QualiLens closes both routes. The server answers only when the request names `127.0.0.1` or `localhost` as its host, refuses any request a browser marks as coming from another site, and requires a session token on every API call. The token is minted fresh each time the app starts and written into the page the app serves, so only pages QualiLens itself served carry it. You will notice the token in one situation only: if the app is restarted while a tab stays open, the tab's next action is refused and the page reloads itself once to fetch the new token. You see a brief reload, and carry on.
-
-The app runs on macOS and Linux; on Windows, use WSL.
+Your browser is the one thing on that computer that could, and so is any other account on it, because a connection to 127.0.0.1 does not say which account made it. A web page you have open in another tab can send requests to any local port, and a page that has been made to resolve to 127.0.0.1 could try to read from it. QualiLens closes these routes. The server answers only when the request names `127.0.0.1` or `localhost` as its host, refuses any request a browser marks as coming from another site, and requires a session token on every API call. The token is minted fresh each time the app starts, and it reaches your browser through a launch page that the launcher opens, a file only your account can read. Opening that page signs the browser in, and every tab of that browser can then use the app. The address on its own signs nothing in, so a tab opened by address in a browser that has not been signed in shows how to open QualiLens instead of your projects. The launcher's Terminal window names the launch page, so you can sign in a second browser by opening that file in it.
 
 ## API keys
 
@@ -120,7 +121,9 @@ A sensible first session goes in this order. Save an API key in Settings and pre
 
 Open **Settings** and find the **Application** card — it names the version
 you are running, with its build stamp (the date and time the release was
-packaged); the footer of every page carries the same line. **Check for
+packaged); the footer of every page carries the same line. **What's new**,
+beside the version, opens the website's page of what each release changed,
+newest first, in a new browser tab. **Check for
 updates** asks GitHub for the latest published
 QualiLens release and compares it with your installation. The check is
 pull-only and happens only when you press the button: one request goes to
@@ -156,21 +159,23 @@ When the update is applied the app stops itself and the page changes to
 **Update installed**, which asks you to start the app again — in the Terminal
 window where it was running, press ↑ then Return, or run `./run.sh` in the
 QualiLens folder; the launcher also installs any new dependencies the update
-brought. The page then reconnects on its own: it checks every two seconds
-for the new build and, when it answers, reloads itself onto it. There is
-nothing to close or reopen. If a minute passes without a reconnection, the
+brought. The launcher opens the new build in a new tab, and this page
+follows on its own, because it checks every two seconds for the new build
+and signs itself in once the new tab has loaded. There is nothing to close
+or reopen. If a minute passes without a reconnection, the
 page says what to check, and the most common cause is an older copy of the
 app still holding the port, which the launcher reports by name with the
 command to stop it.
 
 A related courtesy applies at any restart, not only after an update. A tab
 left open across a restart holds a session token the new server does not
-know; the first thing it asks of the server is refused, and the page reloads
-itself once to fetch the new token rather than showing you the refusal.
-Browsers that restore tabs from days ago behave the same way. Only when a
-reload does not help — because the app is not running — does the message
-`Missing or stale session token` appear, and then the remedy is to start
-the app.
+know. The first thing it asks of the server is refused, and the page
+reloads itself once. If the launcher has already signed the browser in
+again, which it does at every start, the tab carries on. Otherwise the tab
+shows how to open QualiLens, and it signs itself in as soon as the new
+launch tab has loaded. Browsers that restore tabs from days ago behave the
+same way. The message `Missing or stale session token` appears only when
+the app is not running, and then the remedy is to start it.
 
 Replacing the folder by hand remains possible but is the dangerous path:
 `backend/data/` inside the old folder holds everything you have made. If you

@@ -7,7 +7,9 @@ Seeds a scratch database with a thematic run at its first checkpoint and a
 literature-synthesis run at its extraction table (mock model, no keys),
 serves the built interface, and drives the page: download the workbook,
 edit it, upload it, check what is staged on screen, approve, and read the
-audit trail. Needs Playwright with Chromium and openpyxl.
+audit trail. The browser signs in as ./run.sh has it do: through the launch
+page the server writes (QUALILENS_LAUNCH_FILE). Needs Playwright with
+Chromium and openpyxl.
 
     QL_TREE=/path/to/QualiLens QL_PYTHON=/path/to/.venv/bin/python \
         python backend/tests/e2e_sheets_browser.py
@@ -59,20 +61,28 @@ env = dict(os.environ, QUALILENS_DATA_DIR=str(DATA), QUALILENS_SECRET_FILE=str(D
 subprocess.run([PY, "-c", seed], env=env, check=True, capture_output=True)
 ids = json.load(open(DATA / "ids.json"))
 
+# only the server writes the launch page; the seed process above must not
+LAUNCH = DATA / "launch" / "open.html"; LAUNCH.parent.mkdir(mode=0o700)
+srv_env = dict(env, QUALILENS_LAUNCH_FILE=str(LAUNCH), QUALILENS_PORT=str(PORT))
 srv = subprocess.Popen([PY, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(PORT)],
-                       cwd=f"{TREE}/backend", env=env, stdout=open(DATA / "srv.log", "ab"), stderr=subprocess.STDOUT)
+                       cwd=f"{TREE}/backend", env=srv_env, stdout=open(DATA / "srv.log", "ab"), stderr=subprocess.STDOUT)
+import atexit; atexit.register(lambda: srv.poll() is None and srv.terminate())   # also when a wait fails
 for _ in range(60):
     try: urllib.request.urlopen(ORIGIN + "/", timeout=1); break
     except Exception: time.sleep(0.25)
+import re
+LAUNCH_URL = re.search(r'content="0;url=([^"]+)"', LAUNCH.read_text(encoding="utf-8")).group(1)
+# the token the tab holds: served in the page, else kept from the launch load
+TOKEN_JS = "(document.querySelector('meta[name=ql-token]')?.content || sessionStorage.getItem('ql-token'))"
 
 
 def wait_past(page, run_id, old_cp):
-    page.wait_for_function(f"""async () => {{ const t = document.querySelector('meta[name=ql-token]').content;
+    page.wait_for_function(f"""async () => {{ const t = {TOKEN_JS};
         const r = await fetch('/api/runs/{run_id}', {{headers: {{'X-QualiLens-Token': t}}}}); const d = await r.json();
         return d.status !== 'awaiting_review' || (d.pending_checkpoint && d.pending_checkpoint.id !== '{old_cp}') }}""", timeout=60000)
     page.wait_for_timeout(500)
 def cp_id(page, run_id):
-    return page.evaluate(f"""async () => {{ const t = document.querySelector('meta[name=ql-token]').content;
+    return page.evaluate(f"""async () => {{ const t = {TOKEN_JS};
         const r = await fetch('/api/runs/{run_id}', {{headers: {{'X-QualiLens-Token': t}}}}); const d = await r.json(); return d.pending_checkpoint && d.pending_checkpoint.id }}""")
 
 with sync_playwright() as p:
@@ -80,6 +90,8 @@ with sync_playwright() as p:
     ctx = b.new_context(viewport={"width": 1400, "height": 1000}, accept_downloads=True)
     page = ctx.new_page()
     page.on("dialog", lambda d: d.accept())
+    page.goto(LAUNCH_URL, wait_until="networkidle")    # what ./run.sh opens
+    check(page.evaluate(TOKEN_JS) and "?token=" not in page.url, "signed in through the launch page; token out of the address bar")
 
     # ================= code review =================
     page.goto(f"{ORIGIN}/#/runs/{ids['ta']}", wait_until="networkidle")
@@ -114,7 +126,7 @@ with sync_playwright() as p:
     old = cp_id(page, ids['ta'])
     page.click("text=Approve & continue")
     wait_past(page, ids['ta'], old)
-    events = page.evaluate(f"""async () => {{ const t = document.querySelector('meta[name=ql-token]').content;
+    events = page.evaluate(f"""async () => {{ const t = {TOKEN_JS};
         const r = await fetch('/api/runs/{ids['ta']}/events?after=0', {{headers: {{'X-QualiLens-Token': t}}}}); return (await r.json()).map(e => e.message) }}""")
     check(any("loaded from spreadsheet 'codebook.xlsx'" in m for m in events), "resolution event names the worksheet")
     check(any("Researcher note on code" in m and "gerund" in m for m in events), "note is in the audit trail")
@@ -143,7 +155,7 @@ with sync_playwright() as p:
     old = cp_id(page, ids['ls'])
     page.click("text=Approve & continue")
     wait_past(page, ids['ls'], old)
-    events = page.evaluate(f"""async () => {{ const t = document.querySelector('meta[name=ql-token]').content;
+    events = page.evaluate(f"""async () => {{ const t = {TOKEN_JS};
         const r = await fetch('/api/runs/{ids['ls']}/events?after=0', {{headers: {{'X-QualiLens-Token': t}}}}); return (await r.json()).map(e => e.message) }}""")
     check(any("edited extraction 'findings'" in m for m in events), "findings edit applied")
     check(any("excluded" in m and "from the synthesis" in m for m in events), "exclusion applied")

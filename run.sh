@@ -66,7 +66,7 @@ port_in_use_report() {
         echo "A QualiLens server has held it since ${started:-an unknown time} (process $holder); it predates build stamps, so it is older than this folder." >&2
       fi
       if [ "$running" = "$here" ]; then
-        echo "That is this folder's build ($here): open http://127.0.0.1:$PORT — or stop it first with:" >&2
+        echo "That is this folder's build ($here). Switch to the browser tab it opened, or stop it first with:" >&2
       else
         echo "This folder holds build $here. A running server keeps the code it started with, so stop it and run ./run.sh again:" >&2
       fi
@@ -89,6 +89,26 @@ fi
 
 # ---- Python environment ----
 
+# QualiLens supports Macs with Apple silicon, not Intel Macs. cryptography
+# (bundle signatures, the key store) has published no wheel for Intel Macs
+# since 49.0, and building it needs a Rust toolchain, so pip would fail with
+# nothing to say why. An Intel Python under Rosetta on an Apple-silicon Mac
+# fails the same way, so the environment's own Python is asked, not the
+# machine. Called before every install.
+refuse_intel_mac_python() {
+  [ "$(uname -s)" = Darwin ] || return 0
+  [ "$("$1" -c 'import platform; print(platform.machine())' 2>/dev/null)" = x86_64 ] || return 0
+  if [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then
+    fail "This Mac has Apple silicon, but the Python QualiLens found is an Intel build
+  running under Rosetta, and QualiLens's dependencies do not install on it.
+  Install a native Python (https://www.python.org/downloads/, or Homebrew in
+  /opt/homebrew), then run  rm -rf backend/.venv && ./run.sh"
+  fi
+  fail "QualiLens supports Macs with Apple silicon (M1 or later), not Intel Macs,
+  because a library it needs for encryption and for checking update signatures
+  is no longer published for Intel Macs."
+}
+
 # A venv is tied to the machine AND path that created it. Probe it by actually
 # importing the app's server package through the venv's own interpreter — a
 # venv copied from another machine (or a renamed folder) fails this and is
@@ -107,6 +127,7 @@ if [ ! -d backend/.venv ] || ! backend/.venv/bin/python -c 'import uvicorn' >/de
     echo "Creating Python environment with $PY (first run only)…"
     "$PY" -m venv backend/.venv || fail "Could not create the Python environment. Check that Python is installed correctly."
   fi
+  refuse_intel_mac_python backend/.venv/bin/python
   echo "Installing Python dependencies…"
   backend/.venv/bin/python -m pip -q install -r backend/requirements.txt \
     || fail "Python dependency installation failed. Check your internet connection and try again."
@@ -116,6 +137,7 @@ fi
 # what this environment was built against
 REQ_SHA="$(shasum backend/requirements.txt | cut -d' ' -f1)"
 if [ "$REQ_SHA" != "$(cat backend/.venv/req.sha 2>/dev/null)" ]; then
+  refuse_intel_mac_python backend/.venv/bin/python
   echo "Dependencies changed — updating the Python environment…"
   backend/.venv/bin/python -m pip -q install -r backend/requirements.txt \
     || fail "Python dependency update failed."
@@ -139,16 +161,18 @@ if [ ! -f frontend/dist/index.html ]; then
 
   echo "Building the interface (first run only — this takes about a minute)…"
 
+  # npm ci installs exactly what package-lock.json names, each package checked
+  # against the integrity hash the lock records; it never updates the lock
   echo "  Installing JavaScript dependencies…"
-  (cd frontend && npm install --loglevel=warn) \
+  (cd frontend && npm ci --loglevel=warn) \
     || fail "JavaScript dependency installation failed.
   Check your internet connection and available disk space, then try:
-    cd frontend && rm -rf node_modules && npm install"
+    cd frontend && rm -rf node_modules && npm ci"
 
   echo "  Compiling…"
   (cd frontend && npm run build) \
     || fail "Frontend build failed.
-  Try: cd frontend && rm -rf node_modules && npm install && npm run build
+  Try: cd frontend && rm -rf node_modules && npm ci && npm run build
   If the problem persists, open an issue at https://github.com/iconerr/qualilens/issues"
 
   echo "  Done."
@@ -156,14 +180,41 @@ fi
 
 # ---- Launch ----
 
-open_browser() {
-  if command -v open >/dev/null 2>&1; then open "$1"        # macOS
-  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$1"  # Linux
-  else echo "Open $1 in your browser."
+# The session token must not travel on a command line, which every account on
+# this computer can read (ps). So the server writes a launch page holding it,
+# readable by this account only, into a folder only this account can enter;
+# the browser opens that page, which signs it in. Until then the address gives
+# a browser nothing, so another account that visits it reaches no data.
+# (backend/app/main.py, write_launch_page)
+LAUNCH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/qualilens.XXXXXX")" \
+  || fail "Could not create a private temporary folder for the launch page."
+chmod 700 "$LAUNCH_DIR"
+export QUALILENS_LAUNCH_FILE="$LAUNCH_DIR/open.html"
+export QUALILENS_PORT="$PORT"
+
+open_launch_page() {
+  if command -v open >/dev/null 2>&1; then open "$1"                    # macOS
+  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$1" >/dev/null 2>&1  # Linux
+  else
+    echo ""
+    echo "Open this address in your browser to sign it in to QualiLens:"
+    echo "  $(sed -n 's/.*url=\([^"]*\)".*/\1/p' "$1" | head -1)"
   fi
 }
 
 echo ""
 echo "QualiLens running at http://127.0.0.1:$PORT  (Ctrl-C to stop)"
-(sleep 1.5 && open_browser "http://127.0.0.1:$PORT") &
+echo "The launch page that signs a browser in is $QUALILENS_LAUNCH_FILE"
+# Open the launch page once the server answers. The server writes the page
+# before it listens, and the first start after an update can take a while.
+(
+  for _ in $(seq 1 240); do
+    if [ -s "$QUALILENS_LAUNCH_FILE" ]; then
+      if ! command -v curl >/dev/null 2>&1; then sleep 2; break; fi
+      curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$PORT/" && break
+    fi
+    sleep 0.5
+  done
+  [ -s "$QUALILENS_LAUNCH_FILE" ] && open_launch_page "$QUALILENS_LAUNCH_FILE"
+) &
 cd backend && exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT"

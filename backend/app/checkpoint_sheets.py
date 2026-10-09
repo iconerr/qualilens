@@ -37,8 +37,14 @@ from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
+from .untrusted import ContainerRefused, xml_safe, zip_within_bounds
+
 MARK = "qualilens_checkpoint"          # workbook-defined name holding the checkpoint id
 MAX_BYTES = 10 * 1024 * 1024
+# what an uploaded workbook may unpack to: an exported sheet of every
+# excerpt of a large study is a few MB, so this refuses only a container
+# built to exhaust memory (openpyxl holds the shared strings in memory)
+MAX_UNPACKED = 256 * 1024 * 1024
 MAX_ROWS = 50_000
 SUPPORTED = ("code_review", "extraction_review")
 
@@ -67,7 +73,7 @@ def _sheet(wb: Workbook, title: str, columns: list, first: bool = False):
     ws = wb.active if first else wb.create_sheet()
     ws.title = title
     for i, (head, width, editable) in enumerate(columns, 1):
-        c = ws.cell(row=1, column=i, value=head)
+        c = ws.cell(row=1, column=i, value=xml_safe(str(head)))   # field labels can be model output
         c.data_type = "s"                   # see _put
         c.font = _HEAD_FONT
         c.fill = _HEAD_FILL
@@ -77,7 +83,9 @@ def _sheet(wb: Workbook, title: str, columns: list, first: bool = False):
 
 
 def _put(ws, row: int, col: int, value: Any, editable: bool = False):
-    c = ws.cell(row=row, column=col, value="" if value is None else str(value))
+    # a control character (a form feed in a quote) is not allowed in a
+    # worksheet and would fail the whole export (untrusted.xml_safe)
+    c = ws.cell(row=row, column=col, value="" if value is None else xml_safe(str(value)))
     # openpyxl stores any string that begins with "=" as a FORMULA. Names,
     # definitions, and quotes are model output and verbatim document text,
     # so a document containing "=HYPERLINK(…)" or "=WEBSERVICE(…)" would
@@ -191,6 +199,13 @@ def _open(data: bytes):
     if len(data) > MAX_BYTES:
         raise SheetError(f"That file is larger than {MAX_BYTES // (1024 * 1024)} MB; a checkpoint "
                          "workbook is far smaller. Refusing.")
+    try:
+        zip_within_bounds(io.BytesIO(data), "workbook", MAX_UNPACKED)
+    except ContainerRefused as e:
+        if e.not_a_zip:
+            raise SheetError("That file is not an Excel workbook (.xlsx). Numbers and Google "
+                             "Sheets can export one.") from e
+        raise SheetError(str(e)) from e
     try:
         return load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     except Exception as e:  # noqa: BLE001 — anything but a workbook is refused

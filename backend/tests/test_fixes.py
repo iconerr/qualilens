@@ -775,6 +775,8 @@ def test_package_script_manifest_and_relative_path():
                          "QualiLens/manual/01-getting-started.md",
                          "QualiLens/manual/08-literature-synthesis.md",
                          "QualiLens/backend/app/models.json",
+                         "QualiLens/backend/requirements.txt",
+                         "QualiLens/backend/requirements.in",
                          "QualiLens/VERSION", "QualiLens/RELEASE"):
             assert required in names, f"bundle must contain {required}"
         # RELEASE names the changelog's top entry, or says the bundle is interim

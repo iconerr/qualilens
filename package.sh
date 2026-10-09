@@ -83,6 +83,7 @@ MANIFEST=(
   README.md
   .gitignore
   backend/requirements.txt
+  backend/requirements.in
   backend/app
   backend/tests
   frontend/index.html
@@ -168,5 +169,5 @@ if [ "$SIGNED" = 1 ]; then
 else
   echo "UNSIGNED bundle: fine to unzip and run, but Settings → Update will refuse it."
 fi
-echo "Recipients need only Python 3.11+ — they unzip and run ./run.sh"
+echo "Recipients need only Python 3.11 or later on a Mac with Apple silicon or on Linux (WSL on Windows), and they unzip and run ./run.sh"
 echo "Included: the application files listed in package.sh's manifest, nothing else."

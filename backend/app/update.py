@@ -64,7 +64,7 @@ APP_ROOT = Path(__file__).resolve().parent.parent.parent
 ALLOWED = (
     "VERSION", "RELEASE", "run.sh", "package.sh", "LICENSE", "NOTICE", "CITATION.cff",
     "README.md", ".gitignore",
-    "backend/requirements.txt", "backend/app/", "backend/tests/",
+    "backend/requirements.txt", "backend/requirements.in", "backend/app/", "backend/tests/",
     "frontend/index.html", "frontend/package.json", "frontend/package-lock.json",
     "frontend/tsconfig.json", "frontend/tsconfig.app.json",
     "frontend/tsconfig.node.json", "frontend/vite.config.ts",

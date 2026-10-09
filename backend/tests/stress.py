@@ -394,6 +394,12 @@ def run_guard_fuzz():
                         bad += 1; print("  wrongly refused", h, o, t, path, rr.status_code)
                     elif not should and rr.status_code not in (401, 403, 421):
                         bad += 1; print("  wrongly ALLOWED", h, o, t, path, rr.status_code)
+                    # since 2026-10-08 the page carries the token only for a
+                    # browser the launch page signed in (?token= or the
+                    # cookie), and no request here is one: a header token
+                    # included, since a browser never sends it to load a page
+                    if path == "/" and SESSION_TOKEN in rr.text:
+                        bad += 1; print("  token LEAKED in the page", h, o, t)
     print(f"  {tried} requests")
     check(bad == 0, f"{bad} guard decisions wrong")
 

@@ -125,19 +125,65 @@ def test_multipart_upload_from_stranger_refused():
     assert r.status_code == 401
 
 
-def test_index_carries_token_and_cookie_authenticates_downloads(tmp_path, monkeypatch):
+def test_index_gives_the_token_only_to_a_signed_in_browser():
+    """2026-10-08: index.html carried the session token for anyone who asked
+    for /, and a connection to 127.0.0.1 does not say which account made it,
+    so on a shared computer any account could read every project. The token
+    now goes only to a browser the launch page signed in (?token=…, which
+    also sets the cookie) or to one carrying that cookie."""
     from app import main as main_mod
     if not main_mod.FRONTEND_DIST.exists():
         pytest.skip("no built frontend beside the backend")
-    r = stranger.get("/")
-    assert r.status_code == 200
-    assert f'<meta name="ql-token" content="{SESSION_TOKEN}">' in r.text
+    meta = f'<meta name="ql-token" content="{SESSION_TOKEN}">'
+    anyone = TestClient(app, base_url="http://127.0.0.1", raise_server_exceptions=False)
+    for path in ("/", "/index.html", "/projects/x", "/?token=", "/?token=wrong",
+                 f"/?token={SESSION_TOKEN[:-1]}", f"/?token={SESSION_TOKEN}x", "/?token=t%C3%A9st"):
+        r = anyone.get(path)
+        assert r.status_code == 200, path
+        assert SESSION_TOKEN not in r.text and meta not in r.text, path
+        # the build stamp stays public: run.sh reads it to name the port's holder
+        assert f'<meta name="ql-build" content="{main_mod.STARTED_BUILD}">' in r.text, path
+        assert main_mod.TOKEN_COOKIE not in r.cookies, path
+    assert anyone.get("/api/meta").status_code == 401
+    # the launch page's address signs a browser in: the token in the page, the cookie set
+    browser = TestClient(app, base_url="http://127.0.0.1")
+    r = browser.get(f"/?token={SESSION_TOKEN}")
+    assert r.status_code == 200 and meta in r.text
     assert r.headers.get("cache-control") == "no-store"
+    assert r.headers.get("referrer-policy") == "same-origin"
     assert main_mod.TOKEN_COOKIE in r.cookies
-    # the cookie alone (a plain <a href> download) authenticates
-    cookie_only = TestClient(app, base_url="http://127.0.0.1")
-    cookie_only.cookies.set(main_mod.TOKEN_COOKIE, SESSION_TOKEN)
-    assert cookie_only.get("/api/meta").status_code == 200
+    # from then on the cookie carries it: the next page load, and a plain download link
+    assert meta in browser.get("/").text
+    assert browser.get("/api/meta").status_code == 200
+    # a cookie that is not the token earns nothing
+    forged = TestClient(app, base_url="http://127.0.0.1")
+    forged.cookies.set(main_mod.TOKEN_COOKIE, "x" * 43)
+    assert meta not in forged.get("/").text
+    assert forged.get("/api/meta").status_code == 401
+
+
+def test_guard_refuses_a_non_ascii_token_with_401_not_500():
+    """compare_digest raises on a str holding non-ASCII characters; a header
+    or cookie can carry one, and the guard answered 500 (2026-10-08)."""
+    plain = TestClient(app, base_url="http://127.0.0.1", raise_server_exceptions=False)
+    for headers in ([(b"x-qualilens-token", "tést".encode("latin-1"))],
+                    [(b"cookie", "qualilens_token=tést".encode("utf-8"))]):
+        assert plain.get("/api/meta", headers=headers).status_code == 401
+
+
+def test_launch_page_is_private_and_carries_the_signing_in_address(tmp_path):
+    """The token reaches the browser through a file only this account can
+    read, never on a command line (which every account can read)."""
+    from app import main as main_mod
+    page = tmp_path / "open.html"
+    main_mod.write_launch_page(page, 8799)
+    assert page.stat().st_mode & 0o777 == 0o600
+    html = page.read_text(encoding="utf-8")
+    url = f"http://127.0.0.1:8799/?token={SESSION_TOKEN}"
+    assert f'content="0;url={url}"' in html and f'href="{url}"' in html
+    # never written through a file (or a link) that is already there
+    with pytest.raises(FileExistsError):
+        main_mod.write_launch_page(page, 8799)
 
 
 def test_update_refused_while_a_run_is_live(mock_llm_ca):
@@ -1080,3 +1126,197 @@ def test_update_reminder_thresholds_and_launch_dismissal(monkeypatch):
     h = client.get("/api/meta").json()["update_hint"]
     assert h["remind"] is True and h["dismissed"] is True
     assert TestClient(app, base_url="http://127.0.0.1").post("/api/settings/dismiss_update_hint").status_code == 401
+
+
+# ====================================================================
+# 2026-10-08 review: control characters in exported text, zip containers
+# that unpack to an implausible size, ffmpeg's protocols, and the launcher
+# that hands the session token to the browser through a private file.
+# (The token-gated index and the launch page itself are tested above, beside
+# the guard.)
+# ====================================================================
+
+def test_xml_safe_cleans_only_what_xml_forbids():
+    from app.untrusted import xml_safe, xml_safe_deep
+    assert xml_safe("page one\x0cpage two\x0bthree") == "page one\npage two\nthree"
+    assert xml_safe("nul\x00 bell\x07 esc\x1b ￾￿ lone\ud800") == "nul bell esc  lone"
+    keep = "tab\there\nline\r\nUnicode: é ü 中文 😀 \x7f"
+    assert xml_safe(keep) is keep              # nothing to clean: the same object back
+    assert xml_safe_deep({"a\x0c": ["x\x01", ("y\x0b",), 3, None]}) == {"a\n": ["x", ("y\n",), 3, None]}
+
+
+def test_form_feed_in_a_coded_quote_no_longer_breaks_the_word_export():
+    """A source stored before intake cleaned control characters (pdftotext
+    puts a form feed at every page break) made report.docx fail for the
+    whole run (2026-10-08)."""
+    from app import report_docx
+    import docx as _docx
+    text = "We chose the vendor\x0cbecause the price was transparent."
+    ctx, sid = _mini(text=text)
+    c = ctx.add_code("pricing\x0b", "def\x01inition", "theme")
+    ctx.add_excerpt(c, sid, "vendor\x0cbecause the price")
+    common.assemble_report(ctx, "T\x0c", [], "theme", None)
+    payload = json.loads(db.get_conn().execute(
+        "SELECT payload FROM reports WHERE run_id=?", (ctx.run_id,)).fetchone()["payload"])
+    d = _docx.Document(io.BytesIO(report_docx.build_docx(payload)))
+    body = "\n".join(p.text for p in d.paragraphs)
+    assert "vendor\nbecause the price" in body and "\x0c" not in body
+    r = client.get(f"/api/runs/{ctx.run_id}/report.docx")
+    assert r.status_code == 200 and r.content[:2] == b"PK"
+
+
+def test_control_characters_no_longer_break_the_checkpoint_workbook():
+    from app import checkpoint_sheets as cs
+    from openpyxl import load_workbook
+    meta = {"project_name": "P\x0c", "run_id": "r", "checkpoint_id": "cp1", "title": "T", "stage": "s"}
+    payload = {"items": [{"id": "c1", "name": "anx\x0biety", "definition": "d\x01",
+                          "excerpt_count": 1, "sample_excerpts": [{"quote": "my anxiety\x0cinstead"}]}]}
+    wb = load_workbook(io.BytesIO(cs.export_workbook(
+        "code_review", payload, meta, excerpts=[{"code_id": "c1", "code": "anxiety", "via": "",
+                                                 "source": "s.txt", "quote": "q\x0cq", "memo": ""}])))
+    assert wb["Codes"]["B2"].value == "anx\niety" and wb["Codes"]["C2"].value == "d"
+    assert wb["Codes"]["E2"].value == "my anxiety\ninstead"
+    assert wb["Excerpts"]["E2"].value == "q\nq"
+    payload2 = {"fields": ["aims"], "field_labels": {"aims": "Ai\x0cms"},
+                "rows": [{"source_id": "s1", "filename": "f.pdf", "label": "L", "citation": "c\x0cd",
+                          "fields": {"aims": "a\x02"}, "cited_work": ""}]}
+    wb2 = load_workbook(io.BytesIO(cs.export_workbook("extraction_review", payload2, meta, excerpts=[])))
+    assert wb2["Papers"]["E1"].value == "Ai\nms" and wb2["Papers"]["E2"].value == "a"
+    assert wb2["Papers"]["D2"].value == "c\nd"
+
+
+def test_intake_cleans_control_characters_before_offsets_exist(tmp_path):
+    p = tmp_path / "pdftotext.txt"
+    p.write_bytes(b"Page one ends here.\n\x0cPage two\x01 begins.")
+    text, pages = ingestion.extract_text_with_pages(p)
+    assert text == "Page one ends here.\n\nPage two begins." and pages is None
+    clean = tmp_path / "clean.txt"
+    clean.write_bytes("Nothing to clean — é.".encode("utf-8"))
+    assert ingestion.extract_text(clean) == "Nothing to clean — é."
+
+
+def test_zip_within_bounds_counts_members_and_declared_size():
+    from app.untrusted import ContainerRefused, zip_within_bounds
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for i in range(4):
+            z.writestr(f"part{i}.xml", b"\0" * 10_000)       # 40 KB declared, a few hundred bytes stored
+    zip_within_bounds(io.BytesIO(buf.getvalue()), "workbook", 40_000, max_members=4)
+    with pytest.raises(ContainerRefused, match="implausibly many parts"):
+        zip_within_bounds(io.BytesIO(buf.getvalue()), "workbook", 40_000, max_members=3)
+    with pytest.raises(ContainerRefused, match="would unpack to") as e:
+        zip_within_bounds(io.BytesIO(buf.getvalue()), "workbook", 39_999)
+    assert not e.value.not_a_zip
+    with pytest.raises(ContainerRefused) as e:
+        zip_within_bounds(io.BytesIO(b"not a zip"), "workbook", 1 << 20)
+    assert e.value.not_a_zip
+
+
+def test_docx_that_would_unpack_implausibly_is_refused_at_upload(tmp_path, monkeypatch):
+    import docx as _docx
+    d = _docx.Document()
+    d.add_paragraph("An ordinary interview.")
+    path = tmp_path / "interview.docx"
+    d.save(str(path))
+    assert "ordinary interview" in ingestion.extract_text(path)     # the real bound admits it
+    monkeypatch.setattr(ingestion, "MAX_DOCX_UNPACKED", 1000)      # a bound it exceeds
+    r = client.post('/api/projects', json={"name": "Docx bound", "method": "thematic",
+                                           "config": {"provider": "anthropic", "research_question": "q"}})
+    pid = r.json()["id"]
+    r = client.post(f"/api/projects/{pid}/sources",
+                    files={"file": ("interview.docx", io.BytesIO(path.read_bytes()),
+                                    "application/octet-stream")}, data={"grp": ""})
+    assert r.status_code == 400 and "would unpack to" in r.json()["detail"]
+    assert not list(db.UPLOADS_DIR.glob("*_interview.docx")), "a refused upload must not linger"
+
+
+def test_workbook_that_would_unpack_implausibly_is_refused(monkeypatch):
+    from app import checkpoint_sheets as cs
+    meta = {"checkpoint_id": "cp1"}
+    data = cs.export_workbook("code_review", {"items": [{"id": "c1", "name": "n", "definition": "",
+                                                         "excerpt_count": 0}]}, meta, excerpts=[])
+    payload = {"items": [{"id": "c1", "name": "n", "definition": ""}]}
+    assert cs.parse_workbook("code_review", payload, data, "cp1")["kind"] == "code_review"
+    monkeypatch.setattr(cs, "MAX_UNPACKED", 1000)
+    with pytest.raises(cs.SheetError, match="would unpack to"):
+        cs.parse_workbook("code_review", payload, data, "cp1")
+    with pytest.raises(cs.SheetError, match="not an Excel workbook"):
+        cs.parse_workbook("code_review", payload, b"plain text, not a zip", "cp1")
+
+
+def test_ffmpeg_input_may_use_the_file_protocol_only(monkeypatch):
+    """A playlist saved as .mp4 can name segments on a web server; older
+    ffmpeg builds fetch them."""
+    from app import transcription
+    seen = []
+
+    class Done:
+        returncode, stderr = 0, ""
+    monkeypatch.setattr(transcription.subprocess, "run", lambda cmd, **kw: seen.append(cmd) or Done())
+    transcription._run_ffmpeg(["-i", "/tmp/in.mp4", "-vn", "/tmp/out.mp3"])
+    cmd = seen[0]
+    i = cmd.index("-protocol_whitelist")
+    assert cmd[i + 1] == "file" and i < cmd.index("-i")
+
+
+def test_run_sh_opens_a_private_launch_page_and_never_puts_the_token_on_a_command_line(tmp_path):
+    """The whole launch, with the browser-opening program replaced by one that
+    records its arguments: what it is handed must not carry the token, and
+    the page it opens must be private, sign a browser in, and be gone after
+    the server stops. Starts the real server against a scratch data folder."""
+    import shutil, socket, stat, time, urllib.request
+    root = pathlib.Path(__file__).resolve().parent.parent.parent
+    venv_py = root / "backend" / ".venv" / "bin" / "python"
+    req_sha = root / "backend" / ".venv" / "req.sha"
+    if not (venv_py.exists() and (root / "frontend" / "dist" / "index.html").exists()
+            and shutil.which("curl") and shutil.which("lsof")):
+        pytest.skip("needs the app's own environment, a built interface, curl, and lsof")
+    import hashlib
+    want = hashlib.sha1((root / "backend" / "requirements.txt").read_bytes()).hexdigest()
+    if not req_sha.exists() or req_sha.read_text().strip() != want:
+        pytest.skip("the environment awaits its dependency update; run ./run.sh once")
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    record = tmp_path / "opened.txt"
+    for name in ("open", "xdg-open"):
+        f = shim / name
+        f.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{record}"\n')
+        f.chmod(0o755)
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]
+    (tmp_path / "data").mkdir()
+    env = dict(os.environ, PATH=f"{shim}:{os.environ.get('PATH', '')}", QUALILENS_PORT=str(port),
+               QUALILENS_DATA_DIR=str(tmp_path / "data"), QUALILENS_SECRET_FILE=str(tmp_path / "secret.key"),
+               TMPDIR=str(tmp_path))
+    env.pop("QUALILENS_TOKEN", None)
+    env.pop("QUALILENS_LAUNCH_FILE", None)
+    log = open(tmp_path / "run.log", "wb")
+    p = subprocess.Popen(["bash", str(root / "run.sh")], cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT)
+    try:
+        for _ in range(240):
+            if record.exists() and record.read_text().strip():
+                break
+            time.sleep(0.25)
+        else:
+            pytest.fail("run.sh opened nothing; log:\n" + (tmp_path / "run.log").read_text()[-2000:])
+        handed = record.read_text().strip()
+        page = pathlib.Path(handed)
+        assert page.is_file() and page.parent.parent == tmp_path, handed
+        assert stat.S_IMODE(page.stat().st_mode) == 0o600
+        assert stat.S_IMODE(page.parent.stat().st_mode) == 0o700
+        html = page.read_text(encoding="utf-8")
+        url = html.split('content="0;url=', 1)[1].split('"', 1)[0]
+        token = url.split("?token=", 1)[1]
+        assert len(token) >= 40 and token not in handed, "the token must not be on a command line"
+        signed_in = urllib.request.urlopen(url, timeout=5).read().decode()
+        assert f'<meta name="ql-token" content="{token}">' in signed_in
+        plain = urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5).read().decode()
+        assert token not in plain and "ql-build" in plain
+    finally:
+        p.terminate()
+        try:
+            p.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            p.kill(); p.wait()
+        log.close()
+    assert not page.exists(), "the launch page must be removed when the server stops"

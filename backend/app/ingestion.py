@@ -11,6 +11,14 @@ transcription.py); video has its audio track extracted with ffmpeg first.
 
 from pathlib import Path
 
+from .untrusted import xml_safe, zip_within_bounds
+
+# A .docx is a zip; python-docx reads every part into memory, so a container
+# that declares more than this is refused before it is opened (untrusted.py).
+# Uploads are bounded at 200 MB, and images, the bulk of a large document,
+# barely compress, so a real document stays far below this.
+MAX_DOCX_UNPACKED = 512 << 20
+
 # .rtf is deliberately absent: an RTF file is markup, and reading it as
 # plain text would feed control codes to the analysis. Convert it first.
 TEXT_EXTS = {".txt", ".md", ".text", ".markdown"}
@@ -43,13 +51,18 @@ def extract_text_with_pages(path: Path) -> tuple:
     with original 1-based page numbers and character offsets into the
     returned text. Non-PDF sources return (text, None) — they have no pages.
     The joined text is byte-identical to what extract_text always produced,
-    so nothing downstream changes for existing sources."""
+    so nothing downstream changes for existing sources.
+
+    Characters XML cannot hold are cleaned here, before any offset exists
+    (untrusted.xml_safe): a form feed or vertical tab becomes a line feed,
+    one character for one, and other control characters are dropped. Text
+    without them is unchanged."""
     ext = path.suffix.lower()
     if ext in DOCX_EXTS:
-        return _extract_docx(path), None
+        return xml_safe(_extract_docx(path)), None
     if ext in PDF_EXTS:
         return _extract_pdf(path)
-    return decode_text(path.read_bytes()), None
+    return xml_safe(decode_text(path.read_bytes())), None
 
 
 def decode_text(raw: bytes) -> str:
@@ -97,6 +110,7 @@ def _extract_docx(path: Path) -> str:
     footnotes are not read; the manual says so."""
     import docx  # python-docx
     from docx.oxml.ns import qn
+    zip_within_bounds(path, ".docx", MAX_DOCX_UNPACKED)
     d = docx.Document(str(path))
     parts = []
 
@@ -135,7 +149,7 @@ def _extract_pdf(path: Path) -> tuple:
     page_texts = []
     for page in reader.pages:
         t = page.extract_text() or ""
-        page_texts.append(t)
+        page_texts.append(xml_safe(t))   # per page, so the page map stays exact
     return join_pdf_pages(page_texts)
 
 
