@@ -16,9 +16,14 @@
     "can price the model the project chose; a model with no entry uses the",
     "default. Prices are the authors' reading of public list prices at the",
     "time of editing and are not guaranteed — check the provider's page.",
-    "Google: the 3.6, 3.7 and 3.8 Flash prices are introductory until",
+    "Google: the 3.6 and 3.8 Flash prices are introductory until",
     "2026-12-31 ($1.50 / $7.50 from 2027-01-01) — update the default then.",
     "The 2.5 prices are kept, unlisted, for projects that still use them.",
+    "3.7-flash is deprecated (Google answers it with 3.8-flash); it is",
+    "unlisted, and projects that used it are priced by the default.",
+    "OpenAI: gpt-5 (shutdown 2026-12-11) and gpt-5.1 (shutdown 2027-04-01)",
+    "are deprecated and unlisted; their prices are kept for projects that",
+    "still use them.",
     "Check models asks Google about each listed model for free, because",
     "Google keeps listing models it refuses to some projects (the 2.5",
     "models, for projects new to them). paid_only names models a free key",
@@ -45,16 +50,31 @@
   },
   "openai": {
     "label": "OpenAI (GPT)",
-    "default_model": "gpt-5.1",
+    "default_model": "gpt-6.1-sol",
     "models": [
-      "gpt-5.1",
-      "gpt-5",
+      "gpt-6.1-sol",
       "gpt-4.1",
       "gpt-4o"
     ],
     "pricing_usd_per_mtok": {
       "default": [
+        2.0,
+        10.0
+      ],
+      "gpt-4.1": [
+        2.0,
+        8.0
+      ],
+      "gpt-4o": [
         2.5,
+        10.0
+      ],
+      "gpt-5.1": [
+        1.25,
+        10.0
+      ],
+      "gpt-5": [
+        1.25,
         10.0
       ]
     }
@@ -65,7 +85,6 @@
     "models": [
       "gemini-3.6-flash",
       "gemini-3.8-flash",
-      "gemini-3.7-flash",
       "gemini-3.5-flash-lite",
       "gemini-3.1-pro-preview"
     ],

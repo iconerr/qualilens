@@ -36,14 +36,16 @@ _FALLBACK_CATALOG = {
     },
     "openai": {
         "label": "OpenAI (GPT)",
-        "default_model": "gpt-5.1",
-        "models": ["gpt-5.1", "gpt-5", "gpt-4.1", "gpt-4o"],
-        "pricing": (2.5, 10.0),
+        "default_model": "gpt-6.1-sol",
+        "models": ["gpt-6.1-sol", "gpt-4.1", "gpt-4o"],
+        "pricing": (2.0, 10.0),
+        "pricing_by_model": {"gpt-4.1": (2.0, 8.0), "gpt-4o": (2.5, 10.0),
+                             "gpt-5.1": (1.25, 10.0), "gpt-5": (1.25, 10.0)},
     },
     "google": {
         "label": "Google (Gemini)",
         "default_model": "gemini-3.6-flash",
-        "models": ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.7-flash",
+        "models": ["gemini-3.6-flash", "gemini-3.8-flash",
                    "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"],
         "pricing": (0.75, 3.75),
         "pricing_by_model": {"gemini-3.5-flash-lite": (0.3, 2.5),
@@ -339,6 +341,27 @@ def _post_with_retry(url: str, headers: dict, payload: dict,
     raise LLMError(f"Exhausted retries: {last_err}")
 
 
+def _served(value) -> dict:
+    """{"served_model": id} for the model the provider says answered (the
+    response's model field; Gemini's modelVersion), else {}. Google answers
+    a deprecated id with its successor (gemini-3.7-flash was served by
+    3.8-flash), so the audit trail records what answered, not only what was
+    asked for. Anthropic and Mistral echo the id as requested."""
+    if isinstance(value, str) and value.strip():
+        return {"served_model": value.strip().removeprefix("models/")}
+    return {}
+
+
+def same_model(requested: str, served: str) -> bool:
+    """True when the reported id is the requested model or a dated snapshot
+    of it (OpenAI answers gpt-5.1 as gpt-5.1-2025-11-13); False when another
+    model answered."""
+    req = (requested or "").strip().removeprefix("models/")
+    srv = (served or "").strip().removeprefix("models/")
+    return srv == req or re.fullmatch(re.escape(req) + r"-(\d{4}-\d{2}-\d{2}|\d{8})",
+                                      srv) is not None
+
+
 def _finalize(text: str, usage: dict, stop_reason: str, provider: str, model: str,
               sampling: dict | None = None) -> tuple[str, dict]:
     """Common post-checks: refuse empty output and surface truncation. The
@@ -452,7 +475,8 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         stop = data.get("stop_reason", "")
         stop = TRUNCATED if stop == "max_tokens" else stop
         return _finalize(text, {"input_tokens": u.get("input_tokens", 0),
-                                "output_tokens": u.get("output_tokens", 0)},
+                                "output_tokens": u.get("output_tokens", 0),
+                                **_served(data.get("model"))},
                          stop, provider, model,
                          sampling={"temperature": "provider default",
                                    "max_tokens": max_tokens + 8000})
@@ -482,7 +506,8 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         stop = choice.get("finish_reason", "")
         stop = TRUNCATED if stop == "length" else stop
         return _finalize(text, {"input_tokens": u.get("prompt_tokens", 0),
-                                "output_tokens": u.get("completion_tokens", 0)},
+                                "output_tokens": u.get("completion_tokens", 0),
+                                **_served(data.get("model"))},
                          stop, provider, model, sampling=sampling)
 
     if provider == "google":
@@ -510,7 +535,7 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         thinking = u.get("thoughtsTokenCount", 0) or 0
         usage = {"input_tokens": u.get("promptTokenCount", 0),
                  "output_tokens": (u.get("candidatesTokenCount", 0) or 0) + thinking,
-                 "thinking_tokens": thinking}
+                 "thinking_tokens": thinking, **_served(data.get("modelVersion"))}
         sampling = {"temperature": temperature if sets_temperature else "provider default",
                     "max_tokens": max_tokens + 16384}
         candidates = data.get("candidates") or []
@@ -554,7 +579,8 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         stop = choice.get("finish_reason", "")
         stop = TRUNCATED if stop == "length" else stop
         return _finalize(text, {"input_tokens": u.get("prompt_tokens", 0),
-                                "output_tokens": u.get("completion_tokens", 0)},
+                                "output_tokens": u.get("completion_tokens", 0),
+                                **_served(data.get("model"))},
                          stop, provider, model,
                          sampling={"temperature": temperature, "max_tokens": max_tokens})
 
@@ -606,10 +632,14 @@ def chat_json(provider: str, model: str, api_key: str, system: str, user: str,
 
 def _sum_usage(a: dict, b: dict) -> dict:
     """Two calls' token counts as one, keeping the thinking share when a
-    provider reports it."""
+    provider reports it, and the model that answered the first call, which
+    wrote the content the repair only re-typed."""
     out = {k: a.get(k, 0) + b.get(k, 0) for k in ("input_tokens", "output_tokens")}
     if "thinking_tokens" in a or "thinking_tokens" in b:
         out["thinking_tokens"] = a.get("thinking_tokens", 0) + b.get("thinking_tokens", 0)
+    served = a.get("served_model") or b.get("served_model")
+    if served:
+        out["served_model"] = served
     return out
 
 

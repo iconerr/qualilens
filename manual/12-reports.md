@@ -9,7 +9,7 @@ The Run screen shows a green card offering **Open report** and **Download .docx*
 
 ## The interactive report
 
-The report opens with the title, a line linking back to the run and naming the provider, the AI model, and the time of generation, an **Export audit log** button, and a Download button.
+The report opens with the title, a line linking back to the run and naming the provider, the AI model, and the time of generation, an **Export audit log** button, and a Download button. A provider can answer requests for a model it has deprecated with that model's successor, as Google answers requests for `gemini-3.7-flash` with `gemini-3.8-flash`. When the provider reports that a model other than the one the project requested answered, the line also lists the model that answered, and an amber notice beneath it indicates how many calls that model answered. The Word report includes the same addition.
 
 ### Method configuration
 
@@ -116,7 +116,7 @@ The reader says so when a quote cannot be located at all, and lists that excerpt
 
 **Extraction Table** appears in literature synthesis reports only. It preserves the per-paper extraction exactly as you approved it, excluded papers included and marked.
 
-**Audit Trail** appears in every report. It records the number of logged events, the total model usage in calls and tokens, the models that actually answered and how many calls each took, the count of located and unverified excerpts, whether the run was branched and from where, and every checkpoint with its resolved status and a summary of what you decided there — how many codes were kept, renamed, merged, deleted, or added, the new names, excerpts removed, papers excluded. The complete record, with every event's payload and every checkpoint's full resolution, is the **Export audit log** file. The sources analyzed are listed at the head of the report rather than here.
+**Audit Trail** appears in every report. It records the number of logged events, the total model usage in calls and tokens, the models that actually answered and how many calls each took, as the provider reported them, the count of located and unverified excerpts, whether the run was branched and from where, and every checkpoint with its resolved status and a summary of what you decided there — how many codes were kept, renamed, merged, deleted, or added, the new names, excerpts removed, papers excluded. The complete record, with every event's payload and every checkpoint's full resolution, is the **Export audit log** file. The sources analyzed are listed at the head of the report rather than here. Calls logged before QualiLens recorded which model answered are counted separately, under the model requested, because the log holds no record from the provider of which model answered them.
 
 ## The Word export
 
@@ -136,7 +136,7 @@ The file is named after your project.
 
 Your analysis may be going into a paper, a thesis, or a report to a sponsor. These are the facts your reader needs, and the places to find them.
 
-**From the report.** The method and every setup answer exactly as the run froze them, which is the Method configuration section at the head of the report. Reproduce those answers verbatim, because the option text carries the methodological commitment. The provider and model, and the models that actually answered, which are in the report header and the audit appendix.
+**From the report.** The method and every setup answer exactly as the run froze them, which is the Method configuration section at the head of the report. Reproduce those answers verbatim, because the option text carries the methodological commitment. The provider and model, and the models that actually answered, which are in the report header and the audit appendix. When the two differ, report the model that answered.
 
 **From the report's audit appendix.** The number of sources. The number of checkpoints, the fact that a researcher resolved each one, and the summary of what was decided at each. The count of located and unverified excerpts. The total model usage, if you are reporting cost or compute.
 

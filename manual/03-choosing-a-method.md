@@ -63,11 +63,13 @@ Every method uses the same providers. You choose the provider and model once per
 | Provider | Models offered | Default |
 |---|---|---|
 | Anthropic (Claude) | `claude-sonnet-5`, `claude-opus-5`, `claude-haiku-4-5-20251001` | `claude-sonnet-5` |
-| OpenAI (GPT) | `gpt-5.1`, `gpt-5`, `gpt-4.1`, `gpt-4o` | `gpt-5.1` |
-| Google (Gemini) | `gemini-3.6-flash`, `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-pro-preview` | `gemini-3.6-flash` |
+| OpenAI (GPT) | `gpt-6.1-sol`, `gpt-4.1`, `gpt-4o` | `gpt-6.1-sol` |
+| Google (Gemini) | `gemini-3.6-flash`, `gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-pro-preview` | `gemini-3.6-flash` |
 | Mistral | `mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest` | `mistral-large-latest` |
 
 Two notes on Google. Google no longer offers the Gemini 2.5 models to projects that have not used them before, so the catalog offers the Gemini 3 line instead; a project that already uses a 2.5 model keeps it, and an account that still has access can type a 2.5 id under **Custom model id…**. `gemini-3.1-pro-preview`, marked `— paid tier only` in the wizard, is not on Google's free tier: it needs a key whose project is on Google's paid tier, which means linking a billing account and prepaying at least $5 (AI Studio's Projects page shows each project's tier), and as a preview Google may withdraw it at short notice. The Flash models run on a free key, but read the note on Google's free tier in [Data, Privacy, and Governance](14-data-and-privacy.md) before you send it confidential data.
+
+The catalog excludes models their providers have deprecated, and a project that already uses one keeps it. OpenAI shuts down `gpt-5` on 11 December 2026 and `gpt-5.1` on 1 April 2027, so a project set to either runs until that date and then needs a new project with a current model. Google now answers requests for `gemini-3.7-flash` with `gemini-3.8-flash`, so a project set to 3.7 keeps running on 3.8, and its report lists the model that answered.
 
 Three considerations bear on your choice. None of them is about which AI model is best in the abstract.
 

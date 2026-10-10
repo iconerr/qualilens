@@ -9,6 +9,32 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.10.0 — 2026-10-09
+
+- Reports now list the model that actually answered each call, and
+  indicate when a provider answered with a different model from the one
+  the project chose. Each call records the model the provider reports, and
+  the report header, the configuration section, and the audit appendix
+  indicate any difference, in the app and in the Word report, with an
+  amber notice in the app. A dated snapshot, such as OpenAI's
+  `gpt-5.1-2025-11-13` for `gpt-5.1`, counts as the model itself. Calls
+  logged before this release recorded no answering model, and the audit
+  appendix counts them separately under the model requested.
+- `gemini-3.7-flash` has been removed from the wizard's list of Google
+  models. Google has deprecated it and now answers requests for it with
+  `gemini-3.8-flash` at the same price, so the two choices had become one
+  model. A project that already uses 3.7 keeps running on 3.8, and its
+  report lists 3.8 for calls made after this update. For calls made
+  earlier the report lists only 3.7, so a methods section should indicate
+  that calls made since Google's change ran on 3.8.
+- OpenAI's default is now `gpt-6.1-sol`, and `gpt-5.1` and `gpt-5` have
+  been removed from the list. OpenAI has deprecated both, and it shuts down `gpt-5` on
+  11 December 2026 and `gpt-5.1` on 1 April 2027. A project that already
+  uses either keeps running until that date. The cost estimate prices
+  `gpt-6.1-sol` at $2.00 and $10.00 per million tokens, `gpt-4.1` and
+  `gpt-4o` at their own prices, and `gpt-5.1` and `gpt-5` at $1.25 and
+  $10.00 for projects that still use them.
+
 ## 1.9.0 — 2026-10-08
 
 - Other accounts on a shared computer can no longer reach your projects

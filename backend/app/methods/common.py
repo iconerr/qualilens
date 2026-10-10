@@ -7,7 +7,7 @@ grouping, the narrative quote guard, and report assembly used across methods."""
 import json
 import re
 
-from .. import db, ingestion
+from .. import db, ingestion, llm
 from .base import RunContext, locate_quote
 
 CODER_RULES = """Rules for every excerpt you return:
@@ -429,16 +429,28 @@ def assemble_report(ctx: RunContext, title: str, narrative_sections: list,
         "SELECT stage,title,status,resolved_at,resolution FROM checkpoints WHERE run_id=? "
         "ORDER BY created_at", (ctx.run_id,)).fetchall()
     usage_row = conn.execute("SELECT usage FROM runs WHERE id=?", (ctx.run_id,)).fetchone()
-    # the models that actually answered, from the per-call audit events
-    models_used = {}
+    # the models that actually answered, from the per-call audit events, as
+    # the provider reported them; a call logged before QualiLens recorded
+    # that names only the model requested, and is counted apart so the
+    # report never says it answered
+    models_used, unconfirmed, substituted = {}, {}, {}
     for e in conn.execute("SELECT payload FROM events WHERE run_id=? AND kind='llm'",
                           (ctx.run_id,)).fetchall():
         try:
             pl = json.loads(e["payload"] or "{}")
         except ValueError:
             continue
-        key = f"{pl.get('provider', '?')}/{pl.get('model', '?')}"
-        models_used[key] = models_used.get(key, 0) + 1
+        prov, asked = pl.get("provider", "?"), pl.get("model", "?")
+        served = pl.get("served_model")
+        if isinstance(served, str) and served:
+            key = f"{prov}/{served}"
+            models_used[key] = models_used.get(key, 0) + 1
+            if not llm.same_model(asked, served):
+                sub = (prov, asked, served)
+                substituted[sub] = substituted.get(sub, 0) + 1
+        else:
+            key = f"{prov}/{asked}"
+            unconfirmed[key] = unconfirmed.get(key, 0) + 1
     located = conn.execute(
         "SELECT SUM(CASE WHEN e.start_char IS NULL THEN 0 ELSE 1 END) l, "
         "SUM(CASE WHEN e.start_char IS NULL THEN 1 ELSE 0 END) u "
@@ -476,6 +488,10 @@ def assemble_report(ctx: RunContext, title: str, narrative_sections: list,
                              "summary": _resolution_summary(c["resolution"])} for c in cps],
             "usage": json.loads(usage_row["usage"]) if usage_row else {},
             "models_used": models_used,
+            "models_unconfirmed": unconfirmed,
+            "model_substitutions": [
+                {"provider": p, "requested": a, "answered": s, "calls": n}
+                for (p, a, s), n in sorted(substituted.items(), key=lambda kv: -kv[1])],
             "excerpts_located": int(located["l"] or 0),
             "excerpts_unlocated": int(located["u"] or 0),
             "branched_from": ctx.state.get("branched_from"),

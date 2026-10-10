@@ -44,7 +44,7 @@ def build_docx(payload: dict) -> bytes:
     r = meta.add_run(
         f"Method: {payload.get('method_label') or payload.get('method', '')}  ·  "
         f"Generated {when} with QualiLens  ·  "
-        f"Model: {payload.get('provider', '')}/{payload.get('model', '')}")
+        f"Model: {payload.get('provider', '')}/{payload.get('model', '')}{_answered_by(payload)}")
     r.font.size = Pt(9)
     r.font.color.rgb = MUTED
 
@@ -61,7 +61,8 @@ def build_docx(payload: dict) -> bytes:
             rr.bold = True
             p.add_run(text if text else "(blank)")
         p = doc.add_paragraph()
-        rr = p.add_run(f"Provider and model: {payload.get('provider', '')}/{payload.get('model', '')}")
+        rr = p.add_run(f"Provider and model: {payload.get('provider', '')}/{payload.get('model', '')}"
+                       f"{_answered_by(payload)}")
         rr.bold = True
 
     # Sources
@@ -257,8 +258,21 @@ def build_docx(payload: dict) -> bytes:
             f"{usage.get('output_tokens', 0):,} output tokens.")
     models_used = audit.get("models_used") or {}
     if models_used:
-        doc.add_paragraph("Models that answered, by call: " + ", ".join(
-            f"{k} ({v})" for k, v in sorted(models_used.items(), key=lambda kv: -kv[1])) + ".")
+        doc.add_paragraph("Models that answered, by call, as the provider reported them: "
+                          + ", ".join(f"{k} ({v})" for k, v in
+                                      sorted(models_used.items(), key=lambda kv: -kv[1])) + ".")
+    for s in audit.get("model_substitutions") or []:
+        doc.add_paragraph(
+            f"The project requested {s.get('provider')}/{s.get('requested')}, but the provider "
+            f"reported that {s.get('answered')} answered {_calls(s.get('calls', 0))}.")
+    unconfirmed = audit.get("models_unconfirmed") or {}
+    if unconfirmed:
+        names = (next(iter(unconfirmed)) if len(unconfirmed) == 1 else
+                 ", ".join(f"{k} ({v})" for k, v in
+                           sorted(unconfirmed.items(), key=lambda kv: -kv[1])))
+        doc.add_paragraph(
+            f"For {_calls(sum(unconfirmed.values()))} logged before QualiLens recorded which "
+            f"model answered, the log lists only the model requested, {names}.")
     if "excerpts_located" in audit:
         doc.add_paragraph(
             f"Evidence: {audit.get('excerpts_located', 0):,} excerpts located verbatim in their "
@@ -289,6 +303,19 @@ def _is_located(e: dict) -> bool:
     if "start_char" not in e and "end_char" not in e:
         return True        # a payload from before the flag existed: no verdict, quote it
     return e.get("start_char") is not None and e.get("end_char") is not None
+
+
+def _answered_by(payload: dict) -> str:
+    """' (answered by X)' when the provider reported that a model other than
+    the one requested answered, so the line a methods section is written
+    from names the model that did the work."""
+    subs = (payload.get("audit") or {}).get("model_substitutions") or []
+    answered = list(dict.fromkeys(s["answered"] for s in subs if s.get("answered")))
+    return f" (answered by {', '.join(answered)})" if answered else ""
+
+
+def _calls(n: int) -> str:
+    return f"{n} call" if n == 1 else f"{n} calls"
 
 
 def _summary_line(summ: dict) -> str:

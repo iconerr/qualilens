@@ -42,10 +42,13 @@ class MockLLM:
         self.fail_once_when = None   # tuple of substrings that ALL must match, fails once
         self._failed = False
         self.on_call = None          # hook(user) called before answering
+        self.served_for = None       # call number -> model the provider reports ("" for
+                                     # none, as older logs have); default echoes the request
 
     def __call__(self, provider, model, api_key, system, user,
                  max_tokens=8000, temperature=0.3):
         self.calls.append(user[:80])
+        n = len(self.calls)
         if self.on_call:
             self.on_call(user)
         if (self.fail_once_when and not self._failed
@@ -53,6 +56,9 @@ class MockLLM:
             self._failed = True
             raise llm.LLMError("simulated transient failure")
         usage = {"input_tokens": 100, "output_tokens": 50, "stop_reason": "end_turn"}
+        served = self.served_for(n) if self.served_for else model
+        if served:
+            usage["served_model"] = served
         return self._answer(system, user), usage
 
     def _answer(self, system, user):
@@ -1172,6 +1178,57 @@ def test_repaired_gemini_json_keeps_both_calls_thinking(monkeypatch):
     assert u["output_tokens"] == 20 + 300 + 10 + 40 and u["thinking_tokens"] == 340
 
 
+def test_each_call_records_the_model_the_provider_says_answered(monkeypatch):
+    # reply shapes as the providers sent them on 2026-10-09
+    reply = {}
+    monkeypatch.setattr(llm, "_post_with_retry", lambda *a, **k: reply)
+    reply.update({"content": [{"text": "ok"}], "usage": {}, "stop_reason": "end_turn",
+                  "model": "claude-sonnet-5"})
+    assert llm.chat("anthropic", "claude-sonnet-5", "k", "s", "u")[1]["served_model"] == "claude-sonnet-5"
+    reply.clear()
+    reply.update({"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+                  "usage": {}, "model": "gpt-5.1-2025-11-13"})
+    assert llm.chat("openai", "gpt-5.1", "k", "s", "u")[1]["served_model"] == "gpt-5.1-2025-11-13"
+    reply["model"] = "mistral-large-latest"
+    assert llm.chat("mistral", "mistral-large-latest", "k", "s", "u")[1]["served_model"] \
+        == "mistral-large-latest"
+    # Google answered a deprecated id with its successor
+    reply.clear()
+    reply.update({"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": "ok"}]}}],
+                  "usageMetadata": {"promptTokenCount": 7}, "modelVersion": "gemini-3.8-flash"})
+    assert llm.chat("google", "gemini-3.7-flash", "k", "s", "u")[1]["served_model"] == "gemini-3.8-flash"
+    # a refused answer was still billed, and its log says which model refused
+    reply["candidates"][0]["finishReason"] = "SAFETY"
+    with pytest.raises(llm.LLMError) as ei:
+        llm.chat("google", "gemini-3.7-flash", "k", "s", "u")
+    assert ei.value.usage["served_model"] == "gemini-3.8-flash"
+    # a reply that names no model records none rather than guessing
+    reply.pop("modelVersion")
+    reply["candidates"][0]["finishReason"] = "STOP"
+    assert "served_model" not in llm.chat("google", "gemini-3.6-flash", "k", "s", "u")[1]
+
+
+def test_repaired_json_keeps_the_model_that_wrote_it(monkeypatch):
+    answers = iter([
+        {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": "{codes: [}"}]}}],
+         "usageMetadata": {}, "modelVersion": "gemini-3.8-flash"},
+        {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": '{"codes": []}'}]}}],
+         "usageMetadata": {}, "modelVersion": "gemini-3.9-flash"}])
+    monkeypatch.setattr(llm, "_post_with_retry", lambda *a, **k: next(answers))
+    _, u = llm.chat_json("google", "gemini-3.7-flash", "k", "s", "u")
+    assert u["repair_call"] is True and u["served_model"] == "gemini-3.8-flash"
+
+
+def test_a_dated_snapshot_is_the_same_model_and_a_successor_is_not():
+    assert llm.same_model("gpt-5.1", "gpt-5.1-2025-11-13")
+    assert llm.same_model("claude-haiku-4-5", "claude-haiku-4-5-20251001")
+    assert llm.same_model("models/gemini-3.6-flash", "gemini-3.6-flash")
+    assert llm.same_model("mistral-large-latest", "mistral-large-latest")
+    assert not llm.same_model("gemini-3.7-flash", "gemini-3.8-flash")
+    assert not llm.same_model("gpt-5", "gpt-5.1-2025-11-13")     # a prefix is not a snapshot
+    assert not llm.same_model("gpt-4o", "gpt-4o-mini-2024-07-18")
+
+
 def test_google_prices_follow_the_model_the_project_uses():
     cat = llm.catalog()
     assert llm.price_for("google", "gemini-3.6-flash", cat) == (0.75, 3.75)
@@ -1180,6 +1237,29 @@ def test_google_prices_follow_the_model_the_project_uses():
     assert llm.price_for("google", "gemini-2.5-pro", cat) == (1.25, 10.0)
     assert llm.price_key("google", " models/gemini-2.5-flash ") == "gemini-2.5-flash"
     assert llm.price_key("openai", "models/x") == "models/x"   # only Google's ids carry it
+
+
+# deprecated by the provider, even where calls still work (Google redirects
+# gemini-3.7-flash to 3.8-flash; OpenAI serves gpt-5 until 2026-12-11 and
+# gpt-5.1 until 2027-04-01); the catalog never offers them
+DEPRECATED = {"google": {"gemini-3.7-flash"}, "openai": {"gpt-5", "gpt-5.1"}}
+
+
+def test_the_catalog_offers_no_deprecated_model():
+    for pid, gone in DEPRECATED.items():
+        for cat in (llm.catalog()[pid], llm._FALLBACK_CATALOG[pid]):
+            assert not gone & set(cat["models"]), (pid, gone & set(cat["models"]))
+            assert cat["default_model"] not in gone
+
+
+def test_openai_prices_follow_the_model_the_project_uses():
+    cat = llm.catalog()
+    assert cat["openai"]["default_model"] == "gpt-6.1-sol"
+    assert llm.price_for("openai", "gpt-6.1-sol", cat) == (2.0, 10.0)
+    assert llm.price_for("openai", "gpt-4.1", cat) == (2.0, 8.0)
+    # unlisted, but a project that still uses one is priced as itself
+    assert llm.price_for("openai", "gpt-5.1", cat) == (1.25, 10.0)
+    assert llm.price_for("openai", "gpt-5", cat) == (1.25, 10.0)
 
 
 def test_paid_only_models_reach_the_wizard(tmp_path, monkeypatch):

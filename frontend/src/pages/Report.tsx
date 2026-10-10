@@ -37,6 +37,11 @@ export default function ReportPage() {
 
   const stats = rep.stats ?? {}
   const usage = rep.audit?.usage ?? {}
+  // calls the provider reported a model other than the requested one answered
+  const subs: any[] = rep.audit?.model_substitutions ?? []
+  const answeredBy: string[] = Array.from(new Set(subs.map((s: any) => String(s.answered))))
+  const unconfirmed: Record<string, number> = rep.audit?.models_unconfirmed ?? {}
+  const unconfirmedCalls = Object.values(unconfirmed).reduce((a, b) => a + b, 0)
 
   return (
     <div className="page page-wide report">
@@ -47,6 +52,7 @@ export default function ReportPage() {
           <p className="sub">
             <Link to={`/runs/${id}`}>← run</Link>
             {' · '}<span className="mono">{rep.provider}/{rep.model}</span>
+            {answeredBy.length > 0 && <> (answered by <span className="mono">{answeredBy.join(', ')}</span>)</>}
             {' · '}{new Date(rep.generated_at * 1000).toLocaleString()}
           </p>
         </div>
@@ -56,6 +62,16 @@ export default function ReportPage() {
           <a href={`/api/runs/${id}/report.docx`}><button className="primary">Download .docx</button></a>
         </div>
       </div>
+
+      {subs.length > 0 && (
+        <div className="warn-box">
+          {subs.map((s: any, i: number) => (
+            <span key={i}>The project requested <span className="mono">{s.provider}/{s.requested}</span>,
+              but the provider reported that <span className="mono">{s.answered}</span> answered{' '}
+              {s.calls} {s.calls === 1 ? 'call' : 'calls'}. </span>))}
+          When you report this analysis, cite the model that answered.
+        </div>
+      )}
 
       {rep.config && Object.keys(rep.config).length > 0 && (
         <section>
@@ -67,7 +83,8 @@ export default function ReportPage() {
               <tr key={k}><td className="muted" style={{ width: 240 }}>{rep.config_labels?.[k] ?? k}</td>
                 <td style={{ whiteSpace: 'pre-wrap' }}>{settingValue(v) || <span className="muted">(blank)</span>}</td></tr>
             ))}
-            <tr><td className="muted">Provider and model</td><td className="mono">{rep.provider}/{rep.model}</td></tr>
+            <tr><td className="muted">Provider and model</td><td className="mono">{rep.provider}/{rep.model}
+              {answeredBy.length > 0 && <> (answered by {answeredBy.join(', ')})</>}</td></tr>
           </tbody></table>
         </section>
       )}
@@ -273,9 +290,15 @@ export default function ReportPage() {
           {((usage.input_tokens ?? 0) / 1000).toFixed(0)}k input /
           {' '}{((usage.output_tokens ?? 0) / 1000).toFixed(0)}k output tokens.
           {rep.audit?.models_used && Object.keys(rep.audit.models_used).length > 0 && (
-            <> Models that answered: {Object.entries(rep.audit.models_used)
+            <> Models that answered, as the provider reported them: {Object.entries(rep.audit.models_used)
               .map(([m, n]: [string, any], i: number, arr: any[]) => (
                 <span key={m}><span className="mono">{m}</span> ({n}){i < arr.length - 1 ? ', ' : ''}</span>))}.</>)}
+          {Object.keys(unconfirmed).length > 0 && (
+            <> For {unconfirmedCalls} {unconfirmedCalls === 1 ? 'call' : 'calls'} logged before QualiLens
+              recorded which model answered, the log lists only the model requested,{' '}
+              <span className="mono">{Object.keys(unconfirmed).length === 1 ? Object.keys(unconfirmed)[0]
+                : Object.entries(unconfirmed).sort((a, b) => b[1] - a[1])
+                    .map(([m, n]) => `${m} (${n})`).join(', ')}</span>.</>)}
           {typeof rep.audit?.excerpts_unlocated === 'number' && (
             <> Evidence: {rep.audit.excerpts_located} excerpts located verbatim,{' '}
               {rep.audit.excerpts_unlocated} unverified.</>)}

@@ -476,6 +476,63 @@ def test_run_freezes_config_and_report_carries_it(mock_llm_ca):
     assert any(e["kind"] == "user_decision" for e in doc["events"])
     assert doc["checkpoints"][0]["resolution"]["decisions"] == []
     assert doc["checkpoints"][0]["payload"]["kind"] == "code_review"
+    # every call names the model that answered (the mock echoes the request)
+    assert rep["audit"]["models_used"] and not rep["audit"]["models_unconfirmed"]
+    assert rep["audit"]["model_substitutions"] == []
+    assert "answered by" not in text
+
+
+def test_report_names_the_model_that_answered(monkeypatch):
+    """A provider can answer a requested id with another model (Google sent
+    gemini-3.7-flash calls to 3.8-flash). The report indicates it wherever
+    it lists the model, counts a dated snapshot as the model itself, and does
+    not claim an answering model for calls logged before it was recorded."""
+    import threading
+    import time
+    from tests.test_fixes import MockLLM
+    # the mock numbers calls, so no earlier test's run may still be calling:
+    # cancel them, and wait for their threads to exit before patching
+    _quiesce()
+    for _ in range(200):
+        if not any("_execute" in t.name for t in threading.enumerate()):
+            break
+        time.sleep(0.05)
+    m = MockLLM()
+    m.served_for = lambda n: ("" if n == 1 else
+                              "claude-sonnet-5-20260101" if n == 2 else "claude-sonnet-6")
+    monkeypatch.setattr(llm, "chat", m)
+    client.put('/api/settings/keys', json={"anthropic": "sk-test"})
+    pid = client.post('/api/projects', json={
+        "name": "Answered", "method": "content_analysis",
+        "config": {"provider": "anthropic", "model": "claude-sonnet-5", "research_question": "q",
+                   "ca_mode": "Inductive — derive the codebook from the data"}}).json()["id"]
+    client.post(f'/api/projects/{pid}/sources',
+                files={"file": ("doc_1.txt", io.BytesIO(DOC_A.encode()), "text/plain")}, data={"grp": ""})
+    run_id = client.post(f'/api/projects/{pid}/runs').json()["run_id"]
+    d = _wait(run_id, "awaiting_review")
+    client.post(f'/api/runs/{run_id}/checkpoints/{d["pending_checkpoint"]["id"]}/resolve',
+                json={"decisions": []})
+    _wait(run_id, "completed")
+    rep = client.get(f'/api/runs/{run_id}/report').json()
+    audit = rep["audit"]
+    total = audit["usage"]["calls"]
+    assert total >= 3
+    assert audit["models_unconfirmed"] == {"anthropic/claude-sonnet-5": 1}
+    assert audit["models_used"] == {"anthropic/claude-sonnet-5-20260101": 1,
+                                    "anthropic/claude-sonnet-6": total - 2}
+    assert audit["model_substitutions"] == [{"provider": "anthropic", "requested": "claude-sonnet-5",
+                                             "answered": "claude-sonnet-6", "calls": total - 2}]
+    import docx as _docx
+    from app import report_docx
+    text = "\n".join(p.text for p in
+                     _docx.Document(io.BytesIO(report_docx.build_docx(rep))).paragraphs)
+    assert "Model: anthropic/claude-sonnet-5 (answered by claude-sonnet-6)" in text
+    assert "Provider and model: anthropic/claude-sonnet-5 (answered by claude-sonnet-6)" in text
+    n = total - 2
+    assert (f"The project requested anthropic/claude-sonnet-5, but the provider reported that "
+            f"claude-sonnet-6 answered {n} call{'' if n == 1 else 's'}.") in text
+    assert ("For 1 call logged before QualiLens recorded which model answered, the log lists "
+            "only the model requested, anthropic/claude-sonnet-5.") in text
 
 
 def test_sampling_settings_recorded_per_provider(monkeypatch):
