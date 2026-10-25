@@ -1301,6 +1301,53 @@ def test_workbook_that_would_unpack_implausibly_is_refused(monkeypatch):
         cs.parse_workbook("code_review", payload, b"plain text, not a zip", "cp1")
 
 
+def test_transcription_asks_gpt_transcribe_for_json_and_reads_the_text(monkeypatch, tmp_path):
+    """OpenAI deprecated whisper-1 (shutdown 2027-02-26); gpt-transcribe answers
+    the same endpoint. The transcript is requested as JSON and read from its
+    text field, so a 200 without a transcript is an error rather than a
+    transcript made of the raw body."""
+    from app import transcription
+    seen = {}
+
+    class Resp:
+        def __init__(self, status, body):
+            self.status_code, self._body, self.text = status, body, str(body)
+
+        def json(self):
+            if isinstance(self._body, str):
+                raise ValueError("not json")
+            return self._body
+
+    class Client:
+        answer = Resp(200, {"text": "hello there", "languages": [{"code": "en"}]})
+
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            seen.update(url=url, data=dict(data), filename=files["file"][0])
+            return Client.answer
+    monkeypatch.setattr(transcription.httpx, "Client", Client)
+    audio = tmp_path / "interview.m4a"
+    audio.write_bytes(b"\x00" * 10)
+    assert transcription._transcribe_one(audio, "k", retries=0) == "hello there"
+    assert seen["url"].endswith("/v1/audio/transcriptions") and seen["filename"] == "interview.m4a"
+    assert seen["data"] == {"model": "gpt-transcribe", "response_format": "json"}
+    for body in ({"languages": []}, "plain text, not json", ["a list"]):
+        Client.answer = Resp(200, body)
+        with pytest.raises(transcription.TranscriptionError, match="without a transcript"):
+            transcription._transcribe_one(audio, "k", retries=0)
+    Client.answer = Resp(400, {"error": {"message": "bad request"}})
+    with pytest.raises(transcription.TranscriptionError, match="API error 400"):
+        transcription._transcribe_one(audio, "k", retries=0)
+
+
 def test_ffmpeg_input_may_use_the_file_protocol_only(monkeypatch):
     """A playlist saved as .mp4 can name segments on a web server; older
     ffmpeg builds fetch them."""

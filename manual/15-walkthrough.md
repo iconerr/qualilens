@@ -55,7 +55,7 @@ Press **Continue**.
 
 ## Step 3. Model and keys
 
-Select **Anthropic (Claude)**, which now shows `— Ready`. Leave the model at its default of `claude-sonnet-5`. Leave the key field blank, because you are keeping the saved key.
+Select **Anthropic (Claude)**, which now shows `— Ready`. Leave the model at its default of `claude-sonnet-5-5`. Leave the key field blank, because you are keeping the saved key.
 
 Press **Test key** once more with this model selected. The earlier test in Settings used the provider's default, and this one confirms the exact model.
 
@@ -85,9 +85,9 @@ Press **Continue**.
 
 ## Step 5. Review and run
 
-The summary line reads `Thematic Analysis · anthropic/claude-sonnet-5 · 8 sources (304k characters)`.
+The summary line reads `Thematic Analysis · anthropic/claude-sonnet-5-5 · 8 sources (304k characters)`.
 
-The estimate box shows roughly `$1.06`, from about `202k` input tokens and `30k` output tokens, and says it used the Anthropic default price because the catalog lists none for this model. Follow the arithmetic in [The Wizard](02-the-wizard.md#how-the-estimate-is-calculated). Three hundred and four thousand characters becomes seventy-six thousand tokens. That figure is multiplied by the thematic factor of 2.4 and increased by twenty thousand for prompt overhead, with output assumed at fifteen percent.
+The estimate box shows roughly `$0.71`, from about `202k` input tokens and `30k` output tokens, and says it used the Anthropic default price because the catalog lists none for this model. Follow the arithmetic in [The Wizard](02-the-wizard.md#how-the-estimate-is-calculated). Three hundred and four thousand characters becomes seventy-six thousand tokens. That figure is multiplied by the thematic factor of 2.4 and increased by twenty thousand for prompt overhead, with output assumed at fifteen percent.
 
 Beneath the estimate the checkpoints are named. They are the review of initial codes and the review of themes.
 

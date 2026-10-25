@@ -41,10 +41,10 @@ A five-step wizard walks each analysis:
    and model; paste and test the API key.
 4. **Data** — upload transcripts and documents (.txt, .md, .docx, .pdf) or
    audio/video (.mp3, .m4a, .wav, .mp4, .mov, …). Audio and video are
-   transcribed automatically with OpenAI Whisper (requires an OpenAI key even
-   if another provider does the analysis; video also requires ffmpeg).
-   Note: Whisper does not label speakers — if speaker identity matters,
-   upload formatted transcripts instead.
+   transcribed automatically through OpenAI's transcription API (requires an
+   OpenAI key even if another provider does the analysis; video also requires
+   ffmpeg). Note: the transcript does not label speakers — if speaker identity
+   matters, upload formatted transcripts instead.
 5. **Review & run** — a cost estimate, then the run.
 
 ### Checkpoints
@@ -111,10 +111,10 @@ is final. All projects persist in a local SQLite database
 
 ## Architecture
 
-- `backend/` — Python 3.11+ and FastAPI. `app/methods/` holds the four method
+- `backend/` — Python 3.11+ and FastAPI. `app/methods/` holds the five method
   pipelines built on a shared stage/checkpoint framework (`base.py`,
   `common.py`); `app/pipeline.py` is the run manager; `app/llm.py` the
-  provider-agnostic LLM client; `app/transcription.py` Whisper + ffmpeg;
+  provider-agnostic LLM client; `app/transcription.py` OpenAI transcription + ffmpeg;
   `app/report_docx.py` the Word exporter.
 - `frontend/` — React + TypeScript (Vite). Built once; served by the backend.
 - `backend/data/` (or `$QUALILENS_DATA_DIR`) — SQLite database and uploaded
@@ -148,7 +148,7 @@ is final. All projects persist in a local SQLite database
 
 - LLM coding is a *first pass with review*, not a replacement for researcher
   judgment; the checkpoints exist to make that review real.
-- Whisper transcripts have no speaker diarization, and recordings above the
+- Transcripts have no speaker diarization, and recordings above the
   API's size limit are split on a hard time boundary (a word can be garbled at
   each ~10-minute seam).
 - Intercoder reliability (multiple human coders) is not modeled in v1.

@@ -1178,6 +1178,48 @@ def test_repaired_gemini_json_keeps_both_calls_thinking(monkeypatch):
     assert u["output_tokens"] == 20 + 300 + 10 + 40 and u["thinking_tokens"] == 340
 
 
+def test_a_declined_answer_is_named_and_never_parsed(monkeypatch):
+    """Anthropic's safety classifiers answer HTTP 200 with stop_reason
+    "refusal" and no text (Claude 4.7 and later add stop_details); OpenAI's
+    content filter ends a reply with finish_reason content_filter and may
+    leave partial text. Both are declined answers, not truncation, and are
+    refused as the Gemini SAFETY path refuses, with the tokens kept auditable."""
+    reply = {}
+    monkeypatch.setattr(llm, "_post_with_retry", lambda *a, **k: reply)
+    reply.update({"content": [], "stop_reason": "refusal", "model": "claude-sonnet-5-5",
+                  "stop_details": {"type": "refusal", "category": "general_harms",
+                                   "explanation": "The request was declined by a classifier."},
+                  "usage": {"input_tokens": 12, "output_tokens": 0}})
+    with pytest.raises(llm.LLMError, match="declined to answer") as ei:
+        llm.chat("anthropic", "claude-sonnet-5-5", "k", "s", "u")
+    msg = str(ei.value)
+    assert "stop reason: refusal" in msg and "declined by a classifier" in msg
+    assert "use a different provider" in msg and "token budget was consumed" not in msg
+    assert ei.value.usage["stop_reason"] == "refusal"
+    assert ei.value.usage["input_tokens"] == 12 and ei.value.usage["served_model"] == "claude-sonnet-5-5"
+    # without stop_details the explanation is simply absent
+    reply.pop("stop_details")
+    with pytest.raises(llm.LLMError, match="declined to answer") as ei:
+        llm.chat("anthropic", "claude-sonnet-5-5", "k", "s", "u")
+    assert "explanation" not in str(ei.value)
+    # text beside a refusal is partial by definition: chat_json never parses it
+    reply["content"] = [{"type": "text", "text": '{"codes": []}'}]
+    with pytest.raises(llm.LLMError, match="declined"):
+        llm.chat_json("anthropic", "claude-sonnet-5-5", "k", "s", "u")
+    # OpenAI's content filter: partial text, refused, billed
+    reply.clear()
+    reply.update({"choices": [{"message": {"content": '{"codes": ['}, "finish_reason": "content_filter"}],
+                  "usage": {"prompt_tokens": 5, "completion_tokens": 3}, "model": "gpt-6.1-sol-2026-05-01"})
+    with pytest.raises(llm.LLMError, match="finish reason: content_filter") as ei:
+        llm.chat_json("openai", "gpt-6.1-sol", "k", "s", "u")
+    assert ei.value.usage["output_tokens"] == 3 and ei.value.usage["served_model"] == "gpt-6.1-sol-2026-05-01"
+    # an ordinary empty answer keeps the token-budget advice
+    reply.clear()
+    reply.update({"content": [], "stop_reason": "end_turn", "usage": {}})
+    with pytest.raises(llm.LLMError, match="returned no text"):
+        llm.chat("anthropic", "claude-sonnet-5-5", "k", "s", "u")
+
+
 def test_each_call_records_the_model_the_provider_says_answered(monkeypatch):
     # reply shapes as the providers sent them on 2026-10-09
     reply = {}
@@ -1240,9 +1282,11 @@ def test_google_prices_follow_the_model_the_project_uses():
 
 
 # deprecated by the provider, even where calls still work (Google redirects
-# gemini-3.7-flash to 3.8-flash; OpenAI serves gpt-5 until 2026-12-11 and
-# gpt-5.1 until 2027-04-01); the catalog never offers them
-DEPRECATED = {"google": {"gemini-3.7-flash"}, "openai": {"gpt-5", "gpt-5.1"}}
+# gemini-3.7-flash to 3.8-flash; OpenAI serves gpt-5 until 2026-12-11,
+# gpt-4.1 and gpt-4o until 2027-01-14, and gpt-5.1 until 2027-04-01); the
+# catalog never offers them
+DEPRECATED = {"google": {"gemini-3.7-flash"},
+              "openai": {"gpt-5", "gpt-5.1", "gpt-4.1", "gpt-4o"}}
 
 
 def test_the_catalog_offers_no_deprecated_model():
@@ -1256,10 +1300,33 @@ def test_openai_prices_follow_the_model_the_project_uses():
     cat = llm.catalog()
     assert cat["openai"]["default_model"] == "gpt-6.1-sol"
     assert llm.price_for("openai", "gpt-6.1-sol", cat) == (2.0, 10.0)
-    assert llm.price_for("openai", "gpt-4.1", cat) == (2.0, 8.0)
+    assert llm.price_for("openai", "gpt-6-luna", cat) == (0.1, 0.5)
+    assert llm.price_for("openai", "gpt-4.1", cat) == (2.0, 8.0)     # unlisted since 2026-10-24
     # unlisted, but a project that still uses one is priced as itself
     assert llm.price_for("openai", "gpt-5.1", cat) == (1.25, 10.0)
     assert llm.price_for("openai", "gpt-5", cat) == (1.25, 10.0)
+
+
+def test_anthropic_and_mistral_prices_follow_the_model_the_project_uses():
+    """Since 2026-10-24 the Anthropic list offers the 5.5 generation and each
+    model carries its own price (one flat rate had priced Sonnet 5 and Haiku
+    4.5 at Sonnet 4.6's rate); the older three stay priced for the projects
+    that use them. Mistral's default is Large's list price, the other two
+    their own. The compiled-in fallback agrees with models.json."""
+    fallback = {pid: {"pricing_by_model": {}, "paid_only": [], **fb}
+                for pid, fb in llm._FALLBACK_CATALOG.items()}
+    for cat in (llm.catalog(), fallback):
+        assert cat["anthropic"]["default_model"] == "claude-sonnet-5-5"
+        assert llm.price_for("anthropic", "claude-sonnet-5-5", cat) == (2.0, 10.0)
+        assert llm.price_for("anthropic", "claude-opus-5-5", cat) == (4.0, 20.0)
+        assert llm.price_for("anthropic", "claude-haiku-5-5", cat) == (0.1, 0.5)
+        assert llm.price_for("anthropic", "claude-sonnet-5", cat) == (2.0, 10.0)
+        assert llm.price_for("anthropic", "claude-opus-5", cat) == (5.0, 25.0)
+        assert llm.price_for("anthropic", "claude-haiku-4-5-20251001", cat) == (1.0, 5.0)
+        assert llm.price_for("mistral", "mistral-large-latest", cat) == (0.5, 1.5)
+        assert llm.price_for("mistral", "mistral-medium-latest", cat) == (1.5, 7.5)
+        assert llm.price_for("mistral", "mistral-small-latest", cat) == (0.15, 0.6)
+        assert "gpt-6-luna" in cat["openai"]["models"]
 
 
 def test_paid_only_models_reach_the_wizard(tmp_path, monkeypatch):

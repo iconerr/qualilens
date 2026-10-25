@@ -16,11 +16,19 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # the Python CI has always used, and the newest release, which Homebrew
+        # and python.org install by default: a pinned package without a wheel
+        # for it fails every first launch on such a machine (matplotlib 3.11.1
+        # had none for 3.15, found 2026-10-24)
+        python-version: ['3.12', '3.15']
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: '20'

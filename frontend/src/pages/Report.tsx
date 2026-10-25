@@ -91,8 +91,8 @@ export default function ReportPage() {
 
       <section>
         <h2>Sources</h2>
-        <p className="desc">Open any source to read it with its coded spans highlighted —
-          the fastest way to audit what the coding caught and what it missed.</p>
+        <p className="desc">Open any source to read it with its coded spans highlighted,
+          and to see what the coding caught and what it missed.</p>
         <div className="row">
           {rep.sources?.map((s: any) => (
             <button key={s.id} className="small"

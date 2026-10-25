@@ -131,6 +131,10 @@ if [ ! -d backend/.venv ] || ! backend/.venv/bin/python -c 'import uvicorn' >/de
   echo "Installing Python dependencies…"
   backend/.venv/bin/python -m pip -q install -r backend/requirements.txt \
     || fail "Python dependency installation failed. Check your internet connection and try again."
+  # remember what the environment was built against, so the update check
+  # below does not install everything a second time on a first launch and
+  # report that the dependencies changed
+  printf '%s' "$(shasum backend/requirements.txt | cut -d' ' -f1)" > backend/.venv/req.sha
 fi
 
 # an app update can change requirements.txt — reinstall when it differs from

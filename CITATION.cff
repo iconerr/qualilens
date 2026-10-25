@@ -2,6 +2,7 @@ cff-version: 1.2.0
 message: "If you use QualiLens in your research, please cite it as below."
 title: "QualiLens: A local application for LLM-assisted qualitative data analysis"
 type: software
+doi: 10.5281/zenodo.22191913
 authors:
   - family-names: Aggarwal
     given-names: Ashita

@@ -21,9 +21,18 @@
     "The 2.5 prices are kept, unlisted, for projects that still use them.",
     "3.7-flash is deprecated (Google answers it with 3.8-flash); it is",
     "unlisted, and projects that used it are priced by the default.",
-    "OpenAI: gpt-5 (shutdown 2026-12-11) and gpt-5.1 (shutdown 2027-04-01)",
-    "are deprecated and unlisted; their prices are kept for projects that",
-    "still use them.",
+    "OpenAI: gpt-5 (shutdown 2026-12-11), gpt-5.1 (shutdown 2027-04-01),",
+    "gpt-4.1 and gpt-4o (both shut down 2027-01-14) are deprecated and",
+    "unlisted; their prices are kept for projects that still use them.",
+    "gpt-6-luna is the inexpensive model OpenAI names as their replacement.",
+    "Anthropic: prices are per model. The Haiku 5.5 price is Anthropic's rate",
+    "for prompts up to 100,000 tokens, which QualiLens's calls stay under.",
+    "claude-sonnet-5, claude-opus-5 and claude-haiku-4-5-20251001 are still",
+    "served but unlisted since the 5.5 generation; their prices are kept.",
+    "Mistral: the default (Large) price is from Mistral's pricing page on",
+    "2026-10-24; the Medium and Small prices are third-party readings of the",
+    "same date, which Mistral's own pages did not state. Mistral's -latest",
+    "aliases move to new versions silently; the app records the alias.",
     "Check models asks Google about each listed model for free, because",
     "Google keeps listing models it refuses to some projects (the 2.5",
     "models, for projects new to them). paid_only names models a free key",
@@ -35,16 +44,36 @@
   ],
   "anthropic": {
     "label": "Anthropic (Claude)",
-    "default_model": "claude-sonnet-5",
+    "default_model": "claude-sonnet-5-5",
     "models": [
-      "claude-sonnet-5",
-      "claude-opus-5",
-      "claude-haiku-4-5-20251001"
+      "claude-sonnet-5-5",
+      "claude-opus-5-5",
+      "claude-haiku-5-5"
     ],
     "pricing_usd_per_mtok": {
       "default": [
-        3.0,
-        15.0
+        2.0,
+        10.0
+      ],
+      "claude-opus-5-5": [
+        4.0,
+        20.0
+      ],
+      "claude-haiku-5-5": [
+        0.1,
+        0.5
+      ],
+      "claude-sonnet-5": [
+        2.0,
+        10.0
+      ],
+      "claude-opus-5": [
+        5.0,
+        25.0
+      ],
+      "claude-haiku-4-5-20251001": [
+        1.0,
+        5.0
       ]
     }
   },
@@ -53,13 +82,16 @@
     "default_model": "gpt-6.1-sol",
     "models": [
       "gpt-6.1-sol",
-      "gpt-4.1",
-      "gpt-4o"
+      "gpt-6-luna"
     ],
     "pricing_usd_per_mtok": {
       "default": [
         2.0,
         10.0
+      ],
+      "gpt-6-luna": [
+        0.1,
+        0.5
       ],
       "gpt-4.1": [
         2.0,
@@ -124,8 +156,16 @@
     ],
     "pricing_usd_per_mtok": {
       "default": [
-        2.0,
-        6.0
+        0.5,
+        1.5
+      ],
+      "mistral-medium-latest": [
+        1.5,
+        7.5
+      ],
+      "mistral-small-latest": [
+        0.15,
+        0.6
       ]
     }
   }

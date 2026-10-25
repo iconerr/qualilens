@@ -30,16 +30,20 @@ BACKOFF_CAP = 60.0
 _FALLBACK_CATALOG = {
     "anthropic": {
         "label": "Anthropic (Claude)",
-        "default_model": "claude-sonnet-5",
-        "models": ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001"],
-        "pricing": (3.0, 15.0),
+        "default_model": "claude-sonnet-5-5",
+        "models": ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"],
+        "pricing": (2.0, 10.0),
+        "pricing_by_model": {"claude-opus-5-5": (4.0, 20.0), "claude-haiku-5-5": (0.1, 0.5),
+                             "claude-sonnet-5": (2.0, 10.0), "claude-opus-5": (5.0, 25.0),
+                             "claude-haiku-4-5-20251001": (1.0, 5.0)},
     },
     "openai": {
         "label": "OpenAI (GPT)",
         "default_model": "gpt-6.1-sol",
-        "models": ["gpt-6.1-sol", "gpt-4.1", "gpt-4o"],
+        "models": ["gpt-6.1-sol", "gpt-6-luna"],
         "pricing": (2.0, 10.0),
-        "pricing_by_model": {"gpt-4.1": (2.0, 8.0), "gpt-4o": (2.5, 10.0),
+        "pricing_by_model": {"gpt-6-luna": (0.1, 0.5),
+                             "gpt-4.1": (2.0, 8.0), "gpt-4o": (2.5, 10.0),
                              "gpt-5.1": (1.25, 10.0), "gpt-5": (1.25, 10.0)},
     },
     "google": {
@@ -58,7 +62,9 @@ _FALLBACK_CATALOG = {
         "label": "Mistral",
         "default_model": "mistral-large-latest",
         "models": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"],
-        "pricing": (2.0, 6.0),
+        "pricing": (0.5, 1.5),
+        "pricing_by_model": {"mistral-medium-latest": (1.5, 7.5),
+                             "mistral-small-latest": (0.15, 0.6)},
     },
 }
 
@@ -362,6 +368,26 @@ def same_model(requested: str, served: str) -> bool:
                                       srv) is not None
 
 
+def _declined(provider: str, model: str, how: str, explanation, usage: dict,
+              stop_reason: str, sampling: dict) -> "LLMError":
+    """The provider's safety system withheld the answer: Anthropic's refusal
+    stop reason, OpenAI's content_filter finish reason. The error says so and
+    names the way forward, as the Gemini SAFETY path does, instead of the
+    empty-answer advice about token budgets, which does not apply. Whatever
+    text came back may be partial and never reaches the JSON parser. The
+    tokens were billed, so usage stays auditable."""
+    why = f" The provider's explanation: {explanation}" if explanation else ""
+    err = LLMError(
+        f"{provider}/{model} declined to answer this segment ({how}). Its safety "
+        "system withheld the text; nothing was truncated, so a larger token budget "
+        f"will not help.{why} Resume once; if the same segment is declined again, "
+        "use a different provider for this project.")
+    usage["stop_reason"] = stop_reason
+    usage["sampling"] = sampling
+    err.usage = usage
+    return err
+
+
 def _finalize(text: str, usage: dict, stop_reason: str, provider: str, model: str,
               sampling: dict | None = None) -> tuple[str, dict]:
     """Common post-checks: refuse empty output and surface truncation. The
@@ -472,14 +498,21 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         )
         text = "".join(b.get("text", "") for b in data.get("content", []))
         u = data.get("usage", {})
+        usage = {"input_tokens": u.get("input_tokens", 0),
+                 "output_tokens": u.get("output_tokens", 0),
+                 **_served(data.get("model"))}
+        sampling = {"temperature": "provider default", "max_tokens": max_tokens + 8000}
         stop = data.get("stop_reason", "")
+        if stop == "refusal":
+            # Anthropic's safety classifiers answer HTTP 200 with stop_reason
+            # "refusal", no text, and (Claude 4.7 and later) a stop_details
+            # explanation: the segment was declined, not truncated
+            details = data.get("stop_details") or {}
+            raise _declined(provider, model, "stop reason: refusal",
+                            details.get("explanation") or details.get("category"),
+                            usage, stop, sampling)
         stop = TRUNCATED if stop == "max_tokens" else stop
-        return _finalize(text, {"input_tokens": u.get("input_tokens", 0),
-                                "output_tokens": u.get("output_tokens", 0),
-                                **_served(data.get("model"))},
-                         stop, provider, model,
-                         sampling={"temperature": "provider default",
-                                   "max_tokens": max_tokens + 8000})
+        return _finalize(text, usage, stop, provider, model, sampling=sampling)
 
     if provider == "openai":
         payload = {"model": model,
@@ -503,12 +536,17 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         choice = data["choices"][0]
         text = choice["message"].get("content") or ""
         u = data.get("usage", {})
+        usage = {"input_tokens": u.get("prompt_tokens", 0),
+                 "output_tokens": u.get("completion_tokens", 0),
+                 **_served(data.get("model"))}
         stop = choice.get("finish_reason", "")
+        if stop == "content_filter":
+            # the text that came back may be partial, and a partial answer must
+            # never reach the JSON parser or the repair step (as for Gemini)
+            raise _declined(provider, model, "finish reason: content_filter", None,
+                            usage, stop, sampling)
         stop = TRUNCATED if stop == "length" else stop
-        return _finalize(text, {"input_tokens": u.get("prompt_tokens", 0),
-                                "output_tokens": u.get("completion_tokens", 0),
-                                **_served(data.get("model"))},
-                         stop, provider, model, sampling=sampling)
+        return _finalize(text, usage, stop, provider, model, sampling=sampling)
 
     if provider == "google":
         model_id = model.removeprefix("models/")   # as Google's own list prints it

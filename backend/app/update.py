@@ -268,7 +268,7 @@ def _release_notes(body) -> str:
     capped — the release page carries the rest. Text, never markup: the
     interface renders it as a string."""
     text = str(body or "").replace("\r\n", "\n").strip()
-    first = re.split(r"\n\s*\n", text, 1)[0] if text else ""
+    first = re.split(r"\n\s*\n", text, maxsplit=1)[0] if text else ""
     first = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", first)   # [text](url) -> text
     first = re.sub(r"^\s*(#+|>)\s*", "", first, flags=re.M)   # heading and quote markers
     first = re.sub(r"[*_`]+", "", first)                     # emphasis and code

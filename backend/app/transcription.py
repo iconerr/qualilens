@@ -5,8 +5,9 @@
 
 Video files have their audio track extracted with ffmpeg. Files over the
 API's ~25MB limit are split into time-based chunks (also via ffmpeg) and
-the transcripts concatenated. Whisper does not diarize; the transcript is
-a single stream of speech, which the UI discloses to the user.
+the transcripts concatenated. The transcription model does not label
+speakers; the transcript is a single stream of speech, which the UI
+discloses to the user.
 """
 
 import shutil
@@ -18,7 +19,10 @@ import httpx
 
 MAX_UPLOAD_BYTES = 24 * 1024 * 1024
 CHUNK_SECONDS = 600  # 10-minute chunks when splitting
-TRANSCRIBE_MODEL = "whisper-1"
+# OpenAI deprecated whisper-1 on 2026-08-26 (shutdown 2027-02-26) and names
+# gpt-transcribe as its replacement for recorded speech. The transcript is
+# asked for as JSON, the one format every transcription model returns.
+TRANSCRIBE_MODEL = "gpt-transcribe"
 # containers the transcription API does not accept as-is; ffmpeg re-encodes
 # them to mp3 first (the uploader accepts them so a phone recording is not
 # refused at the door)
@@ -38,8 +42,8 @@ def transcribe(path: Path, kind: str, openai_key: str,
     """Transcribe an audio or video file. Returns plain-text transcript."""
     if not openai_key:
         raise TranscriptionError(
-            "Audio/video transcription requires an OpenAI API key (used for Whisper). "
-            "Add one in Settings."
+            "Audio/video transcription requires an OpenAI API key, whichever provider "
+            "runs the analysis. Add one in Settings."
         )
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -116,7 +120,7 @@ def _transcribe_one(path: Path, openai_key: str, retries: int = 3) -> str:
         try:
             with open(path, "rb") as f:
                 files = {"file": (path.name, f, "application/octet-stream")}
-                data = {"model": TRANSCRIBE_MODEL, "response_format": "text"}
+                data = {"model": TRANSCRIBE_MODEL, "response_format": "json"}
                 with httpx.Client(timeout=httpx.Timeout(600.0, connect=15.0)) as client:
                     resp = client.post(
                         "https://api.openai.com/v1/audio/transcriptions",
@@ -124,7 +128,16 @@ def _transcribe_one(path: Path, openai_key: str, retries: int = 3) -> str:
                         data=data, files=files,
                     )
             if resp.status_code == 200:
-                return resp.text
+                try:
+                    body = resp.json()
+                except ValueError:
+                    body = None
+                text = body.get("text") if isinstance(body, dict) else None
+                if not isinstance(text, str):
+                    raise TranscriptionError(
+                        f"Transcription failed for {path.name}: the API answered without "
+                        "a transcript (unexpected response shape).")
+                return text
             last_err = f"API error {resp.status_code}: {resp.text[:400]}"
             if resp.status_code not in (408, 429, 500, 502, 503, 504):
                 break  # permanent error — retrying will not help

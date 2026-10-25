@@ -56,7 +56,7 @@ A line reading `NOTICE: the data folder … appears to sit inside a cloud-synced
 
 | Message | Cause | Remedy |
 |---|---|---|
-| `Audio/video transcription requires an OpenAI API key (used for Whisper). Add one in Settings.` | No OpenAI key is saved, whichever provider runs the analysis, or the saved one is unreadable on this computer (Settings says so) | Save an OpenAI key in Settings, then press Retry on the source |
+| `Audio/video transcription requires an OpenAI API key, whichever provider runs the analysis. Add one in Settings.` | No OpenAI key is saved, whichever provider runs the analysis, or the saved one is unreadable on this computer (Settings says so) | Save an OpenAI key in Settings, then press Retry on the source |
 | `ffmpeg is required to extract audio from video files.` | A video was uploaded and ffmpeg is not installed | Install ffmpeg, then Retry. Settings shows whether the app can see it |
 | `This audio file exceeds the transcription API's size limit and ffmpeg is not available to split it.` | The recording is over roughly 24 MB and cannot be chunked | Install ffmpeg and Retry, or compress the audio yourself before uploading |
 | `The transcription service does not accept .aac files and ffmpeg is not available to convert it.` | An `.aac` recording needs re-encoding first | Install ffmpeg and Retry, or convert the recording to `.mp3` or `.m4a` and upload that |

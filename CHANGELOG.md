@@ -9,6 +9,45 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.10.1 — 2026-10-24
+
+- The Anthropic list offers the 5.5 generation: `claude-sonnet-5-5` is the
+  default, with `claude-opus-5-5` and `claude-haiku-5-5`. `claude-sonnet-5`,
+  `claude-opus-5` and `claude-haiku-4-5-20251001` stay available under
+  Custom model id and keep running in the projects that use them. The cost
+  estimate now prices each Anthropic model at its own rate; it had used one
+  rate for all three, which overstated Sonnet 5 and Haiku 4.5 and
+  understated Opus 5.
+- `gpt-4.1` and `gpt-4o` have been removed from the OpenAI list. OpenAI
+  deprecated them on 14 October 2026 and shuts them down on 14 January
+  2027; a project that uses either keeps running until then. `gpt-6-luna`,
+  the replacement OpenAI names, joins `gpt-6.1-sol`.
+- The estimate's Mistral prices follow Mistral's current list: Large at
+  $0.50 and $1.50 per million tokens, with Medium and Small priced
+  separately.
+- QualiLens installs on Python 3.15, which Homebrew and python.org now
+  install by default. The pinned chart library had no build for 3.15, so a
+  first launch on such a computer stopped while installing dependencies and
+  blamed the internet connection. The test suite now also runs on 3.15.
+- Updated pypdf to 6.21.2, Pillow to 13.0.0 and certifi to 2026.10.23, which
+  fix flaws published since the last release; pypdf reads the PDFs you
+  upload.
+- Audio and video are transcribed with OpenAI's `gpt-transcribe` model.
+  OpenAI has deprecated `whisper-1` and shuts it down on 26 February 2027.
+  The new model costs less per minute and, like Whisper, does not label
+  speakers.
+- When a provider's safety system declines to answer a segment, the run
+  stops with a message that says so, carries the provider's explanation when
+  it gives one, and suggests resuming once or using another provider. Such
+  an answer used to be reported as an empty reply with advice about token
+  limits, and a reply cut short by OpenAI's content filter could reach the
+  JSON reader as a partial answer.
+- The first launch no longer reports that the dependencies changed right
+  after installing them.
+- README names all five methods, CITATION.cff carries the Zenodo DOI, and
+  two sentences describe what the coded-source reader shows instead of
+  calling it the fastest way.
+
 ## 1.10.0 — 2026-10-09
 
 - Reports now list the model that actually answered each call, and
