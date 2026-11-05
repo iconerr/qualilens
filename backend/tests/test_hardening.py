@@ -561,11 +561,16 @@ def test_sampling_settings_recorded_per_provider(monkeypatch):
     _, u = llm.chat("google", "gemini-3.6-flash", "k", "s", "u", max_tokens=100, temperature=0.2)
     assert u["sampling"] == {"temperature": "provider default", "max_tokens": 100 + 16384}
     assert "temperature" not in seen["payload"]["generationConfig"]
-    _, u = llm.chat("google", "gemini-2.5-flash", "k", "s", "u", max_tokens=100, temperature=0.2)
+    _, u = llm.chat("google", "gemini-2.5-flash-lite", "k", "s", "u", max_tokens=100, temperature=0.2)
     assert u["sampling"] == {"temperature": 0.2, "max_tokens": 100 + 16384}
     assert seen["payload"]["generationConfig"]["temperature"] == 0.2
+    # the two 2.5 ids Google answers with Gemini 3 models from 2026-12-01 get none
+    _, u = llm.chat("google", "gemini-2.5-flash", "k", "s", "u", max_tokens=100, temperature=0.2)
+    assert u["sampling"]["temperature"] == "provider default"
+    # Mistral Large 4 reasons inside max_tokens: the budget sent has headroom
     _, u = llm.chat("mistral", "m", "k", "s", "u", max_tokens=100, temperature=0.2)
-    assert u["sampling"] == {"temperature": 0.2, "max_tokens": 100}
+    assert u["sampling"] == {"temperature": 0.2, "max_tokens": 8100}
+    assert seen["payload"]["max_tokens"] == 8100
     # a 200 with a non-JSON body is an LLMError, not a stray exception
     class R:
         status_code = 200

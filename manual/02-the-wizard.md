@@ -151,15 +151,15 @@ The character count of all ready sources is converted to tokens at four characte
 | Anthropic | $2.00 | $10.00 |
 | OpenAI | $2.00 | $10.00 |
 | Google | $0.75 | $3.75 |
-| Mistral | $0.50 | $1.50 |
+| Mistral | $0.70 | $2.10 |
 
-The Google row is the price of the default Gemini Flash models, which Google calls introductory until 31 December 2026; from 1 January 2027 it is $1.50 and $7.50. `gemini-3.5-flash-lite` ($0.30 and $2.50) and `gemini-3.1-pro-preview` ($2.00 and $12.00, for prompts up to 200,000 tokens) carry their own prices in the catalog, and so do `gemini-2.5-pro` ($1.25 and $10.00) and `gemini-2.5-flash` ($0.30 and $2.50) for projects that still use them.
+The Google row is the price of the default Gemini Flash models, which Google calls introductory until 31 December 2026; from 1 January 2027 it is $1.50 and $7.50. `gemini-3.5-flash-lite` ($0.30 and $2.50), `gemini-3.1-pro-preview` ($2.00 and $12.00, for prompts up to 200,000 tokens) and `gemini-4-argon` ($4.00 and $20.00, Google's price from 1 December 2026; it charges half until 30 November) carry their own prices in the catalog, and so do `gemini-2.5-pro` ($1.25 and $10.00) and `gemini-2.5-flash` ($0.30 and $2.50) for projects that still use them. From 1 December 2026 Google answers those two with `gemini-3.8-flash` and `gemini-3.5-flash-lite` and bills their rates, so a 2.5 project's estimate is low from that day.
 
 The Anthropic row is the price of the default, `claude-sonnet-5-5`. `claude-opus-5-5` ($4.00 and $20.00) and `claude-haiku-5-5` ($0.10 and $0.50, Anthropic's rate for prompts up to 100,000 tokens, which QualiLens's calls stay under) carry their own prices in the catalog, and so do `claude-sonnet-5` ($2.00 and $10.00), `claude-opus-5` ($5.00 and $25.00) and `claude-haiku-4-5-20251001` ($1.00 and $5.00) for projects that use them.
 
 The OpenAI row is the price of the default, `gpt-6.1-sol`. `gpt-6-luna` ($0.10 and $0.50) carries its own price in the catalog, and so do `gpt-4.1` ($2.00 and $8.00), `gpt-4o` ($2.50 and $10.00), `gpt-5.1` and `gpt-5` ($1.25 and $10.00 each) for projects that still use them.
 
-The Mistral row is the price of the default, `mistral-large-latest`, as Mistral's pricing page gave it on 24 October 2026. `mistral-medium-latest` ($1.50 and $7.50) and `mistral-small-latest` ($0.15 and $0.60) carry their own prices, read from third-party listings of the same date because Mistral's own pages did not state them.
+The Mistral row is the price of the default, `mistral-large-4`, as Mistral's pricing page gave it on 4 November 2026, and `mistral-small-latest` ($0.15 and $0.60) carries its own from the same page. `mistral-large-latest` ($0.50 and $1.50) and `mistral-medium-latest` ($1.50 and $7.50, from third-party listings of 24 October 2026, which Mistral's own pages did not state) keep their prices for projects that still use them.
 
 Four things the estimate does not know are worth holding in mind. It uses the built-in price table rather than the price your account actually pays, so a discounted or a premium rate will move the real figure; the table prices each provider as a whole unless `backend/app/models.json` lists a price for the model you chose, and the estimate box says which of the two it used. It assumes one pass through the pipeline, so a run you resume after a failure, or a second run over the same project, costs again for the stages that repeat. It does not model reasoning tokens, which several current AI models spend internally and bill as output. And it cannot know how verbose your chosen model will be.
 

@@ -1149,9 +1149,14 @@ def test_gemini_bills_thinking_and_refuses_incomplete_answers(monkeypatch):
     assert "temperature" not in seen["payload"]["generationConfig"]
     assert u["sampling"]["temperature"] == "provider default"
     # an older family, prefixed, keeps the temperature QualiLens sets
-    llm.chat("google", "models/gemini-2.5-flash", "k", "s", "u", max_tokens=100, temperature=0.2)
-    assert seen["url"].endswith("/v1beta/models/gemini-2.5-flash:generateContent")
+    llm.chat("google", "models/gemini-2.5-flash-lite", "k", "s", "u", max_tokens=100, temperature=0.2)
+    assert seen["url"].endswith("/v1beta/models/gemini-2.5-flash-lite:generateContent")
     assert seen["payload"]["generationConfig"]["temperature"] == 0.2
+    # except the two 2.5 ids Google answers with Gemini 3 models from
+    # 2026-12-01, which take none
+    for rerouted in ("gemini-2.5-pro", "models/gemini-2.5-flash"):
+        llm.chat("google", rerouted, "k", "s", "u", max_tokens=100, temperature=0.2)
+        assert "temperature" not in seen["payload"]["generationConfig"], rerouted
     # a filtered or withheld answer may be partial: refused, and still billed
     for reason in ("SAFETY", "RECITATION", "PROHIBITED_CONTENT"):
         reply["candidates"][0]["finishReason"] = reason
@@ -1271,10 +1276,53 @@ def test_a_dated_snapshot_is_the_same_model_and_a_successor_is_not():
     assert not llm.same_model("gpt-4o", "gpt-4o-mini-2024-07-18")
 
 
+def test_mistral_reasoning_answers_are_read_and_given_headroom(monkeypatch):
+    """Mistral Large 4 (public preview 2026-10-06, the replacement Mistral
+    names for the deprecated Large 3 and Medium 3.5) answers with a list of
+    chunks, a thinking chunk whose trace is itself a list of text chunks and
+    then the text chunk, where the other models answer with a string, and
+    its reasoning tokens count against max_tokens (16 tokens bought thinking
+    and nothing visible, 2026-11-04). The answer is the text chunks alone,
+    the trace is recorded as thinking tokens, and the budget has headroom."""
+    seen = {}
+    reply = {}
+
+    def fake_post(url, headers, payload, retries=5):
+        seen["payload"] = payload
+        return reply
+    monkeypatch.setattr(llm, "_post_with_retry", fake_post)
+    reply.update({"choices": [{"message": {"role": "assistant", "content": [
+        {"type": "thinking", "thinking": [{"type": "text", "text": "The user wants one word."}]},
+        {"type": "text", "text": '{"codes": []}'}]}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 25, "completion_tokens": 32,
+                  "completion_tokens_details": {"reasoning_tokens": 28}},
+        "model": "mistral-large-4"})
+    text, u = llm.chat("mistral", "mistral-large-4", "k", "s", "u", max_tokens=100, temperature=0.2)
+    assert text == '{"codes": []}'                     # the trace never reaches the parser
+    assert u["output_tokens"] == 32 and u["thinking_tokens"] == 28
+    assert u["served_model"] == "mistral-large-4" and u["stop_reason"] == "stop"
+    assert seen["payload"]["max_tokens"] == 100 + 8000 and seen["payload"]["temperature"] == 0.2
+    assert u["sampling"] == {"temperature": 0.2, "max_tokens": 8100}
+    assert llm.chat_json("mistral", "mistral-large-4", "k", "s", "u")[0] == {"codes": []}
+    # a string answer, as Large 3, Medium 3.5 and Small 4 give one, is unchanged
+    reply["choices"][0]["message"]["content"] = '{"codes": [1]}'
+    reply["usage"].pop("completion_tokens_details")
+    text, u = llm.chat("mistral", "mistral-large-latest", "k", "s", "u")
+    assert text == '{"codes": [1]}' and u["thinking_tokens"] == 0
+    # thinking that used the whole budget is an empty answer, still billed
+    reply["choices"][0]["message"]["content"] = [
+        {"type": "thinking", "thinking": [{"type": "text", "text": "…"}]}]
+    reply["choices"][0]["finish_reason"] = "length"
+    with pytest.raises(llm.LLMError, match="returned no text") as ei:
+        llm.chat("mistral", "mistral-large-4", "k", "s", "u")
+    assert ei.value.usage["output_tokens"] == 32 and ei.value.usage["stop_reason"] == "truncated"
+
+
 def test_google_prices_follow_the_model_the_project_uses():
     cat = llm.catalog()
     assert llm.price_for("google", "gemini-3.6-flash", cat) == (0.75, 3.75)
     assert llm.price_for("google", "models/gemini-3.1-pro-preview", cat) == (2.0, 12.0)
+    assert llm.price_for("google", "gemini-4-argon", cat) == (4.0, 20.0)   # from 2026-12-01; half until then
     # unlisted, but a project that still uses 2.5 is priced as 2.5
     assert llm.price_for("google", "gemini-2.5-pro", cat) == (1.25, 10.0)
     assert llm.price_key("google", " models/gemini-2.5-flash ") == "gemini-2.5-flash"
@@ -1283,10 +1331,13 @@ def test_google_prices_follow_the_model_the_project_uses():
 
 # deprecated by the provider, even where calls still work (Google redirects
 # gemini-3.7-flash to 3.8-flash; OpenAI serves gpt-5 until 2026-12-11,
-# gpt-4.1 and gpt-4o until 2027-01-14, and gpt-5.1 until 2027-04-01); the
+# gpt-4.1 and gpt-4o until 2027-01-14, and gpt-5.1 until 2027-04-01;
+# Mistral serves Large 3 and Medium 3.5, deprecated 2026-10-31, until
+# 2027-04-30, and on 2026-11-04 its -latest aliases still named them); the
 # catalog never offers them
 DEPRECATED = {"google": {"gemini-3.7-flash"},
-              "openai": {"gpt-5", "gpt-5.1", "gpt-4.1", "gpt-4o"}}
+              "openai": {"gpt-5", "gpt-5.1", "gpt-4.1", "gpt-4o"},
+              "mistral": {"mistral-large-latest", "mistral-medium-latest"}}
 
 
 def test_the_catalog_offers_no_deprecated_model():
@@ -1311,8 +1362,10 @@ def test_anthropic_and_mistral_prices_follow_the_model_the_project_uses():
     """Since 2026-10-24 the Anthropic list offers the 5.5 generation and each
     model carries its own price (one flat rate had priced Sonnet 5 and Haiku
     4.5 at Sonnet 4.6's rate); the older three stay priced for the projects
-    that use them. Mistral's default is Large's list price, the other two
-    their own. The compiled-in fallback agrees with models.json."""
+    that use them. Since 2026-11-04 Mistral's default is Large 4 at Mistral's
+    price, Small 4 its own, and the two -latest aliases that still name the
+    deprecated Large 3 and Medium 3.5 are unlisted but priced. The
+    compiled-in fallback agrees with models.json."""
     fallback = {pid: {"pricing_by_model": {}, "paid_only": [], **fb}
                 for pid, fb in llm._FALLBACK_CATALOG.items()}
     for cat in (llm.catalog(), fallback):
@@ -1323,16 +1376,19 @@ def test_anthropic_and_mistral_prices_follow_the_model_the_project_uses():
         assert llm.price_for("anthropic", "claude-sonnet-5", cat) == (2.0, 10.0)
         assert llm.price_for("anthropic", "claude-opus-5", cat) == (5.0, 25.0)
         assert llm.price_for("anthropic", "claude-haiku-4-5-20251001", cat) == (1.0, 5.0)
-        assert llm.price_for("mistral", "mistral-large-latest", cat) == (0.5, 1.5)
-        assert llm.price_for("mistral", "mistral-medium-latest", cat) == (1.5, 7.5)
+        assert cat["mistral"]["default_model"] == "mistral-large-4"
+        assert cat["mistral"]["models"] == ["mistral-large-4", "mistral-small-latest"]
+        assert llm.price_for("mistral", "mistral-large-4", cat) == (0.7, 2.1)
         assert llm.price_for("mistral", "mistral-small-latest", cat) == (0.15, 0.6)
+        assert llm.price_for("mistral", "mistral-large-latest", cat) == (0.5, 1.5)   # unlisted
+        assert llm.price_for("mistral", "mistral-medium-latest", cat) == (1.5, 7.5)  # unlisted
         assert "gpt-6-luna" in cat["openai"]["models"]
 
 
 def test_paid_only_models_reach_the_wizard(tmp_path, monkeypatch):
     meta = client.get('/api/meta').json()
     google = next(p for p in meta["providers"] if p["id"] == "google")
-    assert google["paid_only"] == ["gemini-3.1-pro-preview"]
+    assert google["paid_only"] == ["gemini-3.1-pro-preview", "gemini-4-argon"]
     assert all(p["paid_only"] == [] for p in meta["providers"] if p["id"] != "google")
     # a malformed entry is ignored, never fatal
     edited = tmp_path / "models.json"
@@ -1342,7 +1398,7 @@ def test_paid_only_models_reach_the_wizard(tmp_path, monkeypatch):
     # and the compiled-in fallback carries the same list and prices
     edited.write_text("{not json")
     fb = llm.catalog()["google"]
-    assert fb["paid_only"] == ["gemini-3.1-pro-preview"]
+    assert fb["paid_only"] == ["gemini-3.1-pro-preview", "gemini-4-argon"]
     assert llm.price_for("google", "gemini-2.5-pro", llm.catalog()) == (1.25, 10.0)
 
 

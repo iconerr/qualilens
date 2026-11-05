@@ -18,9 +18,14 @@
     "time of editing and are not guaranteed — check the provider's page.",
     "Google: the 3.6 and 3.8 Flash prices are introductory until",
     "2026-12-31 ($1.50 / $7.50 from 2027-01-01) — update the default then.",
-    "The 2.5 prices are kept, unlisted, for projects that still use them.",
-    "3.7-flash is deprecated (Google answers it with 3.8-flash); it is",
-    "unlisted, and projects that used it are priced by the default.",
+    "gemini-4-argon carries its price from 2026-12-01 ($4.00 / $20.00; Google",
+    "charges half until 2026-11-30) and is not on Google's free tier.",
+    "The 2.5 prices are kept, unlisted, for projects that still use them;",
+    "from 2026-12-01 Google answers gemini-2.5-pro with 3.8-flash and",
+    "gemini-2.5-flash with 3.5-flash-lite, bills those rates, and the report",
+    "names the model that answered. 3.7-flash is deprecated (Google answers",
+    "it with 3.8-flash); it is unlisted, and projects that used it are priced",
+    "by the default.",
     "OpenAI: gpt-5 (shutdown 2026-12-11), gpt-5.1 (shutdown 2027-04-01),",
     "gpt-4.1 and gpt-4o (both shut down 2027-01-14) are deprecated and",
     "unlisted; their prices are kept for projects that still use them.",
@@ -29,10 +34,14 @@
     "for prompts up to 100,000 tokens, which QualiLens's calls stay under.",
     "claude-sonnet-5, claude-opus-5 and claude-haiku-4-5-20251001 are still",
     "served but unlisted since the 5.5 generation; their prices are kept.",
-    "Mistral: the default (Large) price is from Mistral's pricing page on",
-    "2026-10-24; the Medium and Small prices are third-party readings of the",
-    "same date, which Mistral's own pages did not state. Mistral's -latest",
-    "aliases move to new versions silently; the app records the alias.",
+    "Mistral: Large 3 and Medium 3.5 were deprecated on 2026-10-31 (retired",
+    "2027-04-30; Large 4 replaces both) and the -latest aliases still named",
+    "them on 2026-11-04, so the catalog lists mistral-large-4 (Mistral's price",
+    "of 2026-11-04) and mistral-small-latest (Small 4, priced from Mistral's",
+    "page). mistral-large-latest and mistral-medium-latest are unlisted; their",
+    "prices are kept for projects that still use them (Medium's from",
+    "third-party listings of 2026-10-24). Mistral's -latest aliases move to",
+    "new versions silently; the app records the alias.",
     "Check models asks Google about each listed model for free, because",
     "Google keeps listing models it refuses to some projects (the 2.5",
     "models, for projects new to them). paid_only names models a free key",
@@ -118,7 +127,8 @@
       "gemini-3.6-flash",
       "gemini-3.8-flash",
       "gemini-3.5-flash-lite",
-      "gemini-3.1-pro-preview"
+      "gemini-3.1-pro-preview",
+      "gemini-4-argon"
     ],
     "pricing_usd_per_mtok": {
       "default": [
@@ -133,6 +143,10 @@
         2.0,
         12.0
       ],
+      "gemini-4-argon": [
+        4.0,
+        20.0
+      ],
       "gemini-2.5-pro": [
         1.25,
         10.0
@@ -143,29 +157,33 @@
       ]
     },
     "paid_only": [
-      "gemini-3.1-pro-preview"
+      "gemini-3.1-pro-preview",
+      "gemini-4-argon"
     ]
   },
   "mistral": {
     "label": "Mistral",
-    "default_model": "mistral-large-latest",
+    "default_model": "mistral-large-4",
     "models": [
-      "mistral-large-latest",
-      "mistral-medium-latest",
+      "mistral-large-4",
       "mistral-small-latest"
     ],
     "pricing_usd_per_mtok": {
       "default": [
+        0.7,
+        2.1
+      ],
+      "mistral-small-latest": [
+        0.15,
+        0.6
+      ],
+      "mistral-large-latest": [
         0.5,
         1.5
       ],
       "mistral-medium-latest": [
         1.5,
         7.5
-      ],
-      "mistral-small-latest": [
-        0.15,
-        0.6
       ]
     }
   }

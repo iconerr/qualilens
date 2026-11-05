@@ -50,21 +50,24 @@ _FALLBACK_CATALOG = {
         "label": "Google (Gemini)",
         "default_model": "gemini-3.6-flash",
         "models": ["gemini-3.6-flash", "gemini-3.8-flash",
-                   "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"],
+                   "gemini-3.5-flash-lite", "gemini-3.1-pro-preview",
+                   "gemini-4-argon"],
         "pricing": (0.75, 3.75),
         "pricing_by_model": {"gemini-3.5-flash-lite": (0.3, 2.5),
                              "gemini-3.1-pro-preview": (2.0, 12.0),
+                             "gemini-4-argon": (4.0, 20.0),
                              "gemini-2.5-pro": (1.25, 10.0),
                              "gemini-2.5-flash": (0.3, 2.5)},
-        "paid_only": ["gemini-3.1-pro-preview"],
+        "paid_only": ["gemini-3.1-pro-preview", "gemini-4-argon"],
     },
     "mistral": {
         "label": "Mistral",
-        "default_model": "mistral-large-latest",
-        "models": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"],
-        "pricing": (0.5, 1.5),
-        "pricing_by_model": {"mistral-medium-latest": (1.5, 7.5),
-                             "mistral-small-latest": (0.15, 0.6)},
+        "default_model": "mistral-large-4",
+        "models": ["mistral-large-4", "mistral-small-latest"],
+        "pricing": (0.7, 2.1),
+        "pricing_by_model": {"mistral-small-latest": (0.15, 0.6),
+                             "mistral-large-latest": (0.5, 1.5),
+                             "mistral-medium-latest": (1.5, 7.5)},
     },
 }
 
@@ -210,6 +213,13 @@ _GOOGLE_NOT_TEXT_PREFIX = ("aqa", "gemma", "lyria", "veo", "imagen", "nano-banan
                            "deep-research", "antigravity")
 _GOOGLE_NOT_TEXT_PART = ("-tts", "image", "-live", "computer-use", "robotics",
                          "transcribe", "embedding", "omni")
+
+
+# Google answers these deprecated ids with Gemini 3 models from 2026-12-01
+# (gemini-2.5-pro with 3.8-flash, gemini-2.5-flash with 3.5-flash-lite,
+# billed at those rates), and Gemini 3 takes no temperature; a project that
+# still uses one must not send it either
+_GOOGLE_REROUTED = ("gemini-2.5-pro", "gemini-2.5-flash")
 
 
 def _google_text_model(mid: str) -> bool:
@@ -366,6 +376,20 @@ def same_model(requested: str, served: str) -> bool:
     srv = (served or "").strip().removeprefix("models/")
     return srv == req or re.fullmatch(re.escape(req) + r"-(\d{4}-\d{2}-\d{2}|\d{8})",
                                       srv) is not None
+
+
+def _mistral_text(content) -> str:
+    """The answer in a Mistral message. Reasoning models (Mistral Large 4;
+    Small 4 and Medium 3.5 when asked to reason) answer with a list of
+    chunks: a "thinking" chunk whose trace is itself a list of text chunks,
+    then the "text" chunk. The others answer with a string. Only the text
+    chunks are the answer; the trace never reaches the parser."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(c.get("text") or "" for c in content
+                       if isinstance(c, dict) and c.get("type") == "text")
+    return ""
 
 
 def _declined(provider: str, model: str, how: str, explanation, usage: dict,
@@ -555,8 +579,10 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         config = {"maxOutputTokens": max_tokens + 16384}
         # Google advises leaving Gemini 3 and later at their default
         # temperature (lower values can make them loop), so only the older
-        # families get one set
-        sets_temperature = model_id.startswith(("gemini-1", "gemini-2", "gemma"))
+        # families get one set, and not the two 2.5 ids Google answers with
+        # Gemini 3 models from 2026-12-01
+        sets_temperature = (model_id.startswith(("gemini-1", "gemini-2", "gemma"))
+                            and model_id not in _GOOGLE_REROUTED)
         if sets_temperature:
             config["temperature"] = temperature
         data = _post_with_retry(
@@ -603,24 +629,31 @@ def _chat_impl(provider: str, model: str, api_key: str, system: str, user: str,
         return _finalize(text, usage, stop, provider, model, sampling=sampling)
 
     if provider == "mistral":
+        # Mistral Large 4 reasons before it answers and those tokens count
+        # against max_tokens (16 tokens bought thinking and nothing visible,
+        # 2026-11-04): headroom as for Claude; unused headroom costs nothing
         data = _post_with_retry(
             "https://api.mistral.ai/v1/chat/completions",
             {"Authorization": f"Bearer {api_key}", "content-type": "application/json"},
-            {"model": model, "max_tokens": max_tokens, "temperature": temperature,
+            {"model": model, "max_tokens": max_tokens + 8000, "temperature": temperature,
              "messages": [{"role": "system", "content": system},
                           {"role": "user", "content": user}]},
             retries=retries,
         )
         choice = data["choices"][0]
-        text = choice["message"].get("content") or ""
+        text = _mistral_text(choice["message"].get("content"))
         u = data.get("usage", {})
+        # reasoning tokens are inside completion_tokens; recorded apart, as
+        # Gemini's are, so the audit trail shows what the thinking cost
+        thinking = (u.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
         stop = choice.get("finish_reason", "")
         stop = TRUNCATED if stop == "length" else stop
         return _finalize(text, {"input_tokens": u.get("prompt_tokens", 0),
                                 "output_tokens": u.get("completion_tokens", 0),
+                                "thinking_tokens": thinking,
                                 **_served(data.get("model"))},
                          stop, provider, model,
-                         sampling={"temperature": temperature, "max_tokens": max_tokens})
+                         sampling={"temperature": temperature, "max_tokens": max_tokens + 8000})
 
     raise LLMError(f"Unknown provider '{provider}'.")
 

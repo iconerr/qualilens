@@ -386,8 +386,13 @@ def apply_update(zip_path: Path, allow_downgrade: bool = False) -> dict:
                     keep = db.DATA_DIR / "models.json.previous"
                     keep.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(local_catalog, keep)
-                    catalog_note = (f"Your edited models.json differed from the update's; "
-                                    f"the outgoing copy was saved to {keep}.")
+                    # the installed tree keeps no record of the catalog it was
+                    # given (its MANIFEST.sha256 is the first bundle's, never
+                    # refreshed), so a difference is not proof of an edit: say
+                    # what is known, and where the outgoing copy is
+                    catalog_note = (f"The update replaced models.json, which differed from the "
+                                    f"installed copy; the outgoing copy was saved to {keep}, "
+                                    f"so any edits of yours can be reapplied.")
             except OSError:
                 pass
 

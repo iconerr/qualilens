@@ -9,6 +9,36 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.10.2 — 2026-11-04
+
+- The Mistral list offers `mistral-large-4` as the default, with
+  `mistral-small-latest`. Mistral deprecated Large 3 and Medium 3.5 on
+  31 October 2026 and retires them on 30 April 2027, naming Large 4 as the
+  replacement for both; `mistral-large-latest` and `mistral-medium-latest`
+  still answer with the deprecated models, so they leave the list. A project
+  that uses either keeps running until the retirement, priced as before.
+- Mistral Large 4 reasons before it answers and returns that reasoning
+  beside the answer, in a shape QualiLens could not read: a run on it
+  failed before it began. QualiLens now reads the answer, leaves room in
+  the token budget for the reasoning, and records the reasoning tokens in
+  the audit trail as it does for Gemini. The same failure would have
+  reached the projects on `mistral-large-latest` the day Mistral pointed
+  that alias at Large 4.
+- `gemini-4-argon`, Google's current flagship, joins the Google list,
+  marked paid tier only. The cost estimate prices it at Google's rate from
+  1 December 2026 ($4.00 and $20.00 per million tokens; Google charges half
+  until 30 November).
+- From 1 December 2026 Google answers `gemini-2.5-pro` with
+  `gemini-3.8-flash` and `gemini-2.5-flash` with `gemini-3.5-flash-lite`,
+  billed at their rates. QualiLens no longer sets a temperature on calls to
+  those two ids, which the Gemini 3 models do not take, so a project on
+  either keeps running after the change, and its report names the model
+  that answered.
+- Updated pypdf to 6.21.4, which fixes seven flaws published since the
+  last release; pypdf reads the PDFs you upload.
+- Internal: the interface is built with vite 8.3.5, and the test workflow
+  runs on Node 24 with current GitHub actions.
+
 ## 1.10.1 — 2026-10-24
 
 - The Anthropic list offers the 5.5 generation: `claude-sonnet-5-5` is the
