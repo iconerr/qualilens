@@ -131,7 +131,7 @@ export default function Settings() {
       title: 'Install the latest release?',
       body: ['QualiLens downloads the latest release from GitHub and installs it. An update '
         + 'never touches your projects, keys, or uploads.',
-        'The app stops itself when it is done. Start it again with ./run.sh, and this page reconnects on its own.'],
+        'The app stops itself when it is done. Start it again with ./run.sh. This page reconnects on its own.'],
       confirm: 'Download and install', cancel: 'Not now',
     }))) return
     setUpdState({ phase: 'busy', msg: 'Downloading the release and applying it…' })
@@ -150,7 +150,7 @@ export default function Settings() {
     if (!(await ask({
       title: `Update QualiLens from “${f.name}”?`,
       body: ['An update never touches your projects, keys, or uploads.',
-        'The app stops itself when it is done. Start it again with ./run.sh, and this page reconnects on its own.'],
+        'The app stops itself when it is done. Start it again with ./run.sh. This page reconnects on its own.'],
       confirm: 'Install this bundle',
     }))) { if (updRef.current) updRef.current.value = ''; return }
     setUpdState({ phase: 'busy', msg: 'Validating and applying the bundle…' })

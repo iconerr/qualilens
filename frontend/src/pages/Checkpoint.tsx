@@ -26,12 +26,12 @@ const plural = (n: number, one: string, many = one + 's') =>
 const NEXT: Record<string, string> = {
   review_open_codes: 'After you approve, axial coding groups the codes you keep into categories.',
   review_categories: 'After you approve, selective coding looks for the core category among the categories you keep.',
-  review_core: 'After you approve, the theory and the report are written from what you approve here.',
-  review_codes: 'After you approve, the codes you keep are gathered into candidate themes, reviewed against the data, then defined and named.',
+  review_core: 'After you approve, the theory and the report are written.',
+  review_codes: 'After you approve, the codes you keep are grouped into candidate themes. Those are reviewed against the data and named.',
   review_themes: 'After you approve, the report is written from the themes you keep, as you named them.',
-  review_codebook: 'After you approve, the codebook is applied to every source, then counted and reported.',
-  review_charting: 'After you approve, promoted codes are charted across every source, then the framework matrix and the report are built.',
-  review_extraction: 'After you approve, the cross-paper synthesis is built on this table, and you review its concepts next.',
+  review_codebook: 'After you approve, the codebook is applied to every source and the results are counted.',
+  review_charting: 'After you approve, the promoted codes are charted across every source. Then the matrix and the report are built.',
+  review_extraction: 'After you approve, the synthesis is built on this table. You review its concepts next.',
   review_synthesis: 'After you approve, the concept matrix and the report are built from the concepts you keep.',
 }
 
@@ -268,8 +268,8 @@ const uncodedLine = (runId: string, coverage: any[] | undefined) => {
   const least = [...coverage].sort((a, b) => a.coded_pct - b.coded_pct)[0]
   const what = coverage.length === 1
     ? `${100 - least.coded_pct}% of the transcript has no code.`
-    : `the least-coded source, ${least.filename}, has ${100 - least.coded_pct}% of its text uncoded.`
-  return <li>Ask what the coder missed, because {what}{' '}
+    : `The least-coded source, ${least.filename}, has ${100 - least.coded_pct}% of its text uncoded.`
+  return <li>Ask what the coder missed. {what}{' '}
     <Link to={`/runs/${runId}/sources/${least.source_id}`} target="_blank" rel="noopener">Read the uncoded text ↗</Link></li>
 }
 
@@ -285,10 +285,10 @@ const NOUN: Record<string, [string, string]> = {
 }
 const ADD_HINT: Record<string, string> = {
   codebook: 'An added code enters the codebook and is applied to every source.',
-  open_code: 'An added code has no evidence here. The grouping stage can claim it, but the report shows it without excerpts.',
-  category: 'An added category holds nothing, because no later stage assigns codes to it.',
-  theme: 'An added theme holds nothing, because no later stage assigns codes to it.',
-  concept: 'An added concept carries no quotes, so the matrix will show it empty.',
+  open_code: 'An added code has no excerpts. A category or theme can still claim it, and the report lists it without evidence.',
+  category: 'An added category stays empty. No later stage assigns codes to it.',
+  theme: 'An added theme stays empty. No later stage assigns codes to it.',
+  concept: 'An added concept has no quotes. The matrix shows it empty.',
 }
 
 function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
@@ -486,7 +486,7 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
   const nSources: number = cp.payload.source_count ?? 0
   const exTotal = items.reduce((n, i) => n + (i.excerpt_count ?? 0), 0)
   const evidence = codebook
-    ? `The codebook holds ${plural(items.length, noun, nouns)}, and none has been applied yet.`
+    ? `The codebook holds ${plural(items.length, noun, nouns)}. None has been applied yet.`
     : grouping && !kidsKnown
       ? `${plural(items.length, noun, nouns)} hold ${plural(exTotal, 'excerpt')}${nSources ? ` from ${plural(nSources, 'source')}` : ''}.`
     : grouping
@@ -512,8 +512,8 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
     if (a.kind !== 'keep') {
       const target = byId(a.merge_into)
       const what = a.kind === 'merge'
-        ? <>It will merge into <b>{nameOf(target ?? { name: '?' })}</b>, and {grouping ? `its ${kids(it)} and their evidence will move there.` : n === 1 ? 'its excerpt will move there.' : 'its excerpts will move there.'}</>
-        : grouping ? <>It will be deleted, and its {kids(it)} will stay, listed under Uncategorized in the report.</>
+        ? <>It will merge into <b>{nameOf(target ?? { name: '?' })}</b>. {grouping ? `Its ${kids(it)} and their evidence move with it.` : n === 1 ? 'Its excerpt moves with it.' : 'Its excerpts move with it.'}</>
+        : grouping ? <>It will be deleted. Its {kids(it)} stay, listed under Uncategorized in the report.</>
         : <>It will be deleted{n ? `, with ${n === 1 ? 'its excerpt' : `its ${n} excerpts`}` : ''}.</>
       return (
         <li key={id} data-id={id} tabIndex={0} className={`rv-row is-${a.kind}${focusId === id ? ' is-focus' : ''}`} onFocus={() => setFocusId(id)}>
@@ -550,7 +550,7 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
                   <Fragment key={k.id}>{j > 0 && ' · '}<span>{k.name}</span></Fragment>))}).</p>
               )}
               {it.candidate_name && it.candidate_name !== it.name && (
-                <p className="rv-was">Phase 5 named it from the candidate “{it.candidate_name}”, and the name and definition above are what the report carries unless you edit them.</p>
+                <p className="rv-was">Phase 5 named it from the candidate “{it.candidate_name}”. The report carries the name and definition above unless you edit them.</p>
               )}
               {it.review && (
                 <p className="rv-memo"><b>The model’s own critique:</b> coherence {it.review.coherence}, distinctness {it.review.distinctness}; recommends {it.review.recommendation}. {it.review.notes}</p>
@@ -571,7 +571,7 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
                   {u.memo === (x.id ?? x.quote) && x.memo && <p className="rv-memo"><b>Coder’s memo:</b> {x.memo}</p>}
                 </Quote>
               ))}
-              {codebook && <p className="rv-def muted">It has no excerpts yet, because the codebook is applied after this review.</p>}
+              {codebook && <p className="rv-def muted">It has no excerpts yet. The codebook is applied after this review.</p>}
               {!codebook && n > 1 && (
                 <p className="rv-more"><button className="rv-link" aria-expanded={!!u.all} onClick={() => showAll(it)}>
                   {u.all ? 'Show only the first excerpt' : full === 'loading' ? 'Loading…' : `Show all ${n} excerpts`}</button></p>
@@ -650,10 +650,10 @@ function CodeReview({ runId, cp, onError, onResolved }: PanelProps) {
       approveLabel={tally.decisions ? `Approve ${plural(tally.decisions, 'decision')} and continue` : 'Approve as proposed and continue'}
       habits={<>
         {codebook
-          ? <li>Read each definition as the coder will apply it, because a vague one is coded loosely in every source.</li>
+          ? <li>Read each definition as the coder will apply it. A vague one is coded loosely in every source.</li>
           : grouping
-            ? <li>Check that each {noun}’s codes belong together, and merge {nouns} that name one idea, starting with the thin ones. <button className="rv-link" onClick={() => setSortKey('thin')}>Thinnest first</button></li>
-            : <li>Start from the thinnest {nouns}, because near-duplicates and one-off observations collect there. <button className="rv-link" onClick={() => setSortKey('thin')}>Thinnest first</button></li>}
+            ? <li>Check that each {noun}’s codes belong together. Merge {nouns} that name one idea, starting with the thin ones. <button className="rv-link" onClick={() => setSortKey('thin')}>Thinnest first</button></li>
+            : <li>Start from the thinnest {nouns}. Near-duplicates and one-off observations collect there. <button className="rv-link" onClick={() => setSortKey('thin')}>Thinnest first</button></li>}
         {!codebook && <li>Before trusting a neat {noun}, open its quote in the document.</li>}
         {(stage === 'open_code' || grouping) && uncodedLine(runId, cp.payload.coverage)}
       </>}
@@ -677,7 +677,7 @@ function RenameBox({ name, def, noun, onDone, onCancel }:
       <div className="row">
         <button className="small primary" onClick={() => onDone(n, d)}>Done</button>
         <button className="small" onClick={onCancel}>Cancel</button>
-        <span className="rv-hint">Enter saves · Esc cancels. Later stages keep your wording, and a {noun} with no name keeps its old one.</span>
+        <span className="rv-hint">Enter saves · Esc cancels. Later stages keep your wording. A {noun} left without a name keeps its old one.</span>
       </div>
     </div>
   )
@@ -735,7 +735,7 @@ function CoreReview({ runId, cp, onError, onResolved }: PanelProps) {
   const { busy, submit } = useSubmit(runId, cp, onError, () => { clear(); onResolved() })
   useEffect(() => { save({ name, definition, storyline, gaps, note }) },
     [name, definition, storyline, gaps, note])  // eslint-disable-line react-hooks/exhaustive-deps
-  if (!core) return <p className="desc">Selective coding produced no core category, so there is nothing to approve here.</p>
+  if (!core) return <p className="desc">Selective coding produced no core category. There is nothing to approve here.</p>
 
   const nameEd = name !== core.name, defEd = definition !== (core.definition ?? ''), storyEd = storyline !== (core.storyline ?? '')
   const finalGaps = gaps.filter(g => !g.gone && g.text.trim()).map(g => g.text.trim())
@@ -783,14 +783,14 @@ function CoreReview({ runId, cp, onError, onResolved }: PanelProps) {
         </>}
       </div>
       <div className="pn-sec"><h3>Storyline</h3>
-        <p className="pn-lede">The storyline is the spine of the report, and its opening section reproduces this text. Rewriting it in your own words is expected.</p>
+        <p className="pn-lede">The report opens with this text. Rewrite it in your own words.</p>
         {editing === 'story' ? (
           <div className="rv-edit">
             <GrowingText value={draft.story} className="pn-grow" label="Storyline" autoFocus onChange={v => setDraft(d => ({ ...d, story: v }))} />
             <div className="row">
               <button className="small primary" onClick={() => { setStoryline(draft.story.trim()); setEditing(null) }}>Done</button>
               <button className="small" onClick={() => setEditing(null)}>Cancel</button>
-              <span className="rv-hint">The editor shows the whole storyline, and your wording is final.</span>
+              <span className="rv-hint">Your wording is final.</span>
             </div>
           </div>
         ) : <>
@@ -802,8 +802,8 @@ function CoreReview({ runId, cp, onError, onResolved }: PanelProps) {
       </div>
       <div className="pn-sec"><h3>How each category relates to the core</h3>
         <p className="pn-lede">{legacy
-          ? 'These relationships are the model’s proposal. This review was opened by an earlier version of QualiLens, which did not name the categories here, and the report will still draw its figure from them. They are not edited here, but a note can record where you disagree.'
-          : 'These relationships are the model’s proposal, and the figure is the one the report will draw from them. They are not edited here, but a note can record where you disagree.'}</p>
+          ? 'These relationships are the model’s proposal. This review was opened by an earlier version of QualiLens, which did not name the categories here. The report still draws its figure from them. You cannot edit them here, but a note can record where you disagree.'
+          : 'These relationships are the model’s proposal. The report draws this figure from them. You cannot edit them here, but a note can record where you disagree.'}</p>
         {categories.length > 0 && (
           <figure className="pn-figure"><GTModel themes={themes} stats={stats} />
             <figcaption>The grounded theory model, as the report will draw it</figcaption></figure>
@@ -860,8 +860,8 @@ function CoreReview({ runId, cp, onError, onResolved }: PanelProps) {
   return (
     <ReviewLayout main={main}
       evidence={legacy
-        ? `The model proposes ${plural((core.relationships ?? []).length, 'relationship')} between the categories and the core, and it finds ${plural(origGaps.length, 'place')} where the data are thin.`
-        : `One core category integrates ${plural(categories.length, 'category', 'categories')}, the model proposes ${plural((core.relationships ?? []).length, 'relationship')}, and it finds ${plural(origGaps.length, 'place')} where the data are thin.`}
+        ? `The model proposes ${plural((core.relationships ?? []).length, 'relationship')} between the categories and the core and finds ${plural(origGaps.length, 'place')} where the data are thin.`
+        : `One core category integrates ${plural(categories.length, 'category', 'categories')}. The model proposes ${plural((core.relationships ?? []).length, 'relationship')} and finds ${plural(origGaps.length, 'place')} where the data are thin.`}
       tally={[['Core category', nameEd || defEd ? 'Edited' : 'Unchanged', !(nameEd || defEd)],
               ['Storyline', storyEd ? 'Rewritten' : 'Unchanged', !storyEd],
               ['Sampling recommendations', gapsEd ? `${kept} (changed)` : String(kept), !gapsEd],
@@ -869,7 +869,7 @@ function CoreReview({ runId, cp, onError, onResolved }: PanelProps) {
       decisions={decisions} busy={busy} onApprove={approve}
       approveLabel={decisions.length ? `Approve ${plural(decisions.length, 'change')} and continue` : 'Approve as proposed and continue'}
       habits={<>
-        <li>Read the storyline against the categories, and each should find its place in it.</li>
+        <li>Read the storyline against the categories. Each should find its place in it.</li>
         <li>Rewrite it in your own words. The report opens with it.</li>
         <li>Check the thin places before they become the report’s recommendations.</li>
       </>} />
@@ -930,12 +930,12 @@ function FrameworkReview({ runId, cp, onError, onResolved }: PanelProps) {
     <>
       {emergent.length > 0 && (
         <div className="pn-sec"><h3>{plural(emergent.length, 'candidate code')} outside the framework</h3>
-          <p className="pn-lede">The coder found these passages important, but they fit no framework code, so it gathered them under a proposed code. Promoting one charts it across every source and adds a column to the matrix.</p>
+          <p className="pn-lede">The coder found these passages important, but they fit no framework code. It grouped them under a proposed code. A promoted code is charted across every source and gets a column in the matrix.</p>
           {emergent.map(e => {
             const d = decisions[e.id]
             const state = d === 'keep' ? 'It will join the framework and be charted across every source.'
               : d === 'delete' ? 'It will be discarded, with its passages’ coding.'
-              : <span className="pending">It is not decided, so it will be discarded if you leave it.</span>
+              : <span className="pending">It is not decided. If you leave it, it is discarded.</span>
             return (
               <div key={e.id} className="rv-row rv-row-wide"><div>
                 <div className="rv-head"><h3 className="rv-name">{e.name}</h3><span className="rv-count">{plural(e.excerpt_count ?? 0, 'passage')}</span></div>
@@ -960,7 +960,7 @@ function FrameworkReview({ runId, cp, onError, onResolved }: PanelProps) {
               ? `These are the ${lowConf.length} weakest of the ${cp.payload.low_confidence_total} assignments below the threshold`
               : `These are all ${plural(lowConf.length, 'assignment')} below the threshold`}
             {typeof total === 'number' ? `, out of ${plural(total, 'assignment')} in all` : ''}. Judge each passage against its code’s definition.
-            {' '}An assignment with no confidence came back without a rating and is listed first. The rest are accepted on approval, so read a sample of them in the coded-source reader.</p>
+            {' '}Assignments that came back without a confidence rating are listed first. The rest are accepted when you approve. Read a sample of them in the coded-source reader.</p>
           {framework.length > 0 && (
             <div className="rv-seg" role="group" aria-label="Order" style={{ margin: '4px 0' }}>
               <button aria-pressed={byCode} onClick={() => setByCode(true)}>By framework code</button>
@@ -992,21 +992,21 @@ function FrameworkReview({ runId, cp, onError, onResolved }: PanelProps) {
                     <span className="pn-choice" role="group" aria-label="Keep or remove this assignment">
                       <button aria-pressed={!gone} onClick={() => setDeletions(s => { const n = new Set(s); n.delete(l.excerpt_id); return n })}>Keep</button>
                       <button aria-pressed={gone} onClick={() => setDeletions(s => new Set(s).add(l.excerpt_id))}>Remove</button>
-                    </span>), gone ? 'It will be removed from this code, and the audit trail keeps the quote.' : null)}
+                    </span>), gone ? 'It will be removed from this code. The audit trail keeps the quote.' : null)}
                 </div></li>)]
             })}
           </ul>
         </div>
       )}
       {emergent.length === 0 && lowConf.length === 0 &&
-        <p className="desc">Nothing was flagged, because every assignment was confident and inside the framework.</p>}
+        <p className="desc">Nothing was flagged. Every assignment was confident and inside the framework.</p>}
     </>
   )
   const nNotes = Object.values(notes).filter(n => n.trim()).length
   return (
     <ReviewLayout main={main}
       evidence={`${framework.length ? `The framework has ${plural(framework.length, 'code')}${typeof total === 'number' ? ` and ${plural(total, 'assignment')}` : ''}. ` : ''}`
-        + `${plural(cp.payload.low_confidence_total ?? lowConf.length, 'assignment')} fall below 60% confidence, and ${plural(emergent.length, 'candidate')} ${emergent.length === 1 ? 'sits' : 'sit'} outside the framework.`}
+        + `${plural(cp.payload.low_confidence_total ?? lowConf.length, 'assignment')} fall below 60% confidence. ${plural(emergent.length, 'candidate')} ${emergent.length === 1 ? 'sits' : 'sit'} outside the framework.`}
       tally={[['Promoted', promoted.length, !promoted.length], ['Discarded', discarded.length, !discarded.length],
               ['Not decided', undecided.length, !undecided.length], ['Assignments removed', deletions.size, !deletions.size],
               ['Assignments kept', lowConf.length - deletions.size, false], ['With a note', nNotes, !nNotes]]}
@@ -1015,7 +1015,7 @@ function FrameworkReview({ runId, cp, onError, onResolved }: PanelProps) {
       fine={undecided.length ? `${undecided.length === 1 ? 'One candidate is' : `${undecided.length} candidates are`} not decided and will be discarded.` : undefined}
       habits={<>
         <li>Judge each weak assignment against its code’s definition, not its name.</li>
-        <li>Look at every candidate, because one left undecided is discarded.</li>
+        <li>Look at every candidate. One left undecided is discarded.</li>
         <li>The confident assignments are accepted unseen. Read a sample of them in the coded-source reader.</li>
       </>} />
   )
@@ -1160,11 +1160,11 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
         </dl>
         {excluding === sid ? (
           <div className="rv-edit">
-            <label>Why exclude this paper?<span className="rv-hint">The reason is recorded with the exclusion as your note on this paper, because a synthesis has to account for what it left out.</span>
+            <label>Why exclude this paper?<span className="rv-hint">Your reason is recorded with the exclusion. A synthesis should account for what it leaves out.</span>
               <GrowingText value={draft} label="Why exclude this paper?" autoFocus onChange={setDraft} /></label>
             <div className="row">
               <button className="small primary" onClick={() => {
-                if (rows.filter(x => !isOut(x)).length <= 1) { onError('A synthesis needs at least one paper, so this one cannot be excluded.'); return }
+                if (rows.filter(x => !isOut(x)).length <= 1) { onError('A synthesis needs at least one paper. This one cannot be excluded.'); return }
                 setExcluded(x => ({ ...x, [sid]: true }))
                 if (draft.trim()) setNotes(x => ({ ...x, [sid]: draft.trim() }))
                 setExcluding(null)
@@ -1174,7 +1174,7 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
           </div>
         ) : off ? (
           <>
-            <p className="rv-decision"><b>This paper is excluded from the synthesis,</b> and its extraction stays in the report’s appendix.</p>
+            <p className="rv-decision"><b>This paper is excluded from the synthesis.</b> Its extraction stays in the report’s appendix.</p>
             <div className="rv-actions"><button className="rv-act" onClick={() => setExcluded(x => ({ ...x, [sid]: false }))}>Re-include</button></div>
           </>
         ) : (
@@ -1239,21 +1239,21 @@ function ExtractionReview({ runId, cp, onError, onResolved }: PanelProps) {
         })}
         {shown.length === 0 && <p className="rv-def" style={{ padding: '14px 0' }}>No paper matches.</p>}
       </div>
-      <p className="ex-key">Each number counts the quotes located in the paper for a field. A dash (<span className="nr-key">—</span>) marks a field the paper does not report, and an amber <span className="bare">0</span> marks a summary with no quote behind it. Select a paper to read and correct it.</p>
+      <p className="ex-key">Each number counts the quotes located in the paper for a field. A dash (<span className="nr-key">—</span>) marks a field the paper does not report. An amber <span className="bare">0</span> marks a summary with no quote behind it. Select a paper to read and correct it.</p>
     </>
   )
   return (
     <ReviewLayout main={main}
-      evidence={`The ${plural(rows.length, 'paper')} have ${plural(totQ, 'quote')} located in their text, and ${totU.toLocaleString('en-US')} more could not be located and never ground the synthesis.`}
+      evidence={`The ${plural(rows.length, 'paper')} have ${plural(totQ, 'quote')} located in their text. Another ${totU.toLocaleString('en-US')} could not be located, and those never ground the synthesis.`}
       tally={[['Papers corrected', nEdited, !nEdited], ['Excluded', nOut, !nOut], ['With a note', noted.length, !noted.length],
               ['Unchanged', rows.filter(r => !edited(r) && !isOut(r) && !(notes[r.source_id] ?? '').trim()).length, false]]}
       decisions={list} busy={busy} onApprove={done}
       approveLabel={list.length ? `Approve ${plural(list.length, 'decision')} and continue` : 'Approve as proposed and continue'}
       habits={<>
         {totalBare > 0
-          ? <li>{totalBare === 1 ? 'One summary has' : `${totalBare} summaries have`} no quote behind {totalBare === 1 ? 'it' : 'them'}, so start there. <button className="rv-link" onClick={() => { setOnlyBare(true); setSort('listed') }}>Show those papers</button></li>
-          : <li>Every summary has at least one quote behind it, so start with the papers that have the fewest. <button className="rv-link" onClick={() => setSort('thin')}>Fewest quotes</button></li>}
-        <li>Check labels and citations, because the narrative and the matrix cite papers by their labels.</li>
+          ? <li>{totalBare === 1 ? 'One summary has' : `${totalBare} summaries have`} no quote behind {totalBare === 1 ? 'it' : 'them'}. Start there. <button className="rv-link" onClick={() => { setOnlyBare(true); setSort('listed') }}>Show those papers</button></li>
+          : <li>Every summary has at least one quote behind it. Start with the papers that have the fewest. <button className="rv-link" onClick={() => setSort('thin')}>Fewest quotes</button></li>}
+        <li>Check labels and citations. The narrative and the matrix cite papers by their labels.</li>
         <li>Read a summary against its paper before trusting it.</li>
       </>}
       extra={sheet.links} />

@@ -20,7 +20,7 @@ export default function Home() {
     e.stopPropagation()
     if (!(await ask({
       title: `Delete “${name}”?`,
-      body: ['This deletes the project with all its runs, codes, and reports, and it cannot be undone.'],
+      body: ['This deletes the project with all its runs, codes, and reports. It cannot be undone.'],
       confirm: 'Delete the project', cancel: 'Keep it', danger: true,
     }))) return
     try {

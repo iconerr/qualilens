@@ -112,9 +112,8 @@ def cp_theme_payload(ctx):
     title, instructions, payload = build_code_review_payload(
         ctx, stage="theme", title="Review themes",
         instructions="These are the final theme names and definitions from Phase 5, "
-                     "each with the model's Phase 4 critique of its candidate. Rename, "
-                     "merge, or delete themes, because the names and definitions you "
-                     "approve here are the ones the report carries.")
+                     "each with the model's Phase 4 critique. Rename, merge, or delete "
+                     "themes. The report carries the names and definitions you approve here.")
     for item in payload["items"]:
         row = db.get_conn().execute("SELECT meta FROM codes WHERE id=? AND run_id=?",
                                     (item["id"], ctx.run_id)).fetchone()

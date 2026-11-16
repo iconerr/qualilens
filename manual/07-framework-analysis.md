@@ -65,9 +65,9 @@ Quotes are located in the source, exactly or with tolerance for typography, case
 
 The pipeline stops and shows you two lists. Either list may be empty.
 
-The list of **candidate codes outside the framework** carries each proposed code with its definition, its number of passages, and its sample quotes, with **Promote to the framework** and **Discard**. A candidate left undecided is discarded, and the panel states as much on the candidate and again beside the approve button.
+The list of **candidate codes outside the framework** shows each proposed code with its definition, its number of passages, and sample quotes. Each has **Promote to the framework** and **Discard**. A candidate left undecided is discarded. The panel says so on the candidate and again beside the approve button.
 
-The list of **assignments below 60% confidence** carries the assignments the AI model was least sure of, specifically those with a confidence below sixty percent, and any assignment that came back with no confidence at all, which is marked `No confidence given`. The list is capped at the sixty weakest, and the panel states how many fall below the threshold in total when it shows fewer. By default the assignments are grouped by framework code under each code's definition, so that each passage is judged against what the code means rather than what it is called, and **Weakest first** orders them by confidence instead. Each assignment shows its quote, its confidence, its source, and the coder's reason, with **Keep** and **Remove**.
+The list of **assignments below 60% confidence** carries the assignments the AI model was least sure of. Any that came back with no confidence at all are included, marked `No confidence given`. The list is capped at the sixty weakest. When more fall below the threshold, the panel gives the total. By default the assignments are grouped by framework code under each code's definition, so you judge each passage against what the code means, not what it is called. **Weakest first** orders them by confidence instead. Each assignment shows its quote, its confidence, its source, and the coder's reason, with **Keep** and **Remove**.
 
 The panel states when neither list has anything in it. That means every assignment was confident and within your framework.
 

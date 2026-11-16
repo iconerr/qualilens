@@ -54,10 +54,10 @@ export default function RunPage() {
   const revisit = async (stage: string, label: string) => {
     if (!(await ask({
       title: `Revisit “${label}”?`,
-      body: ['This starts a new run that carries everything this run had at that review, '
-        + 'including the coding, the evidence, and your earlier decisions, and it reopens '
-        + 'the review for you to decide differently. This run and its report stay exactly as they are.',
-        'The stages after the review run again on the new run, and they are billed again.'],
+      body: ['This starts a new run with everything this run had at that review, including '
+        + 'the coding, the evidence, and your earlier decisions. The review reopens there for '
+        + 'you to decide differently. This run and its report stay as they are.',
+        'The stages after the review run again on the new run and are billed again.'],
       confirm: 'Start the new run',
     }))) return
     try {
@@ -168,9 +168,9 @@ export default function RunPage() {
             <button className="small danger" onClick={async () => {
               if (await ask({
                 title: 'Cancel this run?',
-                body: ['Cancelling is final, so this run cannot be resumed. The reviews it has '
-                  + 'already passed stay available, and “Revisit this review…” starts a new run '
-                  + 'that carries the work up to that point.'],
+                body: ['Cancelling is final. This run cannot be resumed. The reviews it has '
+                  + 'passed stay available. “Revisit this review…” starts a new run with the '
+                  + 'work up to that point.'],
                 confirm: 'Cancel the run', cancel: 'Keep the run', danger: true,
               }))
                 api.cancelRun(id!).catch((e: any) => setError(String(e.message ?? e)))

@@ -77,7 +77,7 @@ Every excerpt is copied verbatim and carries a one-sentence memo explaining the 
 
 ### Review initial codes
 
-The pipeline stops. Every code appears beside its first excerpt, with its counts of excerpts and sources. You can search and sort the list, merge codes one at a time or in batches, rename, redefine, delete, note why you decided as you did, or add a code of your own. **Show all** loads every excerpt a code carries, and each excerpt links into [the coded-source reader](10-coded-source-reader.md) at its place in the transcript. See [Checkpoints](09-checkpoints.md).
+The pipeline stops. Every code appears beside its first excerpt, with its counts of excerpts and sources. You can search and sort the list, merge codes singly or in batches, rename, redefine, delete, add a note, or add a code of your own. **Show all** loads every excerpt a code carries. Each excerpt links into [the coded-source reader](10-coded-source-reader.md) at its place in the transcript. See [Checkpoints](09-checkpoints.md).
 
 ### Constructing themes
 
@@ -97,7 +97,7 @@ This stage is phase five, and it runs before your review. The AI model writes a 
 
 ### Review themes
 
-You see every theme with its final name and definition, its counts, the initial codes it holds, the candidate name phase five started from, and the phase-four critique beneath it, in the form `coherence adequate, distinctness weak; recommends merge`, followed by the model's notes. Each theme shows its first excerpt, and **Show all** loads the rest in place, each labeled with the initial code it came from, so you can see which of a theme's codes is actually carrying it. What you approve here is what the report carries, and nothing renames a theme after this point.
+You see every theme with its final name and definition, its counts, and the initial codes it holds. Under it are the candidate name phase five started from and the phase-four critique, in the form `coherence adequate, distinctness weak; recommends merge`, followed by the model's notes. Each theme shows its first excerpt. **Show all** loads the rest in place, each labeled with the initial code it came from, so you can see which of a theme's codes is actually carrying it. What you approve here is what the report carries. Nothing renames a theme after this point.
 
 Treat the critique as a second opinion rather than an instruction. The same AI model that built the themes produced it, from a sample of extracts rather than the full evidence. Use it to find the themes worth looking at closely. Do not let it substitute for looking.
 

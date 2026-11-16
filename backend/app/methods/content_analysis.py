@@ -286,9 +286,9 @@ def stage_quantify_report(ctx):
 def cp_codebook_payload(ctx):
     return build_code_review_payload(
         ctx, stage="codebook", title="Review the codebook",
-        instructions="This codebook will be applied verbatim to every source, so tighten "
-                     "the definitions, merge codes that overlap, and add the codes that are "
-                     "missing. The coding can be no better than the codebook.")
+        instructions="This codebook is applied verbatim to every source. Tighten the "
+                     "definitions, merge codes that overlap, and add any that are missing. "
+                     "The coding can be no better than the codebook.")
 
 
 METHOD = Method(

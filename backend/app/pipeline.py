@@ -437,9 +437,9 @@ def _execute(run_id: str) -> None:
                     if ctx.state.get("branched_at") == stage.name:
                         instructions += (
                             " This review was reopened from an earlier run. The "
-                            "decisions you made there are already applied, and "
-                            "further decisions build on them, so anything merged, "
-                            "deleted, removed, or discarded there does not reappear.")
+                            "decisions you made there are already applied, and new "
+                            "decisions build on them. Anything merged, deleted, "
+                            "removed, or discarded there does not reappear.")
                     conn.execute(
                         "INSERT INTO checkpoints(id,run_id,stage,title,instructions,"
                         "payload,created_at) VALUES(?,?,?,?,?,?,?)",

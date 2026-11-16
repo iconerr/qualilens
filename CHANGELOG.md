@@ -9,6 +9,14 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.11.1 — 2026-11-15
+
+- The review screens say things more plainly. Their notes, the
+  instructions at the top of each review, and the confirmation dialogs
+  use shorter sentences, one point at a time, like the rest of the app.
+- The manual's chapter on checkpoints is rewritten the same way, with the
+  walkthrough and the other passages that describe the review screens.
+
 ## 1.11.0 — 2026-11-15
 
 - The review screens put the evidence beside the decision. Each code shows

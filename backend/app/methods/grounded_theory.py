@@ -238,7 +238,7 @@ METHOD = Method(
               build_payload=functools.partial(
                   build_code_review_payload, stage="category",
                   title="Review categories",
-                  instructions="Refine the category names and definitions, and check that "
+                  instructions="Refine the category names and definitions. Check that "
                                "each category's codes belong together. Merge categories that "
                                "name one idea, and delete any that do not hold together."),
               apply_resolution=apply_code_review_resolution),

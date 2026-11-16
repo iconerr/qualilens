@@ -177,7 +177,7 @@ def cp_review_payload(ctx):
     return ("Review charting",
             "Judge the assignments the coder was least sure of against their codes' "
             "definitions, and keep or remove each one. Promote or discard each candidate "
-            "code outside the framework, because a candidate left undecided is discarded.",
+            "code outside the framework. A candidate left undecided is discarded.",
             {"kind": "framework_review", "low_confidence": low_conf,
              "low_confidence_total": total_low, "low_confidence_shown": len(low_conf),
              "items": emergent, "stage": "emergent", "framework": framework,
