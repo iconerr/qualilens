@@ -195,9 +195,16 @@ fi
 # After an update the server asks to be started again (see the end of this
 # script). The run.sh it relaunches is handed the same private folder, so the
 # server keeps its session token and the tab it signed in stays signed in.
-# The folder is reused only if this account owns it.
+# The folder is reused only if this account owns it and it bears the name
+# this script gives such a folder, because the folder is deleted when the app
+# stops: a variable that named any other folder must not have it deleted.
 RELAUNCHED=""
-if [ -n "${QUALILENS_RELAUNCH_DIR:-}" ] && [ -d "$QUALILENS_RELAUNCH_DIR" ] && [ -O "$QUALILENS_RELAUNCH_DIR" ]; then
+relaunch_dir_ok() {
+  [ -n "$1" ] && [ -d "$1" ] && [ ! -L "$1" ] && [ -O "$1" ] || return 1
+  case "$(basename "$1")" in qualilens.??????) return 0 ;; esac
+  return 1
+}
+if relaunch_dir_ok "${QUALILENS_RELAUNCH_DIR:-}"; then
   LAUNCH_DIR="$QUALILENS_RELAUNCH_DIR"
   RELAUNCHED=1
   rm -f "$LAUNCH_DIR/open.html"      # the server writes it afresh, with the same token

@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { dateLabel, api, statusLabel, type Run } from '../api'
+import { dateLabel, api, saveFile, statusLabel, type Run } from '../api'
 import { ask } from '../ask'
 import { CheckpointPanel } from './Checkpoint'
 
@@ -111,8 +111,8 @@ export default function RunPage() {
             audit trail (every call, decision, and checkpoint) as JSON.</p>
           <div className="row mt">
             <Link to={`/runs/${id}/report`}><button className="primary">Open report</button></Link>
-            <a href={`/api/runs/${id}/report.docx`}><button>Download .docx</button></a>
-            <a href={`/api/runs/${id}/audit.json`}><button>Export audit log</button></a>
+            <a href={`/api/runs/${id}/report.docx`} onClick={e => saveFile(e, `/api/runs/${id}/report.docx`)}><button>Download .docx</button></a>
+            <a href={`/api/runs/${id}/audit.json`} onClick={e => saveFile(e, `/api/runs/${id}/audit.json`)}><button>Export audit log</button></a>
           </div>
         </div>
       )}
@@ -177,7 +177,7 @@ export default function RunPage() {
             }}>Cancel run</button>
           )}
           <div className="row spread mt"><span className="eyebrow">Audit log</span>
-            <a className="small" href={`/api/runs/${id}/audit.json`}
+            <a className="small" href={`/api/runs/${id}/audit.json`} onClick={e => saveFile(e, `/api/runs/${id}/audit.json`)}
               title="Every event with its payload, every checkpoint with its resolution, the frozen configuration">export as JSON ↗</a></div>
           <p className="desc small">The screen keeps recent entries; the export carries the complete record.</p>
           <div className="eventlog" ref={logRef}>

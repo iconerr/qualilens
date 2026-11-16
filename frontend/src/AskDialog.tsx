@@ -24,7 +24,7 @@ export function AskDialog({ title, body = [], confirm, cancel = 'Cancel', danger
         <h2 id="ql-ask-title">{title}</h2>
         <div id="ql-ask-body">{body.map((p, i) => <p key={i}>{p}</p>)}</div>
         <div className="ask-actions">
-          <button ref={no} onClick={() => done(false)}>{cancel}</button>
+          {cancel !== '' && <button ref={no} onClick={() => done(false)}>{cancel}</button>}
           <button ref={ok} className={danger ? 'primary danger' : 'primary'} onClick={() => done(true)}>{confirm}</button>
         </div>
       </div>

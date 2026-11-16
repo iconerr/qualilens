@@ -3,6 +3,8 @@
 
 // Thin typed client over the local FastAPI backend.
 
+import { ask } from './ask'
+
 export interface Question {
   key: string; label: string; help: string;
   type: 'text' | 'textarea' | 'select' | 'toggle';
@@ -108,21 +110,35 @@ export interface Run extends RunSummary {
 // The per-launch session token. Every API request carries it; the server
 // refuses /api calls without it, which keeps other web pages, DNS-rebinding
 // hosts, and other accounts on this computer out of the app. The server puts
-// it into index.html only for a browser that holds it already: one sent here
-// with ?token=… by the launch page ./run.sh opens, or one carrying the cookie
-// that visit set. The tab also keeps the token in sessionStorage, because a
-// browser may withhold that SameSite=Strict cookie when it reloads a page it
-// first reached from the launch file (a cross-site navigation).
+// it into index.html only for a browser sent here with ?token=… by the launch
+// page ./run.sh opens. The page keeps it in storage, never in a cookie: a
+// browser sends a cookie to every port of 127.0.0.1, so any other program
+// listening on this computer that the browser visited was sent the token
+// (until 2026-11-15). Storage belongs to this origin, port included.
+// localStorage is shared by this browser's tabs, so a tab opened by address
+// is signed in too; sessionStorage is the fallback where localStorage is
+// refused, and is where a build up to 1.12.0 kept the token.
 const TOKEN_KEY = 'ql-token'
+
+function stored(): string {
+  try { const t = localStorage.getItem(TOKEN_KEY); if (t) return t } catch { /* refused */ }
+  try { return sessionStorage.getItem(TOKEN_KEY) ?? '' } catch { return '' }
+}
+function store(token: string) {
+  try { localStorage.setItem(TOKEN_KEY, token) } catch { /* refused: the tab's own storage serves */ }
+  try { sessionStorage.setItem(TOKEN_KEY, token) } catch { /* the served token is all there is */ }
+}
+// forget a token the server refused, unless another tab has stored a newer one
+function forget(token: string) {
+  try { if (localStorage.getItem(TOKEN_KEY) === token) localStorage.removeItem(TOKEN_KEY) } catch { /* fine */ }
+  try { sessionStorage.removeItem(TOKEN_KEY) } catch { /* fine */ }
+}
 
 function takeToken(): string {
   if (typeof document === 'undefined') return ''
   const served = document.querySelector('meta[name="ql-token"]')?.getAttribute('content') ?? ''
-  let token = served
-  try {
-    if (served) sessionStorage.setItem(TOKEN_KEY, served)
-    else token = sessionStorage.getItem(TOKEN_KEY) ?? ''
-  } catch { /* storage unavailable: the served token is all there is */ }
+  const token = served || stored()
+  if (token) store(token)      // shared with this browser's other tabs
   // the launch address carries the token in its query: take it out of the
   // address bar and the history entry now that the page holds it
   try {
@@ -141,23 +157,30 @@ const TOKEN = takeToken()
 // proxy adds the token itself, so a development page never needs one.
 export const signedIn = () => TOKEN !== '' || import.meta.env.DEV
 
-// What the server says to this browser now: its token when the browser
-// holds the cookie (another tab was signed in since this one loaded), else ''.
-// Adopting it and reloading signs this tab in.
-export async function tokenFromServer(): Promise<string> {
-  const res = await fetch('/', { cache: 'no-store', credentials: 'same-origin' })
-  if (!res.ok) return ''
-  return /<meta name="ql-token" content="([^"]*)"/.exec(await res.text())?.[1] ?? ''
+// A token the running server accepts, when this browser holds one: the one
+// another tab stored since this tab loaded (the launch page signed it in),
+// or this tab's own, which a server restarted after an update still knows.
+// '' when there is none, or no server answers. Adopting it and reloading
+// signs this tab in.
+export async function workingToken(): Promise<string> {
+  for (const token of new Set([stored(), TOKEN])) {
+    if (!token) continue
+    const res = await fetch('/api/meta', {
+      cache: 'no-store', credentials: 'omit', headers: { 'X-QualiLens-Token': token } })
+    if (res.ok) return token
+  }
+  return ''
 }
 export function adoptToken(token: string) {
-  try { sessionStorage.setItem(TOKEN_KEY, token) } catch { /* the cookie still serves the reload */ }
+  store(token)
   window.location.reload()
 }
 
+// No request sends a cookie: the token travels in the header alone.
 function withToken(init?: RequestInit): RequestInit {
   const headers = new Headers(init?.headers ?? {})
   if (TOKEN) headers.set('X-QualiLens-Token', TOKEN)
-  return { ...init, headers, credentials: 'same-origin' }
+  return { ...init, headers, credentials: 'omit' }
 }
 
 // A 401 from our own server means this page holds a token the server no
@@ -175,8 +198,8 @@ function reloadIfStaleToken(res: Response): boolean {
     const last = Number(sessionStorage.getItem(STALE_KEY) ?? 0)
     if (Date.now() - last < 15000) return false
     sessionStorage.setItem(STALE_KEY, String(Date.now()))
-    sessionStorage.removeItem(TOKEN_KEY)
   } catch { /* storage unavailable: still reload once per page life */ }
+  forget(TOKEN)
   window.location.reload()
   return true
 }
@@ -188,6 +211,43 @@ async function j<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(await errText(res))
   }
   return res.json()
+}
+
+// A download. A plain link cannot carry the token header, and the cookie that
+// once let it through is gone, so the file is fetched like any other call and
+// handed to the browser to save under the name the server gives it.
+export async function download(path: string): Promise<void> {
+  const res = await fetch(path, withToken())
+  if (!res.ok) {
+    if (reloadIfStaleToken(res)) return
+    throw new Error(await errText(res))
+  }
+  const cd = res.headers.get('Content-Disposition') ?? ''
+  let name = ''
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd)?.[1]
+  if (star) { try { name = decodeURIComponent(star) } catch { /* use the plain name */ } }
+  if (!name) name = /filename="([^"]*)"/i.exec(cd)?.[1] ?? ''
+  if (!name) name = path.split('?')[0].split('/').pop() || 'download'
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+// For a download link's onClick: the link's own navigation would arrive
+// without the token and be refused, so it is replaced by download().
+export function saveFile(e: { preventDefault(): void; stopPropagation(): void }, path: string) {
+  e.preventDefault()
+  e.stopPropagation()
+  download(path).catch((err: any) => {
+    void ask({ title: 'The file could not be downloaded', body: [String(err?.message ?? err)],
+               confirm: 'OK', cancel: '' })
+  })
 }
 
 async function errText(res: Response): Promise<string> {

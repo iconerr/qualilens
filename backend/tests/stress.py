@@ -349,7 +349,7 @@ def run_guard_fuzz():
              "LOCALHOST", "127.0.0.1:1", "0x7f000001", "127.1", "2130706433", "127.0.0.1@evil"]
     origins = [None, "http://127.0.0.1:8765", "http://localhost:8765", "https://evil.example", "null",
                "http://127.0.0.1.evil.example", "http://[::1]:8765", "file://", "http://localhost.evil", "",
-               # another local program's page on another port arrives WITH the cookie
+               # another local program's page on another port is another origin
                "http://localhost:3000", "http://127.0.0.1:3000", "http://127.0.0.1", "HTTP://127.0.0.1:8765",
                "https://127.0.0.1:8765", "http://127.0.0.1:8765/path"]
     tokens = [None, SESSION_TOKEN, "", SESSION_TOKEN[:-1], SESSION_TOKEN + "x", "x" * 43, SESSION_TOKEN.upper()]
@@ -395,8 +395,8 @@ def run_guard_fuzz():
                     elif not should and rr.status_code not in (401, 403, 421):
                         bad += 1; print("  wrongly ALLOWED", h, o, t, path, rr.status_code)
                     # since 2026-10-08 the page carries the token only for a
-                    # browser the launch page signed in (?token= or the
-                    # cookie), and no request here is one: a header token
+                    # browser the launch page signed in (?token=), and no
+                    # request here is one: a header token
                     # included, since a browser never sends it to load a page
                     if path == "/" and SESSION_TOKEN in rr.text:
                         bad += 1; print("  token LEAKED in the page", h, o, t)

@@ -3,19 +3,19 @@
 
 import { useEffect, useState } from 'react'
 import { useRef } from 'react'
-import { adoptToken, ageLabel, api, testKey, versionLabel, type KeyStatus, type Meta } from '../api'
+import { adoptToken, ageLabel, api, testKey, versionLabel, workingToken, type KeyStatus, type Meta } from '../api'
 import { ask } from '../ask'
 
 // After an update the server stops itself so ./run.sh can relaunch the new
 // build. This page has nothing to talk to until then, and when the new server
-// comes up it mints a new session token that this page does not hold. So the
-// page waits and polls the root URL, which needs no token and names the build.
-// When a server answers with a different build stamp than the one this page
-// was served by, the page signs in with the new token, which the server
-// includes once this browser holds the new cookie. The launch page ./run.sh
-// opens sets that cookie a moment after the server is up. Without this step
-// the human would be told to reload, and that step used to strand people on
-// a token error.
+// comes up it may mint a new session token that this page does not hold. So
+// the page waits and polls the root URL, which needs no token and names the
+// build. When a server answers with a different build stamp than the one this
+// page was served by, the page looks for a token that server accepts: its
+// own, which a ./run.sh that restarts the server keeps (1.12 on), or the one
+// the launch page's tab stores a moment after an older ./run.sh brings the
+// server up. Without this step the human would be told to reload, and that
+// step used to strand people on a token error.
 const THIS_BUILD = document.querySelector('meta[name="ql-build"]')?.getAttribute('content') ?? ''
 
 function UpdateWaiting({ detail, auto }: { detail: string; auto: boolean }) {
@@ -28,12 +28,12 @@ function UpdateWaiting({ detail, auto }: { detail: string; auto: boolean }) {
       if (!alive) return
       setSecs(s => s + 2)
       try {
-        const res = await fetch('/', { cache: 'no-store', credentials: 'same-origin' })
+        const res = await fetch('/', { cache: 'no-store', credentials: 'omit' })
         if (res.ok) {
           const html = await res.text()
           const build = /<meta name="ql-build" content="([^"]*)"/.exec(html)?.[1] ?? ''
           if (build && build !== THIS_BUILD) {
-            const token = /<meta name="ql-token" content="([^"]*)"/.exec(html)?.[1] ?? ''
+            const token = await workingToken()
             if (token) { alive = false; adoptToken(token); return }
             setNewBuildUp(true)            // up, but the launch page has not signed this browser in yet
             return

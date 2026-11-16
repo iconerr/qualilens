@@ -129,8 +129,13 @@ def test_index_gives_the_token_only_to_a_signed_in_browser():
     """2026-10-08: index.html carried the session token for anyone who asked
     for /, and a connection to 127.0.0.1 does not say which account made it,
     so on a shared computer any account could read every project. The token
-    now goes only to a browser the launch page signed in (?token=…, which
-    also sets the cookie) or to one carrying that cookie."""
+    now goes only to a browser the launch page signed in (?token=…).
+
+    2026-11-15: that visit also set a cookie holding the token, and a browser
+    sends a cookie to every port of 127.0.0.1, so any other program listening
+    on this computer that the browser visited was sent the token. No cookie
+    is set now and none opens the API; the page keeps the token in storage
+    that belongs to this origin and port."""
     from app import main as main_mod
     if not main_mod.FRONTEND_DIST.exists():
         pytest.skip("no built frontend beside the backend")
@@ -145,21 +150,96 @@ def test_index_gives_the_token_only_to_a_signed_in_browser():
         assert f'<meta name="ql-build" content="{main_mod.STARTED_BUILD}">' in r.text, path
         assert main_mod.TOKEN_COOKIE not in r.cookies, path
     assert anyone.get("/api/meta").status_code == 401
-    # the launch page's address signs a browser in: the token in the page, the cookie set
+    # the launch page's address signs a browser in: the token in the page, and no cookie
     browser = TestClient(app, base_url="http://127.0.0.1")
     r = browser.get(f"/?token={SESSION_TOKEN}")
     assert r.status_code == 200 and meta in r.text
     assert r.headers.get("cache-control") == "no-store"
     assert r.headers.get("referrer-policy") == "same-origin"
-    assert main_mod.TOKEN_COOKIE in r.cookies
-    # from then on the cookie carries it: the next page load, and a plain download link
-    assert meta in browser.get("/").text
-    assert browser.get("/api/meta").status_code == 200
-    # a cookie that is not the token earns nothing
+    assert "set-cookie" not in r.headers and not browser.cookies
+    # nothing of that visit stays with the browser's requests: the next page
+    # load carries no token, and the API wants the header
+    assert meta not in browser.get("/").text
+    assert browser.get("/api/meta").status_code == 401
+    assert browser.get("/api/meta", headers=AUTH).status_code == 200
+
+
+def test_a_cookie_opens_nothing_and_an_old_one_is_expired():
+    """A cookie holding the token, as a build up to 1.12.0 set, no longer
+    authenticates any /api call. A tab that build served may still be open
+    when an update brings this build up, waiting for a page that carries the
+    token: it gets one, once, and the same response expires the cookie."""
+    from app import main as main_mod
+    if not main_mod.FRONTEND_DIST.exists():
+        pytest.skip("no built frontend beside the backend")
+    meta = f'<meta name="ql-token" content="{SESSION_TOKEN}">'
+    old_tab = TestClient(app, base_url="http://127.0.0.1")
+    old_tab.cookies.set(main_mod.TOKEN_COOKIE, SESSION_TOKEN)
+    for path in ("/api/meta", "/api/projects", "/api/settings"):
+        assert old_tab.get(path).status_code == 401, path
+    assert old_tab.delete("/api/sources/nothing").status_code == 401
+    r = old_tab.get("/")
+    assert meta in r.text
+    expired = r.headers.get("set-cookie", "")
+    assert expired.startswith(f"{main_mod.TOKEN_COOKIE}=\"\";") or expired.startswith(f"{main_mod.TOKEN_COOKIE}=;")
+    assert "Max-Age=0" in expired and SESSION_TOKEN not in expired
+    # a cookie that is not the token earns nothing, and is expired as well
     forged = TestClient(app, base_url="http://127.0.0.1")
     forged.cookies.set(main_mod.TOKEN_COOKIE, "x" * 43)
-    assert meta not in forged.get("/").text
+    r = forged.get("/")
+    assert meta not in r.text and SESSION_TOKEN not in r.text
+    assert "Max-Age=0" in r.headers.get("set-cookie", "")
     assert forged.get("/api/meta").status_code == 401
+
+
+def test_every_response_refuses_framing_and_type_guessing():
+    """No page of another origin may frame the app, and a browser takes each
+    response as the type it was sent as: on pages, API answers, static files,
+    and the guard's own refusals. The interface's page adds a content policy
+    that admits this origin's scripts only."""
+    from app import main as main_mod
+    plain = TestClient(app, base_url="http://127.0.0.1")
+    answers = [client.get("/api/meta"), plain.get("/api/meta"),
+               plain.get("/api/meta", headers={"Host": "attacker.example"}),
+               plain.get("/api/meta", headers={"Host": "127.0.0.1:8765", "Origin": "https://evil.example"}),
+               client.get("/api/no-such-route")]
+    if main_mod.FRONTEND_DIST.exists():
+        answers += [plain.get("/"), plain.get("/favicon.svg"), plain.get("/manual.html")]
+    assert [a.status_code for a in answers[:5]] == [200, 401, 421, 403, 404]
+    for a in answers:
+        assert a.headers.get("x-content-type-options") == "nosniff", a.url
+        assert a.headers.get("x-frame-options") == "DENY", a.url
+        assert "frame-ancestors 'none'" in a.headers.get("content-security-policy", ""), a.url
+    if main_mod.FRONTEND_DIST.exists():
+        policy = plain.get("/").headers["content-security-policy"]
+        assert "script-src 'self';" in policy and "default-src 'self';" in policy
+        assert "object-src 'none'" in policy and "'unsafe-eval'" not in policy
+        assert "unsafe-inline" not in policy.split("script-src")[1].split(";")[0]
+
+
+def test_a_source_id_is_never_read_as_a_file_pattern():
+    """2026-11-15: deleting a source the database does not know removed its
+    leftover upload by pattern, with the id taken from the URL as written.
+    DELETE /api/sources/* removed every project's uploaded files."""
+    from urllib.parse import quote
+    kept = [db.UPLOADS_DIR / "aaaaaaaaaaaa_interview one.txt",
+            db.UPLOADS_DIR / "bbbbbbbbbbbb_recording_2.m4a",
+            db.UPLOADS_DIR / "[ab]_odd name.txt"]
+    for f in kept:
+        f.write_text("x")
+    try:
+        for wild in ("*", "?" * 12, "[a-z]*", "a*", "*_interview one.txt", "[ab]bbbbbbbbbbb", "aaaaaaaaaaa?"):
+            r = client.delete("/api/sources/" + quote(wild, safe=""))   # as a browser would send it
+            assert r.status_code == 200, wild
+            assert all(f.exists() for f in kept), wild
+        # a leftover whose row is gone is still purged by its own id,
+        # pattern characters and all
+        assert client.delete("/api/sources/aaaaaaaaaaaa").status_code == 200
+        assert client.delete("/api/sources/" + quote("[ab]", safe="")).status_code == 200
+        assert [f.exists() for f in kept] == [False, True, False]
+    finally:
+        for f in kept:
+            f.unlink(missing_ok=True)
 
 
 def test_guard_refuses_a_non_ascii_token_with_401_not_500():
@@ -1044,12 +1124,10 @@ def test_sheet_cells_are_text_never_formulas():
 
 
 def test_origin_must_be_the_apps_own_origin_exactly():
-    """Browsers ignore the port for cookies and for SameSite, so a page served
-    by another local program on another port arrives WITH the cookie; only
-    an Origin equal to this app's own (scheme, host, port) may pass."""
-    from app import main as main_mod
-    cookie_only = TestClient(app, base_url="http://127.0.0.1")
-    cookie_only.cookies.set(main_mod.TOKEN_COOKIE, SESSION_TOKEN)
+    """A page served by another local program on another port is another
+    origin, even on the same host; only an Origin equal to this app's own
+    (scheme, host, port) may pass, whatever token the request carries."""
+    cookie_only = TestClient(app, base_url="http://127.0.0.1", headers=AUTH)
     host = {"Host": "127.0.0.1:8765"}
     for origin in ("http://127.0.0.1:3000", "http://localhost:3000", "http://localhost:8765",
                    "https://127.0.0.1:8765", "http://127.0.0.1", "null", "http://127.0.0.1:8765.evil.example"):
@@ -1059,7 +1137,7 @@ def test_origin_must_be_the_apps_own_origin_exactly():
     assert cookie_only.get("/api/meta", headers={"Host": "localhost:8765", "Origin": "http://localhost:8765"}).status_code == 200
     assert cookie_only.get("/api/meta", headers={"Host": "[::1]:8765", "Origin": "http://[::1]:8765"}).status_code == 200
     assert cookie_only.get("/api/meta", headers={"Host": "127.0.0.1:8765", "Origin": "HTTP://127.0.0.1:8765"}).status_code == 200
-    # no Origin at all (a plain download link) is still gated by the token alone
+    # no Origin at all (a same-origin GET sends none) is still gated by the token alone
     assert cookie_only.get("/api/meta", headers=host).status_code == 200
     assert TestClient(app, base_url="http://127.0.0.1").get("/api/meta", headers=host).status_code == 401
 

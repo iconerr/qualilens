@@ -13,7 +13,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { api, type Checkpoint, type Run, type SheetImport } from '../api'
+import { api, saveFile, type Checkpoint, type Run, type SheetImport } from '../api'
 import { ask } from '../ask'
 import { GTModel } from '../viz'
 
@@ -198,7 +198,7 @@ function useSheet(runId: string, cp: Checkpoint, staged: boolean, imported: Impo
   }
   const links = (
     <p>
-      <a href={api.sheetUrl(runId, cp.id)} title="Every item under review as an .xlsx workbook, with the rules on its About sheet">Download as spreadsheet</a>
+      <a href={api.sheetUrl(runId, cp.id)} onClick={e => saveFile(e, api.sheetUrl(runId, cp.id))} title="Every item under review as an .xlsx workbook, with the rules on its About sheet">Download as spreadsheet</a>
       {' · '}
       <button className="rv-link" disabled={busy} onClick={() => fileRef.current?.click()}
         title="Upload the edited workbook; its decisions load here for you to check before approving">

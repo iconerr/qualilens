@@ -3,7 +3,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { settingValue, api } from '../api'
+import { settingValue, api, saveFile } from '../api'
 import { FreqChart, GTModel, MatrixHeatmap, ThematicMap } from '../viz'
 
 export default function ReportPage() {
@@ -57,9 +57,9 @@ export default function ReportPage() {
           </p>
         </div>
         <div className="row">
-          <a href={`/api/runs/${id}/audit.json`} title="The complete audit trail: every event, decision, and checkpoint payload, as JSON">
+          <a href={`/api/runs/${id}/audit.json`} onClick={e => saveFile(e, `/api/runs/${id}/audit.json`)} title="The complete audit trail: every event, decision, and checkpoint payload, as JSON">
             <button>Export audit log</button></a>
-          <a href={`/api/runs/${id}/report.docx`}><button className="primary">Download .docx</button></a>
+          <a href={`/api/runs/${id}/report.docx`} onClick={e => saveFile(e, `/api/runs/${id}/report.docx`)}><button className="primary">Download .docx</button></a>
         </div>
       </div>
 

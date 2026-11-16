@@ -5,7 +5,8 @@
    (added 2026-11-15). It is set in the app's type and colors, its buttons
    are named for what they do, and for anything that cannot be undone the
    safe choice holds the focus and the other button is red. Esc, the cancel
-   button, or a click outside the dialog all answer no. */
+   button, or a click outside the dialog all answer no. A notice with nothing
+   to choose passes cancel: '' and shows the one button. */
 
 import { createElement } from 'react'
 import { createRoot } from 'react-dom/client'

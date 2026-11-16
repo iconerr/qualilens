@@ -9,6 +9,31 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.12.1 — 2026-11-15
+
+- Other accounts on a shared computer can no longer reach your projects
+  through another program your browser visits. Signing a browser in also
+  left the session token in a cookie, and a browser sends a cookie to any
+  program on the computer that serves pages, on whatever port. On a shared
+  Mac or a lab server, another account running such a program could collect
+  the token when your browser opened its page, and then read your projects
+  and use your keys. The app no longer sets the cookie. The browser keeps
+  the token where only QualiLens's own pages can read it, and the tabs of a
+  signed-in browser can use the app as before. The Word report, the audit
+  log, and the checkpoint spreadsheet download as before.
+- Deleting a source removes only that source's uploaded file. A delete
+  request typed by hand, outside the app, could name a pattern in place of
+  a source and remove the original documents and recordings of all
+  projects. The interface never sent such a request, and the text QualiLens
+  had read from the files stayed in the database.
+- A page served by another site, or by another program on this computer,
+  can no longer show QualiLens inside itself, where a click meant for that
+  page could land on the app. The app's own page also loads nothing but
+  what ships with QualiLens. Both are precautions; no fault was found in
+  either place.
+- The launcher removes its temporary folder when the app stops only if the
+  folder is one it made.
+
 ## 1.12.0 — 2026-11-15
 
 - QualiLens starts again by itself after an update. Download and install,

@@ -16,9 +16,9 @@ that door, applied to every request by the middleware below —
     origin EXACTLY — scheme, host, and port (defeats cross-site requests of
     every shape, including a page served by another local program on
     another port, to which browsers would still send the cookie), and
-  * every /api call must carry the per-launch session token, either in the
-    X-QualiLens-Token header (the interface adds it to every fetch) or in
-    the SameSite=Strict cookie (used by plain download links).
+  * every /api call must carry the per-launch session token in the
+    X-QualiLens-Token header, which the interface adds to every fetch,
+    downloads included.
 
 How the token reaches the browser matters as much as the guards. A
 connection to 127.0.0.1 says nothing about which account on the computer
@@ -26,12 +26,24 @@ made it, so a token handed to whoever asks for / reaches every account on
 a shared machine, and with it the data the data folder's 0700 mode keeps
 from them. That was the case until 2026-10-08. Now ./run.sh opens a launch
 page (write_launch_page): a file readable by this account only, which sends
-the browser to /?token=…. That response carries the token and sets the
-cookie, and index.html carries the token for no one else (_index_html).
+the browser to /?token=…. That response carries the token, and index.html
+carries it for no one else (_index_html).
+
+The browser keeps the token in the page's own storage, which belongs to this
+origin, port included. Until 2026-11-15 it was also kept in a cookie, and a
+browser sends a cookie to every port of a host: any other program listening
+on 127.0.0.1 that the browser visited was sent the token. No cookie is set
+now, none authenticates an /api call, and one left by an older build is
+expired at first sight (_index_html).
+
+Every response also says it may not be framed and that its type is not to
+be guessed, and the interface's page carries a content policy that admits
+this origin's own scripts only (_SECURITY_HEADERS, _PAGE_POLICY).
 """
 
 import atexit
 import contextlib
+import glob
 import json
 import os
 import re
@@ -235,26 +247,51 @@ def _same_token(supplied) -> bool:
 
 
 def _token_ok(request: Request) -> bool:
-    return _same_token(request.headers.get(TOKEN_HEADER) or request.cookies.get(TOKEN_COOKIE))
+    """The header only. A cookie proves nothing here: the browser sends it to
+    every port of this host, so it is not kept and not accepted."""
+    return _same_token(request.headers.get(TOKEN_HEADER))
+
+
+# On every response, the refusals included. No page of another origin may
+# frame this app (a framed, signed-in interface can be clicked through), and
+# a browser must take each response as the type it is sent as.
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "frame-ancestors 'none'",
+}
+# The interface's own page (index.html) adds this. Its scripts, styles, and
+# fonts all ship with it, and it talks to this server alone. Styles may be
+# inline because React sets them that way. The manual is a separate static
+# page with an inline script of its own, so it keeps the short policy above.
+_PAGE_POLICY = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; "
+                "object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+
+
+def _secured(response):
+    for name, value in _SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
 
 
 @app.middleware("http")
 async def local_only_guard(request: Request, call_next):
     host = _hostname(request.headers.get("host", ""))
     if host not in LOCAL_HOSTS:
-        return JSONResponse({"detail": "QualiLens answers only to 127.0.0.1 or localhost."},
-                            status_code=421)
+        return _secured(JSONResponse(
+            {"detail": "QualiLens answers only to 127.0.0.1 or localhost."}, status_code=421))
     origin = request.headers.get("origin")
     if origin is not None and not _origin_is_self(origin, request.headers.get("host", "")):
-        return JSONResponse({"detail": "Cross-site request refused."}, status_code=403)
+        return _secured(JSONResponse({"detail": "Cross-site request refused."}, status_code=403))
     path = request.url.path
     if path == "/api" or path.startswith("/api/"):
         if not _token_ok(request):
-            return JSONResponse(
+            return _secured(JSONResponse(
                 {"detail": "Missing or stale session token — reload the QualiLens page "
                            "(the app was restarted, or this request did not come from it)."},
-                status_code=401)
-    return await call_next(request)
+                status_code=401))
+    return _secured(await call_next(request))
 
 
 def _err(status: int, msg: str):
@@ -581,7 +618,10 @@ def get_project(project_id: str):
 def _remove_upload_file(source_id: str) -> None:
     """Deleting a source must also delete the researcher's uploaded file —
     'deleted' interview data must not quietly persist on disk."""
-    for f in db.UPLOADS_DIR.glob(f"{source_id}_*"):
+    # the id arrives in a URL and is matched as a file pattern, so its
+    # pattern characters are taken literally: until 2026-11-15 an id of "*"
+    # removed every project's uploaded files
+    for f in db.UPLOADS_DIR.glob(f"{glob.escape(source_id)}_*"):
         try:
             f.unlink()
         except OSError:
@@ -1263,17 +1303,25 @@ if FRONTEND_DIST.exists():
     def _index_html(request: Request) -> HTMLResponse:
         """index.html, never cached, so a restart (new token) is picked up by
         the next page load. The session token is injected only for a browser
-        that holds it already: one the launch page sent here with ?token=…,
-        which also gets the cookie, or one carrying the cookie (any tab of a
-        browser a launch page signed in). Any other visitor, including another
-        account on this computer, gets the interface without the token, and
-        the interface says how to open QualiLens. The cookie lets plain
-        <a href> downloads authenticate without a header. The build stamps
-        stay public, because ./run.sh reads them to name the build that
-        holds the port."""
+        that holds it already: one the launch page sent here with ?token=….
+        The page then keeps the token in its own storage, which belongs to
+        this origin and port, and its other tabs read it there. Any other
+        visitor, including another account on this computer, gets the
+        interface without the token, and the interface says how to open
+        QualiLens. The build stamps stay public, because ./run.sh reads them
+        to name the build that holds the port.
+
+        No cookie is set (see the module's opening note). A build up to
+        1.12.0 did set one, and a tab it served may still be open when an
+        update brings this build up: that tab waits for a page carrying the
+        token. So a request that still carries the old cookie, with the right
+        token, gets the token in the page this once, and the cookie is
+        expired in the same response. The tab reloads into this build's
+        interface, which keeps the token in storage."""
         html = (_DIST_BASE / "index.html").read_text(encoding="utf-8")
         via_link = _same_token(request.query_params.get("token"))
-        signed_in = via_link or _same_token(request.cookies.get(TOKEN_COOKIE))
+        old_cookie = request.cookies.get(TOKEN_COOKIE)
+        signed_in = via_link or _same_token(old_cookie)
         meta = ((f'<meta name="ql-token" content="{SESSION_TOKEN}">' if signed_in else "")
                 + f'<meta name="ql-build" content="{STARTED_BUILD}">'
                 + f'<meta name="ql-release" content="{STARTED_RELEASE}">')
@@ -1281,9 +1329,10 @@ if FRONTEND_DIST.exists():
         # the launch address carries the token until the page takes it out of
         # the address bar; no address of this app goes to another site
         resp = HTMLResponse(html, headers={"Cache-Control": "no-store",
-                                           "Referrer-Policy": "same-origin"})
-        if via_link:
-            resp.set_cookie(TOKEN_COOKIE, SESSION_TOKEN, httponly=True, samesite="strict", path="/")
+                                           "Referrer-Policy": "same-origin",
+                                           "Content-Security-Policy": _PAGE_POLICY})
+        if old_cookie is not None:
+            resp.delete_cookie(TOKEN_COOKIE, path="/", httponly=True, samesite="strict")
         return resp
 
     @app.get("/{full_path:path}")

@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, dateLabel, methodLabel, settingValue, sizeLabel, statusLabel, type Meta, type Project } from '../api'
+import { api, dateLabel, methodLabel, saveFile, settingValue, sizeLabel, statusLabel, type Meta, type Project } from '../api'
 import MethodGlyph from '../Glyphs'
 
 export default function ProjectPage() {
@@ -78,7 +78,7 @@ export default function ProjectPage() {
               {r.status === 'completed' && <>
                 <Link to={`/runs/${r.id}/report`} onClick={e => e.stopPropagation()}>
                   <button className="small primary">Open report</button></Link>
-                <a href={`/api/runs/${r.id}/report.docx`} onClick={e => e.stopPropagation()}>
+                <a href={`/api/runs/${r.id}/report.docx`} onClick={e => saveFile(e, `/api/runs/${r.id}/report.docx`)}>
                   <button className="small">Word</button></a>
               </>}
               {r.status === 'awaiting_review' &&
