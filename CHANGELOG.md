@@ -11,63 +11,55 @@ update check compares against your installation.
 
 ## 1.11.0 — 2026-11-15
 
-- The interface takes the look of qualilens.org. Its type is IBM Plex,
-  with Plex Serif for page titles, report headings, and what you read (the
-  report, the coded-source reader, and quotes), Plex Sans for the rest, and
-  Plex Mono for model ids and build stamps. All three ship inside the app,
-  so the report and the reader look the same on every computer, where
-  before their serif was whatever the system had. The main buttons are
-  ink, links and focus are the mark's violet, the grays are warm, and
-  surfaces sit on hairlines instead of shadows.
-- Labels read in sentence case, including the tagline, which had been in
-  spaced capitals. A status shows as a colored dot beside its word, and a
-  run waiting for your review carries an amber rule down its left edge, as
-  a completed run carries a green one.
-- The top bar fits a narrow window, where at 390 pixels wide it ran past
-  the edge and cut off New analysis.
-- The four review screens are rebuilt around what a decision rests on. In
-  a code review, each code shows its first quote beside its definition,
-  with its source and a link into the document, and a category or theme
-  lists the codes it holds. Names and definitions read as text until you
-  choose Rename, each code offers Merge into, Delete, and Add a note, and a
-  note goes into the audit trail with its decision. Each decision is
-  written on its code, a tally beside the list counts them, and the
-  Approve button shows the number. Beside the list, a review of codes,
-  categories, or themes states how much of the least-coded transcript
-  carries no code and links to it. A review of more than 40 codes opens
-  with one line per code, and keys move through the list and act on the
-  code you are on.
-- The core category review shows the storyline as text you rewrite in
-  place, each category with its proposed relation and its weight beneath
-  the figure the report will draw, and the places where the data are thin.
-  The report reproduces those places as its Theoretical Sampling
-  Recommendations, and the review now lets you edit them, leave them out,
-  or add to them.
+- The review screens put the evidence beside the decision. Each code shows
+  its first quote, with its source and a link to the passage in the
+  document, and Show all brings up the rest in place. A category or theme
+  lists the codes it holds. You no longer open codes one at a time in a
+  side panel to see what they rest on.
+- You can record why you decided. A note on any code, category, weak
+  assignment, or paper goes into the audit trail beside the decision, and
+  a note on something you kept unchanged is recorded as well.
+- Each review shows what approving will do. A staged decision is written
+  on the item it changes, a tally beside the list counts the decisions,
+  and the Approve button gives their number.
+- A review of codes, categories, or themes shows how much of the
+  least-coded transcript carries no code, with a link to that text in the
+  coded-source reader.
+- Long code lists are quicker to work through. A review of more than 40
+  codes opens with one line per code, any code can be merged from its own
+  row, and single keys move through the list and rename, merge, delete, or
+  add a note to the code you are on.
+- The core category review shows the model's theoretical gaps, which the
+  report reproduces as its Theoretical Sampling Recommendations. You can
+  now edit them, leave them out, or add to them before they reach the
+  report. The review also shows the figure the report will draw.
 - The charting review shows each weak assignment beside its framework
-  code's definition, offers Keep or Remove in place of a checkbox, and
-  indicates that a candidate code left undecided is discarded.
-- The extraction review opens as a table of papers by field with quote
-  counts, so thin and unsupported summaries stand out, and an opened paper
-  shows each summary beside the quotes that ground it. Excluding a paper
-  asks for a reason, which is recorded with the exclusion.
-- The instructions at the top of each review are rewritten to match the
-  rebuilt screens.
-- Confirmations appear in the app's own dialog instead of the browser's.
-  Each dialog names its buttons for what they do, and for an action that
-  cannot be undone, such as deleting a project or cancelling a run, the
-  safe choice holds the focus.
-- In the review screens, a word that a PDF broke across a line reads whole
-  again ("decomposes" rather than "decom- poses"), and the paper's own text
-  decides whether it keeps a hyphen. The stored quote, the spreadsheet, and
-  the audit export keep each quote exactly as it was extracted.
-- In the extraction review, the column names stay with the table instead
-  of hanging at the top of the window over an opened paper, and they
-  appear again below an opened paper, above the papers that follow it.
-- Word reports list QualiLens as their author, where the library that
-  writes them had put its own name.
-- The manual takes the same type and colors, and its chapter on
-  checkpoints, with the walkthrough and the chapters that refer to it,
-  describes the new review screens.
+  code's definition, so the passage is judged against what the code means.
+  A candidate code left undecided is discarded, and the review now says so
+  before you approve.
+- The extraction review opens as a table of papers by field, with the
+  number of quotes behind each summary, so a summary with no quote behind
+  it stands out. An opened paper shows each summary beside its quotes.
+  Excluding a paper asks for a reason, which is recorded with the
+  exclusion.
+- A review that was already waiting when you update opens in the new
+  screens. A few details, such as the codes a category holds, appear only
+  in reviews opened after the update.
+- Quotes in the review screens read whole. A word that a PDF broke across
+  a line showed as "decom- poses" and now reads "decomposes", and a word
+  the paper hyphenates, such as "worst-case", keeps its hyphen. The stored
+  quote, the spreadsheet, and the audit export are unchanged.
+- Confirmations use the app's own dialog instead of the browser's, with
+  buttons named for what they do. When an action cannot be undone, such as
+  deleting a project, the safe button is the one selected.
+- In the extraction review, the column names stay with the table and
+  appear again below an opened paper, so the papers after it are labeled.
+- The top bar fits a narrow window. At 390 pixels wide it ran past the
+  edge of the screen and cut off New analysis.
+- Word reports list QualiLens as their author. Word's document properties
+  showed python-docx, the library that writes them.
+- The manual and the instructions at the top of each review describe the
+  new screens.
 
 ## 1.10.2 — 2026-11-04
 
