@@ -47,7 +47,7 @@ QualiLens running at http://127.0.0.1:8765  (Ctrl-C to stop)
 The launch page that signs a browser in is /var/folders/…/qualilens.Ab12Cd/open.html
 ```
 
-Stop the app with Ctrl-C in the terminal where it is running. Closing the browser tab does not stop it, and neither does minimising or forgetting the terminal window: the server keeps running until you stop it or the computer restarts. Closing the browser during a long analysis stage is also safe, because the run continues in the background and its state is saved as the run proceeds.
+Stop the app with **Quit**, at the right end of the bar at the top of the page. The app asks first. If a run is in progress or a recording is being transcribed, it says that quitting interrupts them. You can resume the run, or retry the recording, when you start the app again. Ctrl-C in the terminal where the app is running stops it as well. Closing the browser tab does not stop it, and neither does minimising or forgetting the terminal window: the server keeps running until you stop it or the computer restarts. Closing the browser during a long analysis stage is also safe, because the run continues in the background and its state is saved as the run proceeds.
 
 Stop the app before updating it, and after an update stop any older copy that is still running: a server keeps the code it loaded when it started, so an old one left running keeps serving the old app while the folder holds the new one. The launcher notices this and says which build holds the port, when it started, and how to stop it; see [Troubleshooting](13-troubleshooting.md#starting-the-app).
 

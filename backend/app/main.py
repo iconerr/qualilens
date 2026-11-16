@@ -452,8 +452,6 @@ def _finish_update(result: dict) -> dict:
     version starts. Under a ./run.sh that restarts it, write the request it
     looks for first; that run.sh then starts the updated run.sh, with the same
     session token. Shared by the zip and release paths."""
-    import os
-    import signal
     restart_file = (os.environ.get("QUALILENS_RESTART_FILE") or "").strip()
     result["restarts_itself"] = False
     if restart_file:
@@ -464,15 +462,76 @@ def _finish_update(result: dict) -> dict:
             result["restarts_itself"] = True
         except OSError:
             pass                        # the researcher starts it again, as before 1.12
-    if not os.environ.get("QUALILENS_TEST"):
-        def _stop():
-            import time as _t
-            _t.sleep(1.2)   # let the response reach the browser first
-            db.checkpoint_wal()
-            os.kill(os.getpid(), signal.SIGTERM)
-        threading.Thread(target=_stop, daemon=True).start()
+    if _stop_soon():
         result["restart_required"] = True
     return result
+
+
+# How many updates are being installed now. Quit is on every screen, and a
+# server stopped while an update replaces its files would leave the folder
+# half old and half new, so a quit waits for the update (quit_app).
+_updates_installing = 0
+_updates_lock = threading.Lock()
+
+
+@contextlib.contextmanager
+def _installing():
+    global _updates_installing
+    with _updates_lock:
+        _updates_installing += 1
+    try:
+        yield
+    finally:
+        with _updates_lock:
+            _updates_installing -= 1
+
+
+def _stop_soon() -> bool:
+    """Stop this server a moment from now, so the response that announces it
+    reaches the browser first: fold the write-ahead log, then the signal
+    uvicorn stops gracefully on. ./run.sh, which waits for the server, then
+    exits and removes its launch folder, unless a restart request is waiting
+    for it. Tests do not stop (QUALILENS_TEST); returns whether it will."""
+    import signal
+    if os.environ.get("QUALILENS_TEST"):
+        return False
+
+    def _stop():
+        time.sleep(1.2)
+        db.checkpoint_wal()
+        os.kill(os.getpid(), signal.SIGTERM)
+    threading.Thread(target=_stop, daemon=True).start()
+    return True
+
+
+@app.post("/api/quit")
+def quit_app(body: dict):
+    """Quit QualiLens from the interface (Settings). Until this existed the
+    only way to stop the app was Ctrl-C in its Terminal window, and a server
+    forgotten there kept running, with its session token, for days.
+
+    Asked without `confirm`, nothing stops: the answer says what stopping
+    now would interrupt, so the interface can say so before it asks. A run
+    that is executing is marked interrupted at the next start and offers
+    Resume, and a transcription offers Retry (pipeline.reconcile_on_startup);
+    a run awaiting review loses nothing. Asked with `confirm`, the server
+    stops itself the way it does after an update, with no restart request,
+    so ./run.sh ends too and the session token dies with the launch folder."""
+    conn = db.get_conn()
+    running = conn.execute("SELECT COUNT(*) c FROM runs WHERE status='running'").fetchone()["c"]
+    transcribing = conn.execute(
+        "SELECT COUNT(*) c FROM sources WHERE status='transcribing'").fetchone()["c"]
+    out = {"stopping": False, "running": running, "transcribing": transcribing}
+    if not (isinstance(body, dict) and body.get("confirm") is True):
+        return out
+    if _updates_installing:
+        _err(409, "An update is being installed. Quit when it has finished.")
+    restart_file = (os.environ.get("QUALILENS_RESTART_FILE") or "").strip()
+    if restart_file:                    # a quit is never a restart
+        Path(restart_file).unlink(missing_ok=True)
+    out["stopping"] = True
+    out["stops_itself"] = _stop_soon()
+    return out
 
 
 @app.post("/api/settings/update")
@@ -500,7 +559,8 @@ async def apply_app_update(file: UploadFile = File(...), allow_downgrade: str = 
             tmp.write(chunk)
     downgrade_ok = allow_downgrade.strip().lower() in ("1", "true", "yes")
     try:
-        result = await run_in_threadpool(update.apply_update, tmp_path, downgrade_ok)
+        with _installing():
+            result = await run_in_threadpool(update.apply_update, tmp_path, downgrade_ok)
     except update.RollbackRefused as e:
         _err(409, str(e))
     except update.UpdateError as e:
@@ -541,8 +601,9 @@ def install_update():
     _refuse_if_runs_active("install an update")
     with tempfile.TemporaryDirectory() as td:
         try:
-            bundle = update.download_latest_bundle(Path(td))
-            result = update.apply_update(bundle)   # never a downgrade on this path
+            with _installing():
+                bundle = update.download_latest_bundle(Path(td))
+                result = update.apply_update(bundle)   # never a downgrade on this path
         except update.RollbackRefused as e:
             _err(409, str(e))
         except update.UpdateError as e:

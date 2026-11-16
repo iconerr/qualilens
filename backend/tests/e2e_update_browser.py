@@ -156,7 +156,7 @@ with sync_playwright() as p:
     # another browser, never signed in, gets the page without a token
     stranger = b.new_context().new_page()
     stranger.goto(ORIGIN + "/", wait_until="networkidle")
-    check(stranger.evaluate(TOKEN_JS) == "" and "Open QualiLens from the tab it opened" in stranger.content(),
+    check(stranger.evaluate(TOKEN_JS) == "" and "This tab is not signed in" in stranger.content(),
           "a browser never signed in gets no token, only how to open QualiLens")
     # a surviving tab across a plain restart
     page.goto(ORIGIN + "/#/", wait_until="networkidle")
@@ -166,7 +166,7 @@ with sync_playwright() as p:
     check(not os.path.exists(LAUNCH), "the launch page is removed when the server stops")
     srv = start()
     page.click("text=Settings")
-    page.wait_for_selector("text=Open QualiLens from the tab it opened", timeout=15000)
+    page.wait_for_selector("text=This tab is not signed in", timeout=15000)
     check("Missing or stale session token" not in page.content(),
           "stale tab shows how to open QualiLens; no token error")
     run_sh_opens_launch_page()

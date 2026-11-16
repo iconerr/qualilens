@@ -1507,3 +1507,223 @@ def test_run_sh_opens_a_private_launch_page_and_never_puts_the_token_on_a_comman
             p.kill(); p.wait()
         log.close()
     assert not page.exists(), "the launch page must be removed when the server stops"
+    # stopping run.sh stops the server: from 1.12.0 the server was a child the
+    # signal did not reach, and each run of this test left one listening
+    for _ in range(40):
+        with socket.socket() as s:
+            if s.connect_ex(("127.0.0.1", port)) != 0:
+                break
+        time.sleep(0.25)
+    else:
+        subprocess.run(["pkill", "-f", f"uvicorn app.main:app --host 127.0.0.1 --port {port}"])
+        pytest.fail("the server outlived run.sh: a signal to the launcher must stop the app")
+
+
+def _start_run_sh(tmp_path):
+    """run.sh against a scratch data folder, on a free port, with the
+    browser-opening program replaced by one that records what it is handed.
+    Returns once the launch page has been handed over."""
+    import hashlib, shutil, socket, time
+    root = pathlib.Path(__file__).resolve().parent.parent.parent
+    venv_py = root / "backend" / ".venv" / "bin" / "python"
+    req_sha = root / "backend" / ".venv" / "req.sha"
+    if not (venv_py.exists() and (root / "frontend" / "dist" / "index.html").exists()
+            and shutil.which("curl") and shutil.which("lsof")):
+        pytest.skip("needs the app's own environment, a built interface, curl, and lsof")
+    want = hashlib.sha1((root / "backend" / "requirements.txt").read_bytes()).hexdigest()
+    if not req_sha.exists() or req_sha.read_text().strip() != want:
+        pytest.skip("the environment awaits its dependency update; run ./run.sh once")
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    record = tmp_path / "opened.txt"
+    for name in ("open", "xdg-open"):
+        f = shim / name
+        f.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{record}"\n')
+        f.chmod(0o755)
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]
+    (tmp_path / "data").mkdir()
+    env = dict(os.environ, PATH=f"{shim}:{os.environ.get('PATH', '')}", QUALILENS_PORT=str(port),
+               QUALILENS_DATA_DIR=str(tmp_path / "data"), QUALILENS_SECRET_FILE=str(tmp_path / "secret.key"),
+               TMPDIR=str(tmp_path))
+    # QUALILENS_TEST (conftest) keeps a server from stopping itself; this one is real
+    for name in ("QUALILENS_TOKEN", "QUALILENS_LAUNCH_FILE", "QUALILENS_RELAUNCH_DIR", "QUALILENS_TEST"):
+        env.pop(name, None)
+    log_path = tmp_path / "run.log"
+    log = open(log_path, "wb")
+    p = subprocess.Popen(["bash", str(root / "run.sh")], cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT)
+    for _ in range(240):
+        if record.exists() and record.read_text().strip():
+            break
+        time.sleep(0.25)
+    else:
+        p.kill(); p.wait(); log.close()
+        pytest.fail("run.sh opened nothing; log:\n" + log_path.read_text()[-2000:])
+    launch_dir = pathlib.Path(record.read_text().strip().splitlines()[0]).parent
+    return {"p": p, "port": port, "log": log, "log_path": log_path, "record": record, "dir": launch_dir}
+
+
+def _listener(port):
+    """The pid listening on a local port, or None."""
+    out = subprocess.run(["lsof", f"-tiTCP:{port}", "-sTCP:LISTEN"], capture_output=True, text=True).stdout.split()
+    return int(out[0]) if out else None
+
+
+def _stopped_within(port, seconds=15):
+    import time
+    for _ in range(int(seconds * 4)):
+        if _listener(port) is None:
+            return True
+        time.sleep(0.25)
+    return False
+
+
+def _reap(run):
+    """After a test, whatever it asserted: nothing of it may stay running."""
+    p = run["p"]
+    if p.poll() is None:
+        p.kill(); p.wait()
+    pid = _listener(run["port"])
+    if pid:
+        os.kill(pid, 9)
+    run["log"].close()
+
+
+@pytest.mark.parametrize("sig", ["SIGINT", "SIGHUP", "SIGTERM"])
+def test_a_signal_to_run_sh_alone_stops_the_server(tmp_path, sig):
+    """From 1.12.0 the server is a child of run.sh, so that an update can
+    start it again. A signal sent to run.sh alone (kill, a process manager)
+    ended the launcher, which removed the launch folder, and left the server
+    running. run.sh now passes the signal on and waits for the server."""
+    import signal
+    run = _start_run_sh(tmp_path)
+    try:
+        assert _listener(run["port"]) is not None
+        run["p"].send_signal(getattr(signal, sig))
+        run["p"].wait(timeout=25)
+        assert _stopped_within(run["port"]), f"the server outlived run.sh after {sig}"
+        assert not run["dir"].exists(), "the launch folder goes with the app"
+    finally:
+        _reap(run)
+
+
+def test_run_sh_starts_the_server_again_when_asked_and_still_stops_with_it(tmp_path):
+    """What an update does: the server leaves a restart request in the launch
+    folder and stops; run.sh starts itself again with the same folder, so the
+    token is the same and no second launch page opens. The relaunched run.sh
+    must still stop the server when it is stopped."""
+    import signal, time, urllib.request
+    run = _start_run_sh(tmp_path)
+    try:
+        port, launch_dir = run["port"], run["dir"]
+        token = (launch_dir / "token").read_text().strip()
+        first = _listener(port)
+        assert first and len(token) >= 40
+        (launch_dir / "restart").write_text("update\n")
+        os.kill(first, signal.SIGTERM)
+        second = None
+        for _ in range(160):
+            second = _listener(port)
+            if second and second != first:
+                break
+            time.sleep(0.25)
+        assert second and second != first, "run.sh did not start the server again:\n" \
+            + run["log_path"].read_text()[-1500:]
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/meta", headers={"X-QualiLens-Token": token})
+        for _ in range(40):
+            try:
+                assert urllib.request.urlopen(req, timeout=5).status == 200
+                break
+            except OSError:
+                time.sleep(0.25)
+        else:
+            pytest.fail("the restarted server does not answer the token from before")
+        assert "Starting QualiLens again" in run["log_path"].read_text()
+        assert len(run["record"].read_text().strip().splitlines()) == 1, "no second launch page"
+        assert not (launch_dir / "restart").exists() and launch_dir.is_dir()
+        assert run["p"].poll() is None, "the launcher is the same process, started again in place"
+        run["p"].terminate()
+        run["p"].wait(timeout=25)
+        assert _stopped_within(port), "the server outlived the relaunched run.sh"
+        assert not launch_dir.exists()
+    finally:
+        _reap(run)
+
+
+def test_quit_says_what_it_would_interrupt_and_stops_only_on_confirm(monkeypatch, tmp_path):
+    """Settings has Quit QualiLens. Asked without confirm, the server stops
+    nothing and says what a stop would interrupt now; only confirm stops it,
+    and a quit is never a restart, so a waiting restart request is removed."""
+    from app import main as main_mod
+    assert stranger.post("/api/quit", json={"confirm": True}).status_code == 401
+    stopped = []
+    monkeypatch.setattr(main_mod, "_stop_soon", lambda: stopped.append(1) or True)
+    conn = db.get_conn()
+    before = client.post("/api/quit", json={}).json()
+    assert before["stopping"] is False and not stopped
+    pid, rid, sid = db.new_id(), db.new_id(), db.new_id()
+    conn.execute("INSERT INTO projects(id,name,method,config,created_at) VALUES(?,?,?,?,?)",
+                 (pid, "Quit", "thematic", "{}", db.now()))
+    conn.execute("INSERT INTO runs(id,project_id,status,created_at,updated_at) VALUES(?,?,?,?,?)",
+                 (rid, pid, "running", db.now(), db.now()))
+    conn.execute("INSERT INTO sources(id,project_id,filename,kind,status,meta,created_at) "
+                 "VALUES(?,?,?,?,?,?,?)", (sid, pid, "talk.m4a", "audio", "transcribing", "{}", db.now()))
+    conn.commit()
+    try:
+        assert client.post("/api/quit", json=[]).status_code == 422 and not stopped
+        for body in ({}, {"confirm": False}, {"confirm": "true"}, {"confirm": 1}):
+            r = client.post("/api/quit", json=body)
+            assert r.status_code == 200, body
+            now = r.json()
+            assert now["stopping"] is False and not stopped, body
+            assert now["running"] == before["running"] + 1
+            assert now["transcribing"] == before["transcribing"] + 1
+        marker = tmp_path / "restart"
+        marker.write_text("update\n")
+        monkeypatch.setenv("QUALILENS_RESTART_FILE", str(marker))
+        r = client.post("/api/quit", json={"confirm": True}).json()
+        assert r["stopping"] is True and r["stops_itself"] is True and stopped == [1]
+        assert not marker.exists(), "a quit must not be taken for a restart"
+        # Quit is on every screen: while an update replaces the app's files it waits
+        stopped.clear()
+        with main_mod._installing():
+            r = client.post("/api/quit", json={"confirm": True})
+            assert r.status_code == 409 and "update" in r.json()["detail"] and not stopped
+            assert client.post("/api/quit", json={}).status_code == 200
+        assert client.post("/api/quit", json={"confirm": True}).json()["stopping"] is True
+    finally:
+        conn.execute("DELETE FROM sources WHERE id=?", (sid,))
+        conn.execute("DELETE FROM runs WHERE id=?", (rid,))
+        conn.execute("DELETE FROM projects WHERE id=?", (pid,))
+        conn.commit()
+
+
+def test_quit_from_the_interface_ends_the_server_and_run_sh(tmp_path):
+    """The whole path: the request Settings sends stops the server, and
+    run.sh, which waits for it, exits by itself and removes its launch
+    folder, token included. Nothing is started again."""
+    import json as _json, time, urllib.request
+    run = _start_run_sh(tmp_path)
+    try:
+        port, launch_dir = run["port"], run["dir"]
+        token = (launch_dir / "token").read_text().strip()
+
+        def quit_(body, tok=token):
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/api/quit", data=_json.dumps(body).encode(),
+                                         headers={"X-QualiLens-Token": tok, "Content-Type": "application/json"})
+            return _json.loads(urllib.request.urlopen(req, timeout=5).read())
+        assert quit_({}) == {"stopping": False, "running": 0, "transcribing": 0}
+        time.sleep(2)
+        assert _listener(port) is not None, "asking is not quitting"
+        with pytest.raises(urllib.error.HTTPError):
+            quit_({"confirm": True}, tok="x" * 43)
+        out = quit_({"confirm": True})
+        assert out["stopping"] is True and out["stops_itself"] is True
+        run["p"].wait(timeout=25)
+        assert _stopped_within(port), "the server is still listening after Quit"
+        assert not launch_dir.exists(), "the launch folder, with the token, goes with the app"
+        assert "Starting QualiLens again" not in run["log_path"].read_text()
+        time.sleep(1.5)
+        assert _listener(port) is None, "nothing starts it again"
+    finally:
+        _reap(run)

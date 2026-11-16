@@ -37,19 +37,19 @@ export default function NotSignedIn() {
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', minHeight: '60vh', textAlign: 'center', gap: 16
     }}>
-      <h1 style={{ margin: 0 }}>Open QualiLens from the tab it opened</h1>
+      <h1 style={{ margin: 0 }}>This tab is not signed in</h1>
       <p style={{ maxWidth: 500, lineHeight: 1.6, margin: 0 }}>
-        This tab is not signed in, so it cannot reach your projects. QualiLens signs in only
-        the browser that <code>./run.sh</code> opens, so other accounts on this computer
-        cannot read your data through it.
+        QualiLens is running, but this tab cannot open your projects. Use the tab that
+        opened when you started QualiLens.
       </p>
       <p style={{ maxWidth: 500, lineHeight: 1.6, margin: 0 }}>
-        Switch to the tab <code>./run.sh</code> opened, or open the launch page its Terminal
-        window names. If you have neither, stop QualiLens with <kbd>Ctrl</kbd>-<kbd>C</kbd> in
-        that window and run <code>./run.sh</code> again.
+        If you cannot find that tab, go to the Terminal window where QualiLens is running.
+        Press <kbd>Ctrl</kbd>-<kbd>C</kbd> to stop it. Then run <code>./run.sh</code> again.
       </p>
-      <p className="small muted" style={{ margin: 0 }}>
-        This tab signs itself in as soon as another tab of this browser has been signed in.
+      <p className="small muted" style={{ maxWidth: 500, margin: 0 }}>
+        QualiLens signs in only the browser it opens. This keeps other accounts on this
+        computer out of your projects. Once one tab in this browser is signed in, this
+        tab signs in by itself.
       </p>
     </div>
   )

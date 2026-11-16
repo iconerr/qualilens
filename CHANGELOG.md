@@ -9,6 +9,24 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.13.0 — 2026-11-16
+
+- QualiLens has a Quit link. It is at the right end of the bar at the top,
+  on every screen. Until now the only way to stop the app was Ctrl-C in its
+  Terminal window, and an app forgotten there kept running. Quit asks
+  first. If a run is in progress or a recording is being transcribed, it
+  says that quitting interrupts them. You can resume the run, or retry the
+  recording, when you start the app again. The page then says the app has
+  stopped and how to start it again. Starting it again opens a new tab,
+  and the old one says so.
+- The page a tab shows when it is not signed in is easier to read. It is
+  headed "This tab is not signed in" and says what to do in short steps.
+- Stopping the launcher stops QualiLens. Since 1.12.0, a stop sent to the
+  launcher alone, such as `kill`, ended the launcher and left the app
+  running in the background. Ctrl-C and closing the Terminal window were
+  not affected. The launcher now passes the stop on and waits until the app
+  has stopped.
+
 ## 1.12.1 — 2026-11-15
 
 - Other accounts on a shared computer can no longer reach your projects

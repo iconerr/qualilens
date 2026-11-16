@@ -258,10 +258,26 @@ fi
 # disk while this copy is still running, and bash reads a script as it goes,
 # so everything from here on sits in one function that bash has read in full
 # before the server starts, and the line that calls it also exits.
+#
+# Stopping this script must stop the server. Ctrl-C and closing the Terminal
+# window reach both, but a signal sent to this script alone (kill, a process
+# manager) used to end it, and remove the launch folder, with the server left
+# running. bash acts on a signal only between commands, so the server runs in
+# the background and the script waits for it: the wait is interrupted, the
+# signal is passed on, and the script goes on waiting until the server has
+# stopped in its own time.
 run_server() {
-  local code=0
+  local code=0 server=""
   trap 'rm -rf "$LAUNCH_DIR"' EXIT          # the token and the launch page go with the app
-  (cd backend && exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT") || code=$?
+  (cd backend && exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT") &
+  server=$!
+  trap 'kill -TERM "$server" 2>/dev/null || true' TERM HUP INT
+  while :; do
+    code=0
+    wait "$server" || code=$?
+    kill -0 "$server" 2>/dev/null || break   # still running: the wait was only interrupted
+  done
+  trap - TERM HUP INT
   if [ -f "$QUALILENS_RESTART_FILE" ]; then
     rm -f "$QUALILENS_RESTART_FILE"
     trap - EXIT                              # the relaunched run.sh keeps the folder

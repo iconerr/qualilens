@@ -360,6 +360,10 @@ export const api = {
         notes?: string }>(   // the release's first paragraph of notes, plain text
       '/api/settings/check_updates', post()),
   dismissUpdateHint: () => j<{ ok: boolean }>('/api/settings/dismiss_update_hint', post()),
+  // Quit QualiLens. Without confirm nothing stops: the answer says what a
+  // stop would interrupt now. With confirm the server stops itself.
+  quit: (confirm: boolean) =>
+    j<{ stopping: boolean; running: number; transcribing: number }>('/api/quit', post({ confirm })),
   installUpdate: () =>
     j<{ ok: boolean; from_version: string; to_version: string; files_installed: number;
         backup: string; restart_required?: boolean; restarts_itself?: boolean; note?: string }>('/api/settings/install_update', post()),

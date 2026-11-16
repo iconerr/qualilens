@@ -11,7 +11,9 @@ import ReportPage from './pages/Report'
 import SourceReader from './pages/SourceReader'
 import Settings from './pages/Settings'
 import NotSignedIn from './NotSignedIn'
-import { signedIn, versionLabel } from './api'
+import { Stopped } from './Quit'
+import { ask } from './ask'
+import { api, signedIn, versionLabel } from './api'
 
 const QL_LINEAGE = 'ql-a2f4467befc3477b9caea1866a2af37e'
 
@@ -71,8 +73,38 @@ function CoreCategoryEgg({ onDone }: { onDone: () => void }) {
   )
 }
 
+/** Ask, then quit. The server first says what stopping now would interrupt,
+    the dialog says it, and only a yes stops the app. Resolves true when the
+    app is stopping. */
+async function quitApp(): Promise<boolean> {
+  try {
+    const now = await api.quit(false)
+    const body = ['QualiLens stops. Your projects are saved.']
+    if (now.running > 0) body.push(
+      `${now.running === 1 ? 'A run is' : `${now.running} runs are`} in progress. Quitting `
+      + `interrupts ${now.running === 1 ? 'it' : 'them'}. You can resume `
+      + `${now.running === 1 ? 'it' : 'them'} when you start QualiLens again. Finished work is `
+      + 'kept and is not billed again.')
+    if (now.transcribing > 0) body.push(
+      `${now.transcribing === 1 ? 'A recording is' : `${now.transcribing} recordings are`} being `
+      + `transcribed. Quitting interrupts ${now.transcribing === 1 ? 'it' : 'them'}. You can retry `
+      + `${now.transcribing === 1 ? 'it' : 'them'} when you start QualiLens again.`)
+    body.push('To start QualiLens again, run ./run.sh in Terminal.')
+    const busy = now.running > 0 || now.transcribing > 0
+    if (!(await ask({ title: 'Quit QualiLens?', body, confirm: 'Quit QualiLens',
+                      cancel: 'Keep it running', danger: busy }))) return false
+    await api.quit(true)
+    return true
+  } catch (e: any) {
+    void ask({ title: 'QualiLens did not quit', body: [String(e?.message ?? e)], confirm: 'OK', cancel: '' })
+    return false
+  }
+}
+
 export default function App() {
   const [egg, setEgg] = useState(false)
+  // after Quit: the server is gone, so the bar offers nothing and the page says so
+  const [stopped, setStopped] = useState(false)
   useKonami(() => setEgg(true))
   // a tab without the session token can reach nothing but the manual
   const ok = signedIn()
@@ -88,9 +120,9 @@ export default function App() {
             <line x1="2" y1="44" x2="22" y2="29" stroke="#863bff" strokeWidth="2.8" strokeLinecap="round" opacity="0.35"/>
             <polyline points="31,12 44,24 31,36" stroke="#863bff" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          QualiLens<small>You. AI. Done.</small>
+          <span className="word">QualiLens</span><small>You. AI. Done.</small>
         </Link>
-        <nav>
+        {!stopped && <nav>
           {/* the one link that leaves this tab says so, with the same mark
               the rest of the app uses for links that open elsewhere */}
           <a href="/manual.html" target="_blank" rel="noopener"
@@ -99,10 +131,13 @@ export default function App() {
           {ok && <>
             <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>Settings</NavLink>
             <NavLink to="/new" className="nav-primary">New analysis</NavLink>
+            {/* last and quiet: used once a session, and it asks before anything stops */}
+            <button type="button" className="nav-quit" title="Stop QualiLens on this computer"
+              onClick={async () => { if (await quitApp()) setStopped(true) }}>Quit</button>
           </>}
-        </nav>
+        </nav>}
       </header>
-      {ok ? (
+      {stopped ? <Stopped /> : ok ? (
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/new" element={<Wizard />} />
