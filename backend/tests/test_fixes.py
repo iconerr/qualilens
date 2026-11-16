@@ -2102,3 +2102,48 @@ def test_quote_display_joins_words_broken_across_a_line():
     assert display("pre- and post-test scores") == "pre- and post-test scores"   # suspended hyphen
     assert display("the IS- Research link") == "the IS- Research link"            # a capital follows
     assert display("well-known and long-run") == "well-known and long-run"        # nothing broken
+
+
+# ---------- restarting by itself after an update (1.12) ----------
+
+def test_session_token_is_kept_for_a_restart_only_when_private(tmp_path, monkeypatch):
+    """./run.sh asks the server to keep its token in a private file, so that
+    after an update the restarted server signs the same browser tab in."""
+    from app import main as m
+    monkeypatch.delenv("QUALILENS_TOKEN", raising=False)
+    f = tmp_path / "token"
+    monkeypatch.setenv("QUALILENS_TOKEN_FILE", str(f))
+    first = m._session_token()
+    assert f.read_text() == first and (f.stat().st_mode & 0o777) == 0o600
+    assert m._session_token() == first, "a restarted server reads the same token back"
+    f.chmod(0o644)                                   # readable by another account: not trusted
+    replaced = m._session_token()
+    assert replaced != first and (f.stat().st_mode & 0o777) == 0o600
+    monkeypatch.delenv("QUALILENS_TOKEN_FILE")
+    assert m._session_token() != m._session_token(), "without the file, every start gets a fresh token"
+
+
+def test_update_asks_the_launcher_for_a_restart(tmp_path, monkeypatch):
+    from app import main as m
+    marker = tmp_path / "restart"
+    monkeypatch.setenv("QUALILENS_RESTART_FILE", str(marker))
+    out = m._finish_update({"ok": True})
+    assert out["restarts_itself"] is True and marker.exists()
+    assert (marker.stat().st_mode & 0o777) == 0o600
+    assert m._restarts_after_update() is True
+    monkeypatch.delenv("QUALILENS_RESTART_FILE")
+    marker.unlink()
+    out = m._finish_update({"ok": True})
+    assert out["restarts_itself"] is False and not marker.exists()
+    assert m._restarts_after_update() is False
+
+
+def test_run_sh_reads_itself_in_full_before_the_server_starts():
+    """An update rewrites run.sh in place while it runs. The launch logic must
+    sit in a function that bash has read in full, called from the last line."""
+    import pathlib
+    text = (pathlib.Path(__file__).resolve().parent.parent.parent / "run.sh").read_text()
+    assert text.rstrip().endswith("run_server; exit $?")
+    assert "exec \"$SELF\"" in text and "QUALILENS_RESTART_FILE" in text
+    assert "exec .venv/bin/python -m uvicorn" in text.split("run_server() {")[1], \
+        "the server starts inside run_server, not in place of run.sh"

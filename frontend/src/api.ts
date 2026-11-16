@@ -21,6 +21,8 @@ export interface ProviderMeta {
 export interface Meta {
   methods: MethodMeta[]; providers: ProviderMeta[]; ffmpeg: boolean; version?: string;
   release?: string; running_build?: string; running_release?: string;
+  // started by a ./run.sh that starts it again after an update (1.12 on)
+  restarts_after_update?: boolean;
   data_dir?: string; synced_folder?: string;
   // the secret that encrypts the saved API keys: where it lives, whether that
   // place looks cloud-synced, and why it is unusable when it is
@@ -274,7 +276,8 @@ export const api = {
       throw err
     }
     return res.json() as Promise<{ ok: boolean; from_version: string; to_version: string;
-      files_installed: number; backup: string; restart_required?: boolean; note?: string }>
+      files_installed: number; backup: string; restart_required?: boolean; restarts_itself?: boolean;
+      note?: string }>
   },
   codedSource: (runId: string, sourceId: string) =>
     j<CodedSource>(`/api/runs/${runId}/sources/${sourceId}/coded`),
@@ -299,7 +302,7 @@ export const api = {
   dismissUpdateHint: () => j<{ ok: boolean }>('/api/settings/dismiss_update_hint', post()),
   installUpdate: () =>
     j<{ ok: boolean; from_version: string; to_version: string; files_installed: number;
-        backup: string; restart_required?: boolean; note?: string }>('/api/settings/install_update', post()),
+        backup: string; restart_required?: boolean; restarts_itself?: boolean; note?: string }>('/api/settings/install_update', post()),
 }
 
 export const statusLabel = (s: string) =>

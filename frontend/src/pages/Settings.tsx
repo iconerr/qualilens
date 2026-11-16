@@ -18,7 +18,7 @@ import { ask } from '../ask'
 // a token error.
 const THIS_BUILD = document.querySelector('meta[name="ql-build"]')?.getAttribute('content') ?? ''
 
-function UpdateWaiting({ detail }: { detail: string }) {
+function UpdateWaiting({ detail, auto }: { detail: string; auto: boolean }) {
   const [secs, setSecs] = useState(0)
   const [sameBuildFor, setSameBuildFor] = useState(0)
   const [newBuildUp, setNewBuildUp] = useState(false)
@@ -57,36 +57,44 @@ function UpdateWaiting({ detail }: { detail: string }) {
         <path d="M8 12l3 3 5-6" />
       </svg>
       <h1 style={{ margin: 0 }}>Update installed</h1>
-      <p style={{ maxWidth: 460, lineHeight: 1.6, margin: 0 }}>
-        QualiLens has stopped so the new build can start. Start it again: in the Terminal
-        window where it was running, press <kbd>↑</kbd> then <kbd>Return</kbd> — or open a
-        Terminal in the QualiLens folder and run <code>./run.sh</code>.
-      </p>
-      <p style={{ maxWidth: 460, lineHeight: 1.6, margin: 0 }}>
-        <b>This page reconnects on its own</b> once the new build is up; nothing else to do.
-      </p>
+      {auto ? (
+        <p style={{ maxWidth: 460, lineHeight: 1.6, margin: 0 }}>
+          QualiLens is starting again with the new build. This page reloads by itself when it
+          is ready, usually within a minute. There is nothing else to do.
+        </p>
+      ) : (<>
+        <p style={{ maxWidth: 460, lineHeight: 1.6, margin: 0 }}>
+          QualiLens has stopped so the new build can start. Start it again in the Terminal
+          window where it was running: press <kbd>↑</kbd> then <kbd>Return</kbd>. Or open a
+          Terminal in the QualiLens folder and run <code>./run.sh</code>.
+        </p>
+        <p style={{ maxWidth: 460, lineHeight: 1.6, margin: 0 }}>
+          <b>This page reconnects by itself</b> once the new build is up. There is nothing
+          else to do.
+        </p>
+      </>)}
       <p className="small muted" style={{ margin: 0 }}>
         {newBuildUp
-          ? <>The new build is running. This page follows once the tab <code>./run.sh</code> opened
-              has loaded.</>
+          ? <>The new build is running. This page follows once the browser is signed in to it.</>
           : <>Waiting for the new build… {secs > 0 && <span className="mono">{secs}s</span>}</>}
       </p>
-      {!newBuildUp && (secs >= 60 || sameBuildFor >= 20) && (
+      {!newBuildUp && (secs >= (auto ? 90 : 60) || sameBuildFor >= 20) && (
         <div className="warn-box" style={{ maxWidth: 520, textAlign: 'left' }}>
           {sameBuildFor >= 20
-            ? <>A server is answering, but it runs the same build as before. If you relaunched
-                from a different folder, or the launcher printed that the port is in use,
-                stop that server (the launcher prints the command) and run <code>./run.sh</code>
-                again in the updated folder.</>
-            : <>Not reconnecting yet. If the launcher says the port is already in use, an older
-                server is still running — stop it with the command it prints, then run{' '}
-                <code>./run.sh</code> again. Once the app says it is running, it opens in a
-                new tab, and this page follows.</>}
+            ? <>A server is answering, but it runs the same build as before. If you started it
+                from a different folder, or the launcher said the port is in use, stop that
+                server with the command the launcher prints. Then run <code>./run.sh</code> again
+                in the updated folder.</>
+            : auto
+              ? <>QualiLens has not come back yet. The Terminal window where it runs shows what
+                  it is doing, such as installing updated dependencies. If it has stopped, run{' '}
+                  <code>./run.sh</code> again in the QualiLens folder.</>
+              : <>Not reconnecting yet. If the launcher says the port is already in use, an older
+                  server is still running. Stop it with the command it prints, then run{' '}
+                  <code>./run.sh</code> again. The app then opens in a new tab, and this page
+                  follows.</>}
         </div>
       )}
-      <div className="row" style={{ gap: 10 }}>
-        <button onClick={() => window.location.reload()}>Reload now</button>
-      </div>
       <p className="small muted" style={{ maxWidth: 520, marginTop: 8 }}>{detail}</p>
     </div>
   )
@@ -99,7 +107,7 @@ export default function Settings() {
   const [status, setStatus] = useState<Record<string, string>>({})
   const [modelCheck, setModelCheck] = useState<Record<string, any>>({})
   const [error, setError] = useState('')
-  const [updState, setUpdState] = useState<{ phase: string; msg: string }>({ phase: 'idle', msg: '' })
+  const [updState, setUpdState] = useState<{ phase: string; msg: string; auto?: boolean }>({ phase: 'idle', msg: '' })
   const [check, setCheck] = useState<{ phase: string; msg: string; newer?: boolean;
     releaseUrl?: string; notes?: string }>({ phase: 'idle', msg: '' })
   const updRef = useRef<HTMLInputElement>(null)
@@ -126,18 +134,24 @@ export default function Settings() {
     } catch (e: any) { setCheck({ phase: 'error', msg: String(e.message ?? e) }) }
   }
 
+  // what the dialogs before an update say happens next: a ./run.sh from 1.12 on
+  // starts the app again by itself, an older one leaves that to the researcher
+  const restartLine = meta?.restarts_after_update
+    ? 'QualiLens starts again by itself when it is done, and this page reloads by itself.'
+    : 'The app stops itself when it is done. Start it again with ./run.sh. This page reconnects on its own.'
+
   const installUpdate = async () => {
     if (!(await ask({
       title: 'Install the latest release?',
       body: ['QualiLens downloads the latest release from GitHub and installs it. An update '
         + 'never touches your projects, keys, or uploads.',
-        'The app stops itself when it is done. Start it again with ./run.sh. This page reconnects on its own.'],
+        restartLine],
       confirm: 'Download and install', cancel: 'Not now',
     }))) return
     setUpdState({ phase: 'busy', msg: 'Downloading the release and applying it…' })
     try {
       const r = await api.installUpdate()
-      setUpdState({ phase: 'done',
+      setUpdState({ phase: 'done', auto: !!r.restarts_itself,
         msg: `Updated ${r.from_version} → ${r.to_version} (${r.files_installed} files; `
           + `previous version kept in ${r.backup}).` + (r.note ? ` ${r.note}` : '') })
     } catch (e: any) {
@@ -150,7 +164,7 @@ export default function Settings() {
     if (!(await ask({
       title: `Update QualiLens from “${f.name}”?`,
       body: ['An update never touches your projects, keys, or uploads.',
-        'The app stops itself when it is done. Start it again with ./run.sh. This page reconnects on its own.'],
+        restartLine],
       confirm: 'Install this bundle',
     }))) { if (updRef.current) updRef.current.value = ''; return }
     setUpdState({ phase: 'busy', msg: 'Validating and applying the bundle…' })
@@ -170,7 +184,7 @@ export default function Settings() {
         setUpdState({ phase: 'busy', msg: 'Installing the older build as requested…' })
         r = await api.applyUpdate(f, { allowDowngrade: true })
       }
-      setUpdState({ phase: 'done',
+      setUpdState({ phase: 'done', auto: !!r.restarts_itself,
         msg: `Updated ${r.from_version} → ${r.to_version} (${r.files_installed} files; `
           + `previous version kept in ${r.backup}).` + (r.note ? ` ${r.note}` : '') })
     } catch (e: any) {
@@ -235,7 +249,7 @@ export default function Settings() {
     setStatus(s => ({ ...s, [pid]: r.ok ? `Key works (reply: "${r.reply}")` : `Failed: ${r.error}` }))
   }
 
-  if (updState.phase === 'done') return <UpdateWaiting detail={updState.msg} />
+  if (updState.phase === 'done') return <UpdateWaiting detail={updState.msg} auto={!!updState.auto} />
 
   if (!meta) return <div className="page">{error ? <div className="error-box">{error}</div> : 'Loading…'}</div>
 

@@ -6,6 +6,8 @@
 # and opens the app in your browser.
 set -e
 cd "$(dirname "$0")"
+# this script by its full path, to start it again after an update (see the end)
+SELF="$(pwd)/$(basename "$0")"
 
 fail() { echo ""; echo "ERROR: $1" >&2; exit 1; }
 
@@ -190,11 +192,26 @@ fi
 # the browser opens that page, which signs it in. Until then the address gives
 # a browser nothing, so another account that visits it reaches no data.
 # (backend/app/main.py, write_launch_page)
-LAUNCH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/qualilens.XXXXXX")" \
-  || fail "Could not create a private temporary folder for the launch page."
+# After an update the server asks to be started again (see the end of this
+# script). The run.sh it relaunches is handed the same private folder, so the
+# server keeps its session token and the tab it signed in stays signed in.
+# The folder is reused only if this account owns it.
+RELAUNCHED=""
+if [ -n "${QUALILENS_RELAUNCH_DIR:-}" ] && [ -d "$QUALILENS_RELAUNCH_DIR" ] && [ -O "$QUALILENS_RELAUNCH_DIR" ]; then
+  LAUNCH_DIR="$QUALILENS_RELAUNCH_DIR"
+  RELAUNCHED=1
+  rm -f "$LAUNCH_DIR/open.html"      # the server writes it afresh, with the same token
+else
+  LAUNCH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/qualilens.XXXXXX")" \
+    || fail "Could not create a private temporary folder for the launch page."
+fi
+unset QUALILENS_RELAUNCH_DIR
 chmod 700 "$LAUNCH_DIR"
 export QUALILENS_LAUNCH_FILE="$LAUNCH_DIR/open.html"
+export QUALILENS_TOKEN_FILE="$LAUNCH_DIR/token"      # kept across a restart after an update
+export QUALILENS_RESTART_FILE="$LAUNCH_DIR/restart"  # the server writes it to ask for one
 export QUALILENS_PORT="$PORT"
+rm -f "$QUALILENS_RESTART_FILE"
 
 open_launch_page() {
   if command -v open >/dev/null 2>&1; then open "$1"                    # macOS
@@ -209,16 +226,43 @@ open_launch_page() {
 echo ""
 echo "QualiLens running at http://127.0.0.1:$PORT  (Ctrl-C to stop)"
 echo "The launch page that signs a browser in is $QUALILENS_LAUNCH_FILE"
-# Open the launch page once the server answers. The server writes the page
-# before it listens, and the first start after an update can take a while.
-(
-  for _ in $(seq 1 240); do
-    if [ -s "$QUALILENS_LAUNCH_FILE" ]; then
-      if ! command -v curl >/dev/null 2>&1; then sleep 2; break; fi
-      curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$PORT/" && break
-    fi
-    sleep 0.5
-  done
-  [ -s "$QUALILENS_LAUNCH_FILE" ] && open_launch_page "$QUALILENS_LAUNCH_FILE"
-) &
-cd backend && exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT"
+if [ -n "$RELAUNCHED" ] && [ -s "$QUALILENS_TOKEN_FILE" ]; then
+  # the server keeps the token, so the tab the browser already has reloads by
+  # itself; a new tab would be a second copy. Without the token file it could
+  # not follow, so the launch page opens as on any other start.
+  echo "Restarted after the update. The QualiLens tab in your browser reloads by itself."
+else
+  # Open the launch page once the server answers. The server writes the page
+  # before it listens, and the first start after an update can take a while.
+  (
+    for _ in $(seq 1 240); do
+      if [ -s "$QUALILENS_LAUNCH_FILE" ]; then
+        if ! command -v curl >/dev/null 2>&1; then sleep 2; break; fi
+        curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$PORT/" && break
+      fi
+      sleep 0.5
+    done
+    [ -s "$QUALILENS_LAUNCH_FILE" ] && open_launch_page "$QUALILENS_LAUNCH_FILE"
+  ) &
+fi
+
+# The server runs as a child of this script rather than in its place, so that
+# after an update it can ask to be started again. An update rewrites run.sh on
+# disk while this copy is still running, and bash reads a script as it goes,
+# so everything from here on sits in one function that bash has read in full
+# before the server starts, and the line that calls it also exits.
+run_server() {
+  local code=0
+  trap 'rm -rf "$LAUNCH_DIR"' EXIT          # the token and the launch page go with the app
+  (cd backend && exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT") || code=$?
+  if [ -f "$QUALILENS_RESTART_FILE" ]; then
+    rm -f "$QUALILENS_RESTART_FILE"
+    trap - EXIT                              # the relaunched run.sh keeps the folder
+    echo ""
+    echo "Update installed. Starting QualiLens again…"
+    export QUALILENS_RELAUNCH_DIR="$LAUNCH_DIR"
+    exec "$SELF"                             # the updated run.sh: its own dependency check runs first
+  fi
+  exit "$code"
+}
+run_server; exit $?

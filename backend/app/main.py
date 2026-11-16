@@ -90,9 +90,42 @@ pipeline.reconcile_on_startup()
 
 # ---------------- local-only guard ----------------
 
-# QUALILENS_TOKEN pins the token (development against the Vite dev server);
-# otherwise a fresh random token per launch.
-SESSION_TOKEN = (os.environ.get("QUALILENS_TOKEN") or "").strip() or secrets.token_urlsafe(32)
+# QUALILENS_TOKEN pins the token (development against the Vite dev server).
+# Otherwise each launch gets a fresh random token, which ./run.sh asks the
+# server to keep in QUALILENS_TOKEN_FILE, a file in the private folder it
+# made: when the server restarts after an update, the relaunched server reads
+# it back, so the browser tab already signed in stays signed in. The file is
+# trusted only if this account owns it and no one else can read it.
+def _session_token() -> str:
+    pinned = (os.environ.get("QUALILENS_TOKEN") or "").strip()
+    if pinned:
+        return pinned
+    path = (os.environ.get("QUALILENS_TOKEN_FILE") or "").strip()
+    if not path:
+        return secrets.token_urlsafe(32)
+    p = Path(path)
+    try:
+        st = p.stat()
+        if st.st_uid == os.getuid() and not (st.st_mode & 0o077):
+            kept = p.read_text(encoding="utf-8").strip()
+            if kept:
+                return kept
+        p.unlink()                      # not ours, readable by others, or empty: replace it
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return secrets.token_urlsafe(32)
+    token = secrets.token_urlsafe(32)
+    try:
+        fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(token)
+    except OSError:
+        pass                            # not kept: a restart then needs the launch page again
+    return token
+
+
+SESSION_TOKEN = _session_token()
 TOKEN_HEADER = "x-qualilens-token"
 TOKEN_COOKIE = "qualilens_token"
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -270,6 +303,7 @@ def get_meta():
         "release": update._current_release(),   # its release version ('1.6.3')
         "running_build": STARTED_BUILD,          # this process
         "running_release": STARTED_RELEASE,
+        "restarts_after_update": _restarts_after_update(),
         "update_hint": _update_hint(),
         "data_dir": str(db.DATA_DIR),
         "synced_folder": db.synced_folder_hint(),
@@ -369,11 +403,30 @@ def check_models(body: dict):
     return out
 
 
+def _restarts_after_update() -> bool:
+    """Whether this server was started by a ./run.sh that starts it again
+    after an update (1.12 on). An older run.sh, or a server started by hand,
+    has to be started again by the researcher."""
+    return bool((os.environ.get("QUALILENS_RESTART_FILE") or "").strip())
+
+
 def _finish_update(result: dict) -> dict:
-    """After a successful update: stop the server (outside tests) so ./run.sh
-    relaunches the new version. Shared by the zip and release paths."""
+    """After a successful update: stop the server (outside tests) so the new
+    version starts. Under a ./run.sh that restarts it, write the request it
+    looks for first; that run.sh then starts the updated run.sh, with the same
+    session token. Shared by the zip and release paths."""
     import os
     import signal
+    restart_file = (os.environ.get("QUALILENS_RESTART_FILE") or "").strip()
+    result["restarts_itself"] = False
+    if restart_file:
+        try:
+            fd = os.open(restart_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write("update\n")
+            result["restarts_itself"] = True
+        except OSError:
+            pass                        # the researcher starts it again, as before 1.12
     if not os.environ.get("QUALILENS_TEST"):
         def _stop():
             import time as _t

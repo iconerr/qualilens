@@ -155,17 +155,23 @@ If you had edited `backend/app/models.json` by hand, the update replaces it;
 your copy is saved beside your data as `models.json.previous` so you can
 reapply the edits.
 
-When the update is applied the app stops itself and the page changes to
-**Update installed**, which asks you to start the app again — in the Terminal
-window where it was running, press ↑ then Return, or run `./run.sh` in the
-QualiLens folder; the launcher also installs any new dependencies the update
-brought. The launcher opens the new build in a new tab, and this page
-follows on its own, because it checks every two seconds for the new build
-and signs itself in once the new tab has loaded. There is nothing to close
-or reopen. If a minute passes without a reconnection, the
-page says what to check, and the most common cause is an older copy of the
-app still holding the port, which the launcher reports by name with the
-command to stop it.
+When the update is applied, the page changes to **Update installed**, and
+QualiLens starts again by itself with the new build. The launcher first
+installs any new dependencies the update brought, so the restart can take a
+minute. You stay signed in, and the page reloads by itself onto the new
+build. There is nothing to do in Terminal, and no new tab opens. If the app
+has not come back after a minute and a half, the page says what to check.
+The Terminal window where QualiLens runs shows what it is doing.
+
+The launcher learned this in 1.12. When you update from an earlier version,
+the launcher that is running is the old one, and it cannot start the app
+again. The page then asks you to start it yourself: in the Terminal window
+where it was running, press ↑ then Return, or run `./run.sh` in the
+QualiLens folder. The launcher opens the new build in a new tab, and the
+page follows on its own once that tab has loaded. If a minute passes without
+a reconnection, the page says what to check. The most common cause is an
+older copy of the app still holding the port, which the launcher reports by
+name with the command to stop it.
 
 A related courtesy applies at any restart, not only after an update. A tab
 left open across a restart holds a session token the new server does not

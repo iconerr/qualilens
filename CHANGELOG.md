@@ -9,6 +9,19 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.12.0 — 2026-11-15
+
+- QualiLens starts again by itself after an update. Download and install,
+  or an update from a downloaded zip, now ends with the app restarting on
+  the new build in the same tab, still signed in, with nothing to do in
+  Terminal. Before, the app stopped, and you started it again yourself,
+  which opened a second tab. The first update into this release still works
+  the old way, because the launcher that runs it is the one already
+  installed.
+- The page shown while an update installs no longer offers a Reload button.
+  Reloading before the new build was up signed the tab out, and the page
+  already reloads by itself.
+
 ## 1.11.1 — 2026-11-15
 
 - The review screens say things more plainly. Their notes, the
