@@ -339,11 +339,12 @@ def cp_extraction_payload(ctx):
             "excluded": bool(excluded.get(src["id"])),
         })
     return ("Review the extraction table",
-            "One row per paper: the label and citation the extractor read off the "
-            "paper, and the five field summaries. Correct anything the extractor "
-            "got wrong — your edits are final and the synthesis builds on this "
-            "table. A paper that turns out not to belong can be excluded from the "
-            "synthesis; its extraction is kept in the record.",
+            "The table lists each paper by the label and citation the extractor read "
+            "from it, and counts the quotes behind each of its five field summaries. "
+            "Correct anything the extractor got wrong, because your edits are final "
+            "and the synthesis builds on this table. A paper that turns out not to "
+            "belong can be excluded from the synthesis, and its extraction stays in "
+            "the record.",
             {"kind": "extraction_review", "stage": "extract_field",
              "fields": FIELD_KEYS,
              "field_labels": {k: lbl for k, lbl in FIELDS}, "rows": rows})
@@ -365,7 +366,7 @@ def cp_extraction_apply(ctx, resolution):
         if "exclude" in row and row.get("source_id") in {s["id"] for s in ctx.sources}:
             prospective[row["source_id"]] = bool(row["exclude"])
     if ctx.sources and all(prospective.get(s["id"]) for s in ctx.sources):
-        raise ValueError("Every paper is excluded — re-include at least one "
+        raise ValueError("Every paper is excluded, so re-include at least one "
                          "paper before approving, or cancel the run.")
     # a label edit must not collide with another paper's label: matrix rows
     # and narrative citations must stay distinct (also refused before mutating)
@@ -579,9 +580,9 @@ def cp_concepts_payload(ctx):
     title, instructions, payload = build_code_review_payload(
         ctx, stage="concept", title="Review concepts",
         instructions="Each concept is grounded in extraction quotes from the "
-                     "papers; the papers supporting it are listed with the "
-                     "evidence. Rename, merge, or delete concepts — your edits "
-                     "define the matrix and the narrative.")
+                     "papers, and the papers that support it are listed with its "
+                     "evidence. Rename, merge, or delete concepts, because the "
+                     "concepts you keep define the matrix and the narrative.")
     # show which papers support each concept, next to the excerpt count
     src_label = {s["id"]: _label_of(ctx, s["id"]) for s in ctx.sources}
     for item in payload["items"]:

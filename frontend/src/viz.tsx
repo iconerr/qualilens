@@ -8,10 +8,10 @@
 // Mirrors the tokens in styles.css (SVG cannot read CSS variables when the
 // figure is exported). Ink carries the structure; the categorical palette is
 // for group comparisons only, and is kept quiet.
-const INK = '#16171a'
-const MUTED = '#5c5f66'
-const ACCENT = '#2a2c32'
-const LINE = '#c4c6cd'
+const INK = '#1c1917'      // the register's stone ramp (2026-11-15)
+const MUTED = '#625d57'
+const ACCENT = '#2f2a26'
+const LINE = '#cfc9c1'
 const PALETTE = [ACCENT, '#c9971c', '#4f8a6a', '#9a6079', '#6f68a8', '#a3823f']
 
 function wrap(s: string, width: number, maxLines = 3): string[] {
@@ -353,11 +353,11 @@ export function MatrixHeatmap({ stats, rowNoun = 'source', colNoun = 'code' }:
   const W = LABEL + codes.length * CELL + 16
   const H = HEAD + rows.length * 34 + 8 + (hiddenNote ? 20 : 0)
   const shade = (v: number) => {
-    if (!v) return '#f4f4f6'
+    if (!v) return '#f4f2ee'
     const t = v / vmax
-    // light-grey-to-ink ramp
+    // light-stone-to-ink ramp (#e4e0da → #2f2a26)
     const mix = (a: number, b: number) => Math.round(a + (b - a) * t)
-    return `rgb(${mix(228, 42)}, ${mix(229, 44)}, ${mix(233, 50)})`
+    return `rgb(${mix(228, 47)}, ${mix(224, 42)}, ${mix(218, 38)})`
   }
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: W }}

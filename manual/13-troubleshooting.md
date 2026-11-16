@@ -103,7 +103,7 @@ Two messages may meet you if you press Retry at the wrong moment. `Transcription
 | `Merge target '<name>' is no longer active; choose a kept code.` | The code you chose to merge into was merged or deleted at an earlier review | Pick a code that is still kept |
 | `Cannot merge '<a>' (<kind>) into '<b>' (<kind>): different kinds of code.` | An open code was aimed at a theme or category, or the reverse | Merge like into like |
 | `Two papers would share the label '<label>' — give each paper its own label.` | Two extraction rows would cite by the same label | Edit one of the labels |
-| `Every paper is excluded — re-include at least one paper before approving, or cancel the run.` | The extraction review excluded every paper | Re-include one, or cancel |
+| `Every paper is excluded, so re-include at least one paper before approving, or cancel the run.` | The extraction review excluded every paper | Re-include one, or cancel |
 | `Only review checkpoints can be revisited.` / `The run never reached this review.` / `The run is waiting at this review right now — open it instead of branching.` | Revisit was asked for a stage that is not a passed review | Choose a review the run has passed |
 
 ## Model and provider errors

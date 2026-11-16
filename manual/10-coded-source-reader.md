@@ -11,15 +11,16 @@ The report tells you what the AI coder found. The reader shows you the document 
 
 ## How to open it
 
-There are three routes into the reader. Two of them take you to a particular passage.
+There are four routes into the reader. Two of them take you to a particular passage.
 
 | From | How | Where it lands |
 |---|---|---|
 | The report's **Sources** section | A button per source, carrying that source's excerpt count | The top of the document |
 | Any excerpt in the report | The **view in coded document** link | At that excerpt, briefly highlighted |
-| The evidence panel at a checkpoint | The **open in document ↗** link | At that excerpt, in a new browser tab |
+| A quote in a checkpoint panel | The **Open in document ↗** link | At that excerpt, in a new browser tab |
+| A checkpoint panel's right-hand column, or a paper in the extraction review | The **Read the uncoded text ↗** or **Open the coded paper ↗** link | The top of the document, in a new browser tab |
 
-The link from a checkpoint opens a new tab, so that a review in progress is not lost when you navigate away. Your checkpoint decisions are held either way.
+The links from a checkpoint open a new tab, so that a review in progress is not lost when you navigate away. Your checkpoint decisions are held either way.
 
 ## What is on the screen
 
@@ -50,7 +51,7 @@ The coverage bar and its percentage sit at the head of the panel. Coverage is th
 
 ### Isolating a code
 
-Click any code to isolate it. The passages carrying that code turn blue, every other coded passage fades to grey, and the view jumps to the first instance.
+Click any code to isolate it. The passages carrying that code turn violet, every other coded passage fades to grey, and the view jumps to the first instance.
 
 Three controls appear while a code is isolated.
 

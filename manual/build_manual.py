@@ -260,39 +260,46 @@ def render_nav(headings) -> str:
 
 CSS = """
 :root{
-  --bg:#f4f4f6; --panel:#ffffff; --ink:#16171a; --muted:#5c5f66;
-  --line:#dcdde2; --line-strong:#c4c6cd; --accent:#1a1b1f; --accent-soft:#ececef;
-  --focus:#863bff; --focus-soft:#ede3ff;
+  --bg:#fbfaf7; --panel:#ffffff; --ink:#1c1917; --ink-2:#44403c; --muted:#625d57;
+  --line:#e4e0da; --line-strong:#cfc9c1; --accent:#1c1917; --accent-soft:#f4f2ee;
+  --violet:#6d2ee6; --violet-hover:#5b23c9; --focus:#6d2ee6; --focus-soft:#ece6fb;
   --amber-soft:#fbf1dc; --amber:#8a5a0c;
-  --font:"Inter Variable",Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
-  --serif:Charter,"Iowan Old Style","Source Serif Pro","Palatino Linotype",Georgia,serif;
-  --mono:"JetBrains Mono Variable","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --font:"IBM Plex Sans Variable","IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --serif:"IBM Plex Serif",Charter,Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   --rail:300px;
 }
-/* The same faces the app bundles, at stable paths under /fonts/ when the
-   manual is served by the app; opened as a plain file, the stacks above fall
-   back to what the machine has. */
-@font-face{font-family:"Inter Variable";font-style:normal;font-weight:100 900;font-display:swap;
-  src:url(/fonts/inter-latin-wght-normal.woff2) format("woff2");
+/* The same faces the app bundles (IBM Plex, the 2026-11-15 register), at stable
+   paths under /fonts/ when the manual is served by the app; opened as a plain
+   file, the stacks above fall back to what the machine has. */
+@font-face{font-family:"IBM Plex Sans Variable";font-style:normal;font-weight:100 700;font-display:swap;
+  src:url(/fonts/ibm-plex-sans-latin-wght-normal.woff2) format("woff2-variations");
   unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
-@font-face{font-family:"Inter Variable";font-style:normal;font-weight:100 900;font-display:swap;
-  src:url(/fonts/inter-latin-ext-wght-normal.woff2) format("woff2");
+@font-face{font-family:"IBM Plex Sans Variable";font-style:normal;font-weight:100 700;font-display:swap;
+  src:url(/fonts/ibm-plex-sans-latin-ext-wght-normal.woff2) format("woff2-variations");
   unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
-@font-face{font-family:"Inter Variable";font-style:italic;font-weight:100 900;font-display:swap;
-  src:url(/fonts/inter-latin-wght-italic.woff2) format("woff2");
+@font-face{font-family:"IBM Plex Sans Variable";font-style:italic;font-weight:100 700;font-display:swap;
+  src:url(/fonts/ibm-plex-sans-latin-wght-italic.woff2) format("woff2-variations");
   unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
-@font-face{font-family:"Inter Variable";font-style:italic;font-weight:100 900;font-display:swap;
-  src:url(/fonts/inter-latin-ext-wght-italic.woff2) format("woff2");
+@font-face{font-family:"IBM Plex Sans Variable";font-style:italic;font-weight:100 700;font-display:swap;
+  src:url(/fonts/ibm-plex-sans-latin-ext-wght-italic.woff2) format("woff2-variations");
   unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
-@font-face{font-family:"JetBrains Mono Variable";font-style:normal;font-weight:100 800;font-display:swap;
-  src:url(/fonts/jetbrains-mono-latin-wght-normal.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Serif";font-style:normal;font-weight:400;font-display:swap;
+  src:url(/fonts/ibm-plex-serif-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Serif";font-style:italic;font-weight:400;font-display:swap;
+  src:url(/fonts/ibm-plex-serif-latin-400-italic.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Serif";font-style:normal;font-weight:500;font-display:swap;
+  src:url(/fonts/ibm-plex-serif-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:400;font-display:swap;
+  src:url(/fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2")}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth; scroll-padding-top:24px}
 html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);
-  font-size:14.5px;line-height:1.5;font-feature-settings:"cv11","ss01"}
-a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:2px}
-a:hover{text-decoration-color:var(--ink)}
+  font-size:15px;line-height:1.5}
+a{color:var(--violet);text-decoration:underline;text-underline-offset:3px;
+  text-decoration-color:color-mix(in srgb,var(--violet) 40%,transparent)}
+a:hover{color:var(--violet-hover);text-decoration-color:currentColor}
 
 /* ---------- layout ---------- */
 .shell{display:flex;align-items:flex-start;min-height:100vh}
@@ -300,13 +307,12 @@ a:hover{text-decoration-color:var(--ink)}
   display:flex;flex-direction:column;background:var(--panel);
   border-right:1px solid var(--line)}
 .rail-head{padding:18px 20px 12px;border-bottom:1px solid var(--line)}
-.brand{display:block;font-weight:600;font-size:16px;color:var(--ink);letter-spacing:-.2px;text-decoration:none}
+.brand{display:block;font-weight:500;font-size:17px;color:var(--ink);letter-spacing:-.01em;text-decoration:none}
 .brand:hover{text-decoration:none}
-.brand small{display:block;font-weight:400;font-size:11.5px;color:var(--muted);
-  margin-top:3px;letter-spacing:.08em;text-transform:uppercase}
+.brand small{display:block;font-weight:400;font-size:13px;color:var(--muted);margin-top:3px}
 .search-wrap{position:relative;margin-top:12px}
 #search{width:100%;padding:8px 30px 8px 11px;border:1px solid var(--line);
-  border-radius:4px;font-family:inherit;font-size:13.5px;background:#fff;color:var(--ink)}
+  border-radius:6px;font-family:inherit;font-size:13.5px;background:#fff;color:var(--ink)}
 #search:focus{outline:none;border-color:var(--focus);
   box-shadow:0 0 0 3px var(--focus-soft)}
 .search-hint{position:absolute;right:9px;top:50%;transform:translateY(-50%);
@@ -324,42 +330,41 @@ a:hover{text-decoration-color:var(--ink)}
 .nav-h2{display:block;padding:4px 10px;border-radius:4px;font-size:12.5px;
   color:var(--muted);line-height:1.35;text-decoration:none}
 .nav-h2:hover{background:var(--bg);color:var(--ink);text-decoration:none}
-.nav-h1.active{background:var(--accent-soft);color:var(--ink);font-weight:600}
+.nav-h1.active{background:var(--accent-soft);color:var(--ink);font-weight:500}
 .nav-h2.active{color:var(--ink);font-weight:500}
 
 /* ---------- search results ---------- */
 #results{display:none;padding:6px 8px 40px}
 #results.on{display:block}
 body.searching #nav{display:none}
-.res-count{padding:6px 12px 8px;font-size:11.5px;color:var(--muted);
-  text-transform:uppercase;letter-spacing:.4px}
+.res-count{padding:6px 12px 8px;font-size:12.5px;color:var(--muted)}
 .res{display:block;padding:8px 12px;border-radius:4px;margin-bottom:2px;color:var(--ink);text-decoration:none}
 .res:hover{background:var(--bg);text-decoration:none}
 .res .where{display:block;font-size:11px;color:var(--muted);margin-bottom:2px}
-.res .snip{display:block;font-size:12.5px;line-height:1.45;color:#3b3f46}
+.res .snip{display:block;font-size:12.5px;line-height:1.45;color:var(--ink-2)}
 .res mark,mark.hit{background:#fdf0bd;color:inherit;padding:0 1px;border-radius:2px}
 .res-empty{padding:14px 12px;font-size:13px;color:var(--muted)}
 
 /* ---------- content ---------- */
 .main{flex:1;min-width:0;display:flex;justify-content:center;padding:0 48px 140px}
 .doc{width:100%;max-width:820px}
-.doc h1{font-size:28px;font-weight:600;line-height:1.2;margin:64px 0 8px;letter-spacing:-.02em}
+.doc h1{font-family:var(--serif);font-size:30px;font-weight:500;line-height:1.2;margin:64px 0 8px;letter-spacing:-.01em}
 .doc p.byline{font-family:var(--font);font-size:13px;color:var(--muted);
-  letter-spacing:.08em;text-transform:uppercase;margin:0 0 26px}
+  margin:0 0 26px}
 .doc section:first-child h1{margin-top:44px}
-.doc h2{font-size:19px;font-weight:600;margin:38px 0 6px;line-height:1.3;letter-spacing:-.01em}
-.doc h3{font-size:15.5px;font-weight:600;margin:26px 0 4px}
+.doc h2{font-family:var(--serif);font-size:21px;font-weight:500;margin:38px 0 6px;line-height:1.3;letter-spacing:-.005em}
+.doc h3{font-size:15.5px;font-weight:500;margin:26px 0 4px}
 .doc p{font-family:var(--serif);font-size:16px;line-height:1.62;margin:12px 0;
-  color:#26282e}
-.doc code{font-family:var(--mono);font-size:.85em;font-weight:450;background:var(--accent-soft);
-  padding:1px 5px;border-radius:3px;color:#2a2c32}
-.doc pre{background:#16171a;color:#e6e6ea;padding:14px 16px;border-radius:6px;
+  color:var(--ink)}
+.doc code{font-family:var(--mono);font-size:.85em;font-weight:400;background:var(--accent-soft);
+  border:1px solid var(--line);padding:1px 5px;border-radius:3px;color:var(--ink)}
+.doc pre{background:var(--ink);color:#eeebe6;padding:14px 16px;border-radius:6px;
   overflow-x:auto;margin:16px 0}
 .doc pre code{background:none;padding:0;color:inherit;font-size:12.5px;line-height:1.6}
 .doc hr.rule{border:0;border-top:1px solid var(--line);margin:34px 0}
 .doc blockquote{margin:16px 0;padding:2px 0 2px 18px;
   border-left:3px solid var(--line);font-family:var(--serif);font-size:15.5px;
-  line-height:1.6;color:#3a3c42}
+  line-height:1.6;color:var(--ink-2)}
 .doc strong{font-weight:600;color:var(--ink)}
 
 .table-wrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);
@@ -367,7 +372,7 @@ body.searching #nav{display:none}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line);
   vertical-align:top;line-height:1.45}
-th{background:var(--bg);font-weight:500;font-size:12.5px;white-space:nowrap}
+th{background:var(--accent-soft);color:var(--ink-2);font-weight:500;font-size:12.5px;white-space:nowrap}
 tr:last-child td{border-bottom:none}
 td code{white-space:nowrap}
 
@@ -375,17 +380,16 @@ td code{white-space:nowrap}
   background:var(--panel);overflow:hidden}
 .msg-item{padding:13px 16px 11px;border-bottom:1px solid var(--line)}
 .msg-item:last-child{border-bottom:none}
-.msg-item:nth-child(even){background:#f8f8fa}
+.msg-item:nth-child(even){background:var(--bg)}
 .msg-line{margin-bottom:7px}
 .msg-line code{white-space:normal;word-break:break-word}
 .msg-fact{display:flex;gap:12px;font-size:13.5px;line-height:1.5;margin-top:4px}
-.msg-k{flex:0 0 62px;font-weight:500;color:var(--muted);font-size:10.5px;
-  text-transform:uppercase;letter-spacing:.06em;padding-top:2.5px}
+.msg-k{flex:0 0 62px;font-weight:500;color:var(--muted);font-size:12.5px;padding-top:1px}
 .msg-v{flex:1;color:var(--ink)}
 
 .anchor{opacity:0;margin-left:8px;color:var(--muted);font-weight:400;
   text-decoration:none;font-size:.7em}
-.doc a:not(.anchor){color:var(--ink)}
+.doc a:not(.anchor){color:var(--violet)}
 h1:hover .anchor,h2:hover .anchor,h3:hover .anchor{opacity:1}
 
 section{scroll-margin-top:20px}
@@ -397,13 +401,13 @@ tr.flash td,tr.flash th{animation:flash 1.6s ease-out}
   font-size:12.5px;line-height:1.6;color:var(--muted)}
 .colophon p{font-family:var(--font);font-size:12.5px;color:var(--muted);margin:0 0 8px}
 .colophon b{color:var(--ink)}
-.colophon .buildstamp{margin-top:14px;font-size:11.5px;color:#8b8e97}
+.colophon .buildstamp{margin-top:14px;font-size:11.5px;color:var(--muted)}
 .colophon code{font-family:var(--mono);font-size:11px;background:var(--accent-soft);
   padding:1px 5px;border-radius:3px;color:var(--muted)}
 
 .totop{position:fixed;right:22px;bottom:22px;padding:8px 13px;border-radius:20px;
   background:var(--panel);border:1px solid var(--line-strong);font-size:12.5px;
-  color:var(--muted);box-shadow:0 2px 10px rgba(22,23,26,.06);opacity:0;text-decoration:none;
+  color:var(--muted);box-shadow:0 2px 10px rgba(28,25,23,.06);opacity:0;text-decoration:none;
   pointer-events:none;transition:opacity .2s}
 .totop.on{opacity:1;pointer-events:auto}
 .totop:hover{color:var(--ink);text-decoration:none}

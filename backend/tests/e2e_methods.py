@@ -197,6 +197,8 @@ pid, rid = make_project("CA", "content_analysis",
                         {"research_question": "q", "ca_mode": "Inductive — derive the codebook from the data",
                          "ca_compare_groups": "true"}, groups=("Site A", "Site B"))
 d = wait(rid, "awaiting_review"); assert d["pending_checkpoint"]["stage"] == "review_codebook"
+# nothing is coded yet, so the review reports no uncoded share
+assert d["pending_checkpoint"]["payload"]["coverage"] == [], d["pending_checkpoint"]["payload"].get("coverage")
 resolve(rid, d)
 d = wait(rid, "completed")
 rep = c.get(f'/api/runs/{rid}/report').json()
@@ -219,8 +221,19 @@ assert pl["low_confidence"], "low-confidence list must be populated"
 assert pl["items"] and pl["items"][0]["name"] == "Trial experience"
 emergent_id = pl["items"][0]["id"]
 bad_excerpt = pl["low_confidence"][0]["excerpt_id"]
-resolve(rid, d, {"decisions": [{"id": emergent_id, "action": "keep"}],
-                 "excerpt_deletions": [bad_excerpt]})
+# the review judges a weak assignment against its code's definition, and links it to its document
+fw = {f["name"]: f for f in pl["framework"]}
+assert fw["Cost factors"]["definition"] == "pricing considerations" and fw["Cost factors"]["assignments"] == 2, fw
+assert pl["assignments_total"] == sum(f["assignments"] for f in pl["framework"]), pl["assignments_total"]
+lc = pl["low_confidence"][0]
+assert lc["source_id"] and lc["code_id"] == fw[lc["code"]]["id"], lc
+assert pl["items"][0]["sample_excerpts"][0]["source"] == "doc_1.txt", pl["items"][0]
+resolve(rid, d, {"decisions": [{"id": emergent_id, "action": "keep", "notes": "The trial matters."}],
+                 "excerpt_deletions": [bad_excerpt],
+                 "excerpt_notes": {bad_excerpt: "Fear, not cost.", "not-an-excerpt": "ignored"}})
+evs = [e["message"] for e in c.get(f'/api/runs/{rid}/events').json()]
+assert any(f"rejected excerpt {bad_excerpt}" in m and "Fear, not cost." in m for m in evs), evs[-6:]
+assert any("note on emergent code 'Trial experience'" in m and "trial matters" in m for m in evs), evs[-6:]
 d = wait(rid, "completed")
 rep = c.get(f'/api/runs/{rid}/report').json()
 names = [t["name"] for t in rep["themes"]]
@@ -242,6 +255,11 @@ rows = {r["filename"]: r for r in pl["rows"]}
 assert rows["doc_1.txt"]["label"] == "Alpha, 2021", rows["doc_1.txt"]
 assert rows["doc_1.txt"]["quote_counts"]["findings"] == 1
 assert rows["doc_1.txt"]["fields"]["findings"] == "Transparency decided the choice."
+# the review shows each summary beside the quotes that ground it, field by field
+q = c.get(f'/api/runs/{rid}/sources/{rows["doc_1.txt"]["source_id"]}/extraction').json()["fields"]
+assert [x["quote"] for x in q["findings"]] == ["the price was transparent"], q
+assert q["findings"][0]["why"] == "decisive factor" and q["aims"] == [], q
+assert c.get(f'/api/runs/nope/sources/x/extraction').status_code == 404
 resolve(rid, d, {"rows": [{"source_id": rows["doc_1.txt"]["source_id"],
                            "findings": "EDITED FINDINGS."}]})
 d = wait(rid, "awaiting_review"); cp = d["pending_checkpoint"]
@@ -249,6 +267,8 @@ assert cp["stage"] == "review_synthesis"
 items = cp["payload"]["items"]
 assert items and items[0]["name"] == "Transparency as trust"
 assert sorted(items[0]["papers"]) == ["Alpha, 2021", "Beta, 2022"], items[0]
+# papers are quoted, not coded in full, so the concept review reports no uncoded share
+assert cp["payload"]["coverage"] == [], cp["payload"].get("coverage")
 # all three extraction quotes made it in; the bogus excerpt id must not have
 assert items[0]["excerpt_count"] == 3, items[0]
 resolve(rid, d, {"decisions": [{"id": items[0]["id"], "action": "rename",
@@ -278,4 +298,8 @@ assert any("Dropped support" in e["message"] for e in evs), \
     "the out-of-corpus excerpt id must be dropped and logged"
 r = c.get(f'/api/runs/{rid}/report.docx'); assert r.status_code == 200 and len(r.content) > 5000
 print("LITERATURE SYNTHESIS OK:", stats["codes"])
+# every checkpoint's instructions follow the house style: full sentences, no em dashes
+_cps = _db.get_conn().execute("SELECT stage, instructions FROM checkpoints").fetchall()
+assert _cps and all("\u2014" not in r["instructions"] for r in _cps), \
+    [r["stage"] for r in _cps if "\u2014" in r["instructions"]]
 print("ALL METHOD E2E CHECKS PASSED")

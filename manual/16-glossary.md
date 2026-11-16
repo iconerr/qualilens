@@ -56,7 +56,7 @@ SPDX-License-Identifier: Apache-2.0
 
 **Branch.** A new run created by revisiting a review an earlier run has passed. It carries everything that run had at the review — the codes, the evidence, the earlier resolved reviews, and the decisions already made at the revisited review itself — and reopens that review for further decisions. Stages after the review run again on the branch; the source run and its report are untouched. See [Runs, Cancellation, and Recovery](11-runs-and-recovery.md).
 
-**Via.** The label the checkpoint's evidence panel puts on an excerpt that a grouping code carries through one of its child codes, naming that child. All of a theme's evidence is held this way, because themes carry no excerpts of their own.
+**Via.** The label a checkpoint panel puts on a quote that a grouping code carries through one of its child codes, naming that child. All of a theme's evidence is held this way, because themes carry no excerpts of their own.
 
 **Resolution.** The set of decisions you submit at a checkpoint. It is stored with the checkpoint, so your audit trail records what you decided and not merely that you decided something.
 
@@ -139,7 +139,7 @@ SPDX-License-Identifier: Apache-2.0
 | Existing codes shown to the coder | 300 | Above this, near-duplicate codes appear and the audit log says so |
 | Single-call grouping limit | 120 codes | Above this, grouping runs in chunks and a consolidation call follows |
 | Quotation length checked by the quote guard | 25 characters or more | Narrative sections |
-| Evidence shown at a code checkpoint | All of it, on demand | Clicking a code opens every excerpt, not a sample |
+| Evidence shown at a code checkpoint | The first excerpt, and all of it on demand | **Show all** loads every excerpt, not a sample |
 | Sample quotes on an emergent candidate | 4, 400 characters each | The framework charting checkpoint |
 | Quote preview in the Not located panel | 200 characters | The coded-source reader |
 | Low-confidence threshold | Below 0.6 | Which assignments the framework checkpoint shows |

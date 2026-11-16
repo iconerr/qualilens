@@ -157,25 +157,31 @@ def cp_review_payload(ctx):
         (ctx.run_id,)).fetchall()
     src_name = {s["id"]: s["filename"] for s in ctx.sources}
     for r in rows:
-        low_conf.append({"excerpt_id": r["id"], "code": r["code_name"],
+        low_conf.append({"excerpt_id": r["id"], "code": r["code_name"], "code_id": r["code_id"],
                          "quote": r["quote"][:400], "confidence": r["confidence"],
-                         "source": src_name.get(r["source_id"], "?"), "memo": r["memo"]})
+                         "source": src_name.get(r["source_id"], "?"),
+                         "source_id": r["source_id"], "memo": r["memo"]})
     emergent = []
     for c in ctx.codes(stage="emergent"):
         exs = ctx.excerpts_for(c["id"])
         emergent.append({"id": c["id"], "name": c["name"], "definition": c["definition"],
                          "excerpt_count": len(exs),
-                         "sample_excerpts": [{"quote": e["quote"][:400],
-                                              "source_id": e["source_id"], "memo": ""}
+                         "sample_excerpts": [{"id": e["id"], "quote": e["quote"][:400],
+                                              "source_id": e["source_id"],
+                                              "source": src_name.get(e["source_id"], "?"), "memo": ""}
                                              for e in exs[:4]]})
+    # the framework itself, so a weak assignment is judged against its code's
+    # definition, and each code's share of the weak ones can be seen
+    framework = [{"id": c["id"], "name": c["name"], "definition": c["definition"],
+                  "assignments": ctx.excerpt_count(c["id"])} for c in ctx.codes(stage="codebook")]
     return ("Review charting",
-            "Low-confidence assignments are listed for spot-checking (delete any that are "
-            "wrong). Emergent code candidates can be promoted into the framework or "
-            "discarded; a promoted code is then charted across every source before the "
-            "matrix is built.",
+            "Judge the assignments the coder was least sure of against their codes' "
+            "definitions, and keep or remove each one. Promote or discard each candidate "
+            "code outside the framework, because a candidate left undecided is discarded.",
             {"kind": "framework_review", "low_confidence": low_conf,
              "low_confidence_total": total_low, "low_confidence_shown": len(low_conf),
-             "items": emergent, "stage": "emergent"})
+             "items": emergent, "stage": "emergent", "framework": framework,
+             "assignments_total": sum(f["assignments"] for f in framework)})
 
 
 def cp_review_apply(ctx, resolution):
@@ -193,16 +199,31 @@ def cp_review_apply(ctx, resolution):
             if tgt is None or tgt["status"] != "active":
                 raise ValueError("Merge target is not an active code of this run.")
     promoted = list(ctx.state.get("promoted_codes", []))
-    for ex in resolution.get("excerpt_deletions", []):
+    # a reason the researcher gave for keeping or removing an assignment
+    raw_notes = resolution.get("excerpt_notes")
+    notes = {k: v.strip() for k, v in (raw_notes.items() if isinstance(raw_notes, dict) else [])
+             if isinstance(k, str) and isinstance(v, str) and v.strip()}
+    deletions = [ex for ex in resolution.get("excerpt_deletions", []) if isinstance(ex, str)]
+    for ex, note in notes.items():
+        if ex in deletions:
+            continue                       # logged with the removal below
+        row = conn.execute("SELECT quote FROM excerpts WHERE id=? AND run_id=?",
+                           (ex, ctx.run_id)).fetchone()
+        if row:
+            db.log_event(ctx.run_id, "user_decision",
+                         f"Researcher note on excerpt {ex} (kept): {note}",
+                         {"excerpt_id": ex, "quote": row["quote"], "notes": note})
+    for ex in deletions:
         row = conn.execute("SELECT quote, source_id, code_id FROM excerpts "
                            "WHERE id=? AND run_id=?", (ex, ctx.run_id)).fetchone()
         if not row:
             continue
         # preserve the removed evidence in the audit trail before deleting it
         db.log_event(ctx.run_id, "user_decision",
-                     f"Researcher rejected excerpt {ex}",
+                     f"Researcher rejected excerpt {ex}"
+                     + (f" — note: {notes[ex]}" if ex in notes else ""),
                      {"quote": row["quote"], "source_id": row["source_id"],
-                      "code_id": row["code_id"]})
+                      "code_id": row["code_id"], **({"notes": notes[ex]} if ex in notes else {})})
         conn.execute("DELETE FROM excerpts WHERE id=? AND run_id=?", (ex, ctx.run_id))
     conn.commit()
     # decisions on emergent codes: keep => promote to codebook; delete => drop
@@ -215,6 +236,11 @@ def cp_review_apply(ctx, resolution):
             db.log_event(ctx.run_id, "info",
                          f"Skipped decision for unknown emergent code {d.get('id')}", d)
             continue
+        note = d.get("notes")
+        if isinstance(note, str) and note.strip():
+            db.log_event(ctx.run_id, "user_decision",
+                         f"Researcher note on emergent code '{row['name']}': {note.strip()}",
+                         {"id": d["id"], "action": d.get("action"), "notes": note.strip()})
         if d.get("action") in ("keep", "rename"):
             meta_row = conn.execute("SELECT meta FROM codes WHERE id=? AND run_id=?",
                                     (d["id"], ctx.run_id)).fetchone()

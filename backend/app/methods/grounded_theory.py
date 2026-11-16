@@ -108,12 +108,23 @@ def cp_core_payload(ctx):
     items = [{"id": c["id"], "name": c["name"], "definition": c["definition"],
               "storyline": c.get("meta", {}).get("storyline", ""),
               "relationships": c.get("meta", {}).get("relationships", []),
-              "theoretical_gaps": c.get("meta", {}).get("theoretical_gaps", [])}
+              "theoretical_gaps": c.get("meta", {}).get("theoretical_gaps", []),
+              "existing_category_id": c.get("meta", {}).get("is_existing_category_id")}
              for c in core]
+    # the categories the core integrates, named and weighed, so the review can
+    # show each relationship by its category and draw the report's figure
+    all_codes = ctx.codes()
+    categories = []
+    for cat in ctx.codes(stage="category"):
+        kids = [k for k in all_codes if k.get("parent_id") == cat["id"]]
+        categories.append({
+            "id": cat["id"], "name": cat["name"], "codes": len(kids),
+            "excerpts": ctx.excerpt_count(cat["id"]) + sum(ctx.excerpt_count(k["id"]) for k in kids)})
     return ("Review the core category",
-            "Edit the core category's name, definition, or storyline before the theory "
-            "narrative is written. The storyline is the spine of the final report.",
-            {"kind": "core_review", "items": items})
+            "Edit the core category's name, definition, and storyline, and check the "
+            "places where the data are thin. The storyline is the spine of the final "
+            "report.",
+            {"kind": "core_review", "items": items, "categories": categories})
 
 
 def cp_core_apply(ctx, resolution):
@@ -139,6 +150,16 @@ def cp_core_apply(ctx, resolution):
                    else row["definition"])
         new_story = (str(d["storyline"]).strip() if isinstance(d.get("storyline"), str)
                      else str(meta.get("storyline", "")))
+        # the places where the data are thin become the report's Theoretical
+        # Sampling Recommendations word for word, so the review may edit them
+        old_gaps = [str(g) for g in meta.get("theoretical_gaps", []) or []]
+        new_gaps = ([str(g).strip() for g in d["theoretical_gaps"] if isinstance(g, str) and str(g).strip()]
+                    if isinstance(d.get("theoretical_gaps"), list) else old_gaps)
+        note = d.get("notes")
+        if isinstance(note, str) and note.strip():
+            db.log_event(ctx.run_id, "user_decision",
+                         f"Researcher note on the core category: {note.strip()}",
+                         {"id": d.get("id"), "notes": note.strip()})
         changed = []
         if new_name != row["name"]:
             changed.append("name")
@@ -146,11 +167,14 @@ def cp_core_apply(ctx, resolution):
             changed.append("definition")
         if new_story != str(meta.get("storyline", "")):
             changed.append("storyline")
+        if new_gaps != old_gaps:
+            changed.append("sampling recommendations")
         if not changed:
             db.log_event(ctx.run_id, "user_decision",
                          "Researcher approved the core category unchanged", {"id": d.get("id")})
             continue
         meta["storyline"] = new_story
+        meta["theoretical_gaps"] = new_gaps
         meta["user_edited"] = True
         conn.execute("UPDATE codes SET name=?, definition=?, meta=? WHERE id=? AND run_id=?",
                      (new_name, new_def, _json.dumps(meta), d["id"], ctx.run_id))
@@ -205,17 +229,18 @@ METHOD = Method(
               build_payload=functools.partial(
                   build_code_review_payload, stage="open_code",
                   title="Review open codes",
-                  instructions="Rename, merge, or delete open codes before they are grouped "
-                               "into categories. Merging moves a code's excerpts into the "
-                               "target code."),
+                  instructions="Rename, merge, or delete the open codes, and add any the "
+                               "coder missed. A merged code's excerpts move into the code "
+                               "it merges into."),
               apply_resolution=apply_code_review_resolution),
         Stage("axial_coding", "Axial coding", run=stage_axial),
         Stage("review_categories", "Review categories", kind="checkpoint",
               build_payload=functools.partial(
                   build_code_review_payload, stage="category",
                   title="Review categories",
-                  instructions="Refine category names and definitions before selective "
-                               "coding identifies the core category."),
+                  instructions="Refine the category names and definitions, and check that "
+                               "each category's codes belong together. Merge categories that "
+                               "name one idea, and delete any that do not hold together."),
               apply_resolution=apply_code_review_resolution),
         Stage("selective_coding", "Selective coding", run=stage_selective),
         Stage("review_core", "Review core category", kind="checkpoint",

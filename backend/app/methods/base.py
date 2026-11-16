@@ -408,25 +408,80 @@ def locate_quote(text: str, quote: str, window: tuple | None = None) -> tuple:
 
 # ---------- shared checkpoint machinery for code/theme review ----------
 
+def coverage_by_source(ctx: RunContext) -> list:
+    """The share of each source's text that carries any active code of this
+    run: the coded-source reader's figure (the union of located spans over
+    the text's length), so a review can say what the coder left uncoded."""
+    conn = db.get_conn()
+    out = []
+    for s in ctx.sources:
+        text = s.get("text") or ""
+        if not text:
+            continue
+        rows = conn.execute(
+            "SELECT e.start_char, e.end_char FROM excerpts e JOIN codes c ON c.id=e.code_id "
+            "WHERE e.run_id=? AND e.source_id=? AND c.status='active' "
+            "AND e.start_char IS NOT NULL AND e.end_char IS NOT NULL",
+            (ctx.run_id, s["id"])).fetchall()
+        spans = sorted((r[0], r[1]) for r in rows if 0 <= r[0] < r[1] <= len(text))
+        covered, lo, hi = 0, None, None
+        for a, b in spans:
+            if hi is None or a > hi:
+                if hi is not None:
+                    covered += hi - lo
+                lo, hi = a, b
+            else:
+                hi = max(hi, b)
+        if hi is not None:
+            covered += hi - lo
+        out.append({"source_id": s["id"], "filename": s["filename"],
+                    "coded_pct": round(100 * covered / len(text))})
+    return out
+
+
 def build_code_review_payload(ctx: RunContext, stage: str, title: str,
                               instructions: str) -> tuple:
+    """The code review's payload. Each item carries its first quotes (the
+    review shows the first beside the code, the rest on request through the
+    excerpts endpoint), with the source's name and, for a grouping code, the
+    child code each quote came through; a grouping code also lists its
+    children, so the review can say what a category or theme holds."""
     items = []
     all_codes = ctx.codes()
+    names = {s["id"]: s["filename"] for s in ctx.sources}
+    grouping = stage in ("category", "theme")
+    sources_seen = set()
     for c in ctx.codes(stage=stage):
-        exs = list(ctx.excerpts_for(c["id"]))
+        exs = [(e, None) for e in ctx.excerpts_for(c["id"])]
+        children = []
         # a grouping code (theme/category) carries its evidence on child codes
         for child in all_codes:
             if child.get("parent_id") == c["id"]:
-                exs.extend(ctx.excerpts_for(child["id"]))
-        items.append({
+                kid = ctx.excerpts_for(child["id"])
+                exs.extend((e, child["name"]) for e in kid)
+                children.append({"id": child["id"], "name": child["name"],
+                                 "excerpt_count": len(kid)})
+        item = {
             "id": c["id"], "name": c["name"], "definition": c["definition"],
             "excerpt_count": len(exs),
+            "source_count": len({e["source_id"] for e, _ in exs}),
             "sample_excerpts": [
-                {"quote": e["quote"][:400], "source_id": e["source_id"], "memo": e["memo"]}
-                for e in exs[:4]
+                {"id": e["id"], "quote": e["quote"][:400], "truncated": len(e["quote"]) > 400,
+                 "source_id": e["source_id"], "source": names.get(e["source_id"], ""),
+                 "memo": e["memo"], "via": via}
+                for e, via in exs[:4]
             ],
-        })
-    return title, instructions, {"kind": "code_review", "stage": stage, "items": items}
+        }
+        if grouping:
+            item["children"] = children
+        sources_seen.update(e["source_id"] for e, _ in exs)
+        items.append(item)
+    # what the coder left uncoded means something only where the coder read
+    # each source in full: not before any coding (the codebook) and not over
+    # papers that are quoted rather than coded (the concepts)
+    coverage = coverage_by_source(ctx) if stage in ("open_code", "category", "theme") else []
+    return title, instructions, {"kind": "code_review", "stage": stage, "items": items,
+                                 "source_count": len(sources_seen), "coverage": coverage}
 
 
 def apply_code_review_resolution(ctx: RunContext, resolution: dict) -> None:

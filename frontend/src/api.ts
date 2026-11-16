@@ -249,6 +249,10 @@ export const api = {
         start_char: number | null; end_char: number | null;
         source_id: string; source: string; via: string | null }[]>(
       `/api/runs/${runId}/codes/${codeId}/excerpts`),
+  // one paper's located extraction quotes, field by field (the extraction review)
+  extractionQuotes: (runId: string, sourceId: string) =>
+    j<{ fields: Record<string, { id: string; quote: string; why: string }[]> }>(
+      `/api/runs/${runId}/sources/${sourceId}/extraction`),
   checkModels: (provider?: string) =>
     j<Record<string, { ok: boolean; error?: string; missing?: string[];
       catalog?: { id: string; available: boolean; reason?: string }[];

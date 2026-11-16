@@ -232,8 +232,7 @@ export default function Wizard() {
 
       {step === 0 && meta.methods.map(m => (
         <div key={m.id}
-          className="card clickable"
-          style={methodId === m.id ? { borderColor: 'var(--accent)', background: 'var(--accent-soft)' } : {}}
+          className={`card clickable${methodId === m.id ? ' chosen' : ''}`}
           onClick={() => {
             if (methodId === m.id) return
             // stash the current method's answers so switching back restores them

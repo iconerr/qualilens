@@ -47,7 +47,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import (checkpoint_sheets, db, ingestion, keystore, llm, pipeline, report_docx,
+from . import (checkpoint_sheets, db, ingestion, keystore, llm, pipeline, quotes, report_docx,
                transcription, update)
 from .methods import METHODS
 
@@ -831,6 +831,8 @@ def get_run(run_id: str):
         "SELECT * FROM checkpoints WHERE run_id=? AND status='pending' "
         "ORDER BY created_at DESC LIMIT 1", (run_id,)).fetchone()
     run["pending_checkpoint"] = db.row_to_dict(cp, ("payload",)) if cp else None
+    if run["pending_checkpoint"]:      # quotes as the review shows them (app/quotes.py)
+        run["pending_checkpoint"]["payload"] = quotes.checkpoint_payload(run["pending_checkpoint"]["payload"])
     run["has_report"] = bool(conn.execute(
         "SELECT run_id FROM reports WHERE run_id=?", (run_id,)).fetchone())
     return run
@@ -1045,7 +1047,37 @@ def code_excerpts(run_id: str, code_id: str):
         "WHERE e.run_id=? AND (e.code_id=? OR (c.parent_id=? AND c.status='active')) "
         "ORDER BY via, s.filename, COALESCE(e.start_char, 0)",
         (code_id, run_id, code_id, code_id)).fetchall()
-    return [dict(r) for r in rows]
+    return [{**dict(r), "quote": quotes.for_display(r["quote"], r["source_id"])} for r in rows]
+
+
+@app.get("/api/runs/{run_id}/sources/{source_id}/extraction")
+def extraction_quotes(run_id: str, source_id: str):
+    """The verbatim quotes behind one paper's extraction, field by field: the
+    extraction review shows each field's summary beside the quotes that ground
+    it. Only quotes located in the paper are listed; unlocated ones never
+    ground the synthesis. The memo is the extractor's reason for the quote."""
+    conn = db.get_conn()
+    if not conn.execute("SELECT id FROM runs WHERE id=?", (run_id,)).fetchone():
+        _err(404, "Run not found")
+    field_of = {}
+    for r in conn.execute("SELECT id, meta FROM codes WHERE run_id=? AND stage='extract_field' "
+                          "AND status='active'", (run_id,)).fetchall():
+        try:
+            f = json.loads(r["meta"] or "{}").get("field")
+        except ValueError:
+            f = None
+        if f:
+            field_of[r["id"]] = f
+    out = {f: [] for f in field_of.values()}
+    if field_of:
+        marks = ",".join("?" * len(field_of))
+        for r in conn.execute(
+                "SELECT id, code_id, quote, memo FROM excerpts WHERE run_id=? AND source_id=? "
+                f"AND start_char IS NOT NULL AND code_id IN ({marks}) ORDER BY start_char",
+                (run_id, source_id, *field_of)).fetchall():
+            out[field_of[r["code_id"]]].append({"id": r["id"], "quote": quotes.for_display(r["quote"], source_id),
+                                                "why": r["memo"]})
+    return {"fields": out}
 
 
 def _to_utf16_offsets(text: str, items: list, keys: tuple = ("start", "end")) -> None:

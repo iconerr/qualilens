@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { useRef } from 'react'
 import { adoptToken, ageLabel, api, testKey, versionLabel, type KeyStatus, type Meta } from '../api'
+import { ask } from '../ask'
 
 // After an update the server stops itself so ./run.sh can relaunch the new
 // build. This page has nothing to talk to until then, and when the new server
@@ -126,10 +127,13 @@ export default function Settings() {
   }
 
   const installUpdate = async () => {
-    if (!confirm('Download and install the latest release from GitHub?\n\n'
-      + 'Your projects, keys, and uploads are never touched by an update. The '
-      + 'app will stop itself when done; you start it again with ./run.sh and '
-      + 'this page reconnects on its own.')) return
+    if (!(await ask({
+      title: 'Install the latest release?',
+      body: ['QualiLens downloads the latest release from GitHub and installs it. An update '
+        + 'never touches your projects, keys, or uploads.',
+        'The app stops itself when it is done. Start it again with ./run.sh, and this page reconnects on its own.'],
+      confirm: 'Download and install', cancel: 'Not now',
+    }))) return
     setUpdState({ phase: 'busy', msg: 'Downloading the release and applying it…' })
     try {
       const r = await api.installUpdate()
@@ -143,9 +147,12 @@ export default function Settings() {
 
   const applyUpdate = async (f: File | undefined) => {
     if (!f) return
-    if (!confirm(`Update QualiLens from “${f.name}”?\n\nYour projects, keys, and uploads are `
-      + 'never touched by an update. The app will stop itself when done; you start '
-      + 'it again with ./run.sh and this page reconnects on its own.')) return
+    if (!(await ask({
+      title: `Update QualiLens from “${f.name}”?`,
+      body: ['An update never touches your projects, keys, or uploads.',
+        'The app stops itself when it is done. Start it again with ./run.sh, and this page reconnects on its own.'],
+      confirm: 'Install this bundle',
+    }))) { if (updRef.current) updRef.current.value = ''; return }
     setUpdState({ phase: 'busy', msg: 'Validating and applying the bundle…' })
     try {
       let r
@@ -154,7 +161,10 @@ export default function Settings() {
       } catch (e: any) {
         // an older build than the one installed: a rollback only on request
         if (!e?.rollback) throw e
-        if (!confirm(`${e.message}\n\nInstall this older build anyway?`)) {
+        if (!(await ask({
+          title: 'Install an older build?', body: [e.message],
+          confirm: 'Install the older build', cancel: 'Keep the current build', danger: true,
+        }))) {
           setUpdState({ phase: 'idle', msg: '' }); return
         }
         setUpdState({ phase: 'busy', msg: 'Installing the older build as requested…' })

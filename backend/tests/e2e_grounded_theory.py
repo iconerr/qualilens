@@ -144,6 +144,14 @@ assert any(i["name"] == "seeking validation" for i in items)
 # 'seeking validation' should have excerpts from BOTH sources (code reuse across sources)
 sv = next(i for i in items if i["name"] == "seeking validation")
 assert sv["excerpt_count"] == 2, sv
+# the review shows a code's first quote beside it: id, source name, no 'via' on an open code
+s0 = sv["sample_excerpts"][0]
+assert s0["id"] and s0["source"] and s0["via"] is None and "truncated" in s0, s0
+assert sv["source_count"] == 2, sv
+assert "children" not in sv, "an open code is not a grouping code"
+assert cp["payload"]["source_count"] == 2, cp["payload"].get("source_count")
+cov = cp["payload"]["coverage"]
+assert len(cov) == 2 and all(isinstance(x["coded_pct"], int) and 0 < x["coded_pct"] <= 100 for x in cov), cov
 decisions = [{"id": items[0]["id"], "action": "rename", "name": items[0]["name"] + " (edited)"}]
 r = c.post(f'/api/runs/{run_id}/checkpoints/{cp["id"]}/resolve', json={"decisions": decisions})
 assert r.status_code == 200, r.text
@@ -152,6 +160,11 @@ assert r.status_code == 200, r.text
 d = wait_status("awaiting_review")
 cp = d["pending_checkpoint"]; assert cp["stage"] == "review_categories", cp["stage"]
 print("categories:", [i["name"] for i in cp["payload"]["items"]])
+# a category names the codes it holds, and its quotes say which code they came through
+cat = next(i for i in cp["payload"]["items"] if i["children"])
+assert all(k["name"] and isinstance(k["excerpt_count"], int) for k in cat["children"]), cat
+assert cat["sample_excerpts"] and all(x["via"] in {k["name"] for k in cat["children"]}
+                                      for x in cat["sample_excerpts"]), cat
 r = c.post(f'/api/runs/{run_id}/checkpoints/{cp["id"]}/resolve', json={"decisions": []})
 assert r.status_code == 200, r.text
 
@@ -160,9 +173,18 @@ d = wait_status("awaiting_review")
 cp = d["pending_checkpoint"]; assert cp["stage"] == "review_core", cp["stage"]
 core = cp["payload"]["items"][0]
 print("core:", core["name"])
+# the core review names each category with its weight, and shows the sampling gaps
+cats = cp["payload"]["categories"]
+assert cats and all(c_["name"] and isinstance(c_["codes"], int) and isinstance(c_["excerpts"], int) for c_ in cats), cats
+assert core["theoretical_gaps"] == ["No negative cases sampled."], core["theoretical_gaps"]
 r = c.post(f'/api/runs/{run_id}/checkpoints/{cp["id"]}/resolve',
-           json={"decisions": [{"id": core["id"], "storyline": "EDITED STORYLINE."}]})
+           json={"decisions": [{"id": core["id"], "storyline": "EDITED STORYLINE.",
+                                "theoretical_gaps": ["Sample people who stopped, too.", "  "],
+                                "notes": "Storyline rewritten in the participants' terms."}]})
 assert r.status_code == 200, r.text
+evs = [e["message"] for e in c.get(f'/api/runs/{run_id}/events?after=0').json()]
+assert any("Researcher note on the core category" in m and "participants' terms" in m for m in evs), evs[-5:]
+assert any("edited the core category" in m and "sampling recommendations" in m for m in evs), evs[-5:]
 
 # completion
 d = wait_status("completed")
@@ -174,6 +196,8 @@ rep = r.json()
 print("report title:", rep["title"])
 print("themes:", [t["name"] for t in rep["themes"]])
 assert "EDITED STORYLINE." in json.dumps(rep), "edited storyline must reach the report"
+assert "Sample people who stopped, too." in json.dumps(rep), "edited sampling gaps must reach the report"
+assert "No negative cases sampled." not in json.dumps(rep), "a gap left out must not reach the report"
 assert any("(edited)" in json.dumps(t) for t in rep["themes"]), "renamed code must persist"
 # provenance: offsets located
 ex = rep["themes"][0]["children"][0]["excerpts"][0]
@@ -184,4 +208,8 @@ print("provenance sample:", ex["source"], ex["start_char"], ex["end_char"])
 r = c.get(f'/api/runs/{run_id}/report.docx')
 assert r.status_code == 200 and len(r.content) > 5000
 print("docx bytes:", len(r.content))
+# every checkpoint's instructions follow the house style: full sentences, no em dashes
+_cps = _db.get_conn().execute("SELECT stage, instructions FROM checkpoints").fetchall()
+assert _cps and all("\u2014" not in r["instructions"] for r in _cps), \
+    [r["stage"] for r in _cps if "\u2014" in r["instructions"]]
 print("ALL E2E CHECKS PASSED")

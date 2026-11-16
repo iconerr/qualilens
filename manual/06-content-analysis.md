@@ -89,7 +89,7 @@ This stage runs either the derivation call described above, or the parsing of th
 
 The pipeline stops and shows you every code with its name and definition. You can rename, redefine, merge, delete, or add.
 
-This checkpoint differs from the coding checkpoints in one visible way. No coding has happened yet, so every code shows zero excerpts and the evidence panel has nothing to show. You are reviewing definitions in the abstract, against your own knowledge of the material. This is the one checkpoint where the software can give you no help beyond the definitions themselves.
+This checkpoint differs from the coding checkpoints in one visible way. No coding has happened yet, so every code reads `not yet applied` and carries no quotes. You are reviewing definitions in the abstract, against your own knowledge of the material. This is the one checkpoint where the software can give you no help beyond the definitions themselves.
 
 It is also the most consequential checkpoint in QualiLens, because this codebook is applied verbatim to every source and the AI coder is forbidden to invent anything outside it. Overlapping definitions produce arbitrary assignment. A missing category produces silence rather than an error. A vague definition produces counts that mean nothing. Your coding quality is bounded here.
 

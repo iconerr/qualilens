@@ -107,27 +107,27 @@ You can close the browser here. The run continues in the server process, and reo
 
 ## Checkpoint one: review initial codes
 
-The run status changes to `awaiting review`, and an amber panel appears carrying sixty-one initial codes.
+The run status changes to `awaiting review`, and the review panel, marked in amber, appears carrying sixty-one initial codes. A review of more than forty codes opens in **Names only**, which lists each code by name and counts, and that view suits the first pass.
 
 Work through them in four passes.
 
 **The merge pass comes first.** Sixty-one codes on eight transcripts is more than your data hold. The surplus is duplication rather than richness: the coder reuses a code only when it repeats its name exactly, and near-synonyms accumulate.
 
-Set the sort to **Fewest excerpts first (merge candidates)**. The thin end of the list rises to the top, and the duplicates are mostly there. Pairs such as `worrying about overstepping` and `fearing overreach into prescribing` name the same thing, and so do three separate codes about the prescriber's authority. Tick all three, choose the best-named of them from **merge all into…**, and press **Merge**. Each merged row dims and prints where it is going, and its excerpts will move to the target.
+Press **Thinnest first** in the toolbar. The thin end of the list rises to the top, and the duplicates are mostly there. Pairs such as `worrying about overstepping` and `fearing overreach into prescribing` name the same thing, and so do three separate codes about the prescriber's authority. Tick the two of those three you like least, press **Merge into…** in the bar that appears, and choose the third. Each merged row now states the code it will merge into and that its excerpts will move there.
 
-Nine merges in four batches bring the list from sixty-one to fifty-two. The counter in the toolbar reads `61 codes · 61 shown · 9 to merge` while you work.
+Nine merges in four batches bring the list from sixty-one to fifty-two. The tally in the right-hand column counts the nine as `Merging` while you work.
 
-**The evidence pass comes second.** Click any code whose name is surprising, appealing, or suspiciously neat, and its full evidence opens beside the list. `Rationing candor` sounds like a finding, and it rests on two excerpts. Reading both shows that one is a pharmacist describing time pressure rather than any decision about candor. Rename the code to `Shortening the conversation under time pressure` and rewrite the definition to match. That rename flags the code as researcher-edited, and nothing downstream will overwrite it.
+**The evidence pass comes second.** Press **Show evidence** in the toolbar, so that each code sits beside its first excerpt. For any code whose name is surprising, appealing, or suspiciously neat, press **Show all** and read every excerpt beneath it. `Rationing candor` sounds like a finding, and it rests on two excerpts. Reading both shows that one is a pharmacist describing time pressure rather than any decision about candor. Rename the code to `Shortening the conversation under time pressure` and rewrite the definition to match. That rename flags the code as researcher-edited, and nothing downstream will overwrite it.
 
-**The document pass comes third.** Follow **open in document ↗** on an excerpt, for two or three of the codes your argument will lean on. The transcript opens in a new tab with that passage highlighted and the rest of the document's coding shaded around it, so you can read the quote in its own paragraph. One excerpt under `Guarding the relationship with the prescriber` turns out to be a pharmacist describing a good working relationship rather than guarding anything. Note that code for a definition rewrite when you return.
+**The document pass comes third.** Follow **Open in document ↗** on an excerpt, for two or three of the codes your argument will lean on. The transcript opens in a new tab with that passage highlighted and the rest of the document's coding shaded around it, so you can read the quote in its own paragraph. One excerpt under `Guarding the relationship with the prescriber` turns out to be a pharmacist describing a good working relationship rather than guarding anything. Press **Add a note** on that code and record what you found, so that the definition you rewrite on your return has its reason in the audit trail.
 
 Your merges and renames are all still staged when you come back to the tab. You lose nothing by leaving the page.
 
-**The absence pass comes fourth.** Ask what your own reading of these transcripts found that the list does not show. Two pharmacists described consulting a colleague before raising the subject, and no code names it. Press **+ Add a code**, name it `Seeking a second opinion before raising it`, and write a definition.
+**The absence pass comes fourth.** Ask what your own reading of these transcripts found that the list does not show. Two pharmacists described consulting a colleague before raising the subject, and no code names it. Press **+ Add a code the coder missed**, name it `Seeking a second opinion before raising it`, and write a definition.
 
 Be clear-eyed about what that addition does at this checkpoint. It carries no excerpts and cannot be given any. It will be passed to theme construction and may be claimed by a theme, and it will appear in your report with no evidence beneath it. It records that you saw something the AI coder missed. You will have to evidence the concept yourself from the transcripts if it matters to your paper.
 
-Press **Approve and continue**. The run resumes.
+Open **See what will be recorded** beneath the approve button if you want to read the whole review in one list, then press the button, which by now counts every decision you staged. The run resumes.
 
 ---
 
@@ -141,29 +141,30 @@ Three calls, a minute or two, and the panel reappears.
 
 ## Checkpoint two: review themes
 
-Six themes appear with their final names and definitions, each with its excerpt count, the candidate name phase five started from, and the phase-four critique beneath it. Clicking a theme opens all of its evidence beside the list, with each excerpt labeled by the initial code it came from.
+Six themes appear with their final names and definitions, each with its counts, the initial codes it holds, the candidate name phase five started from, and the phase-four critique beneath it. Each theme shows its first excerpt, and **Show all** loads the rest in place, each labeled with the initial code it came from.
 
 ```
-Guarding the relationship with the prescriber            [ 47 excerpts ]
-Named in Phase 5 from the candidate "Prescriber relationship".
-Model's own critique: coherence strong, distinctness strong —
+Guarding the relationship with the prescriber     47 excerpts · 8 sources
+Phase 5 named it from the candidate "Prescriber relationship", and the
+name and definition above are what the report carries unless you edit them.
+The model's own critique: coherence strong, distinctness strong;
 recommends keep.
 
-Time as the limiting condition                           [ 31 excerpts ]
-Model's own critique: coherence adequate, distinctness weak —
+Time as the limiting condition                    31 excerpts · 8 sources
+The model's own critique: coherence adequate, distinctness weak;
 recommends merge. Overlaps substantially with "Working inside
 the appointment structure".
 ```
 
 Read the critique as a second opinion rather than an instruction. It came from the same AI model that built the themes, and from a sample of extracts rather than the full evidence. Open the theme and read the evidence yourself wherever the critique flags a weakness.
 
-The critique is right about the overlap here. Opening both themes shows the same four initial codes doing the work in each. Tick `Time as the limiting condition`, choose `Working inside the appointment structure` as the target, and merge. The child codes move across, so the evidence follows.
+The critique is right about the overlap here. Reading the evidence of both themes shows the same four initial codes doing the work in each. Press **Merge into…** on `Time as the limiting condition` and choose `Working inside the appointment structure`. The row now states that its codes and their evidence will move there, so the evidence follows the merge.
 
 A fourth theme carries a recommendation to split, and the panel offers no split control. Leave the theme whole. Deleting it in order to split it would orphan its codes into an `Uncategorized` block. You can draw the two halves out in your own writing, where the evidence is all still visible under one heading.
 
 Now read the names, because they are the names your report will carry. Two of the five remaining themes read as you want them. A third, `Time as the limiting condition`, is now merged away. The other two need your wording: rewrite them here, and they are final.
 
-Press **Approve and continue**.
+Press **Approve 3 decisions and continue**, which counts the merge and the two renames.
 
 ---
 

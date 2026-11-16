@@ -111,9 +111,10 @@ def stage_theme_review(ctx):
 def cp_theme_payload(ctx):
     title, instructions, payload = build_code_review_payload(
         ctx, stage="theme", title="Review themes",
-        instructions="These are the final theme names and definitions (Phase 5) with "
-                     "the model's Phase-4 critique of each candidate. Rename, merge, or "
-                     "discard themes; what you approve here is what the report carries.")
+        instructions="These are the final theme names and definitions from Phase 5, "
+                     "each with the model's Phase 4 critique of its candidate. Rename, "
+                     "merge, or delete themes, because the names and definitions you "
+                     "approve here are the ones the report carries.")
     for item in payload["items"]:
         row = db.get_conn().execute("SELECT meta FROM codes WHERE id=? AND run_id=?",
                                     (item["id"], ctx.run_id)).fetchone()
@@ -190,8 +191,9 @@ METHOD = Method(
               build_payload=functools.partial(
                   build_code_review_payload, stage="open_code",
                   title="Review initial codes",
-                  instructions="Rename, merge, or delete codes before themes are "
-                               "constructed from them."),
+                  instructions="Rename, merge, or delete the initial codes, and add any "
+                               "the coder missed. A merged code's excerpts move into the "
+                               "code it merges into."),
               apply_resolution=apply_code_review_resolution),
         Stage("theme_construction", "Constructing themes", run=stage_theme_construction),
         Stage("theme_review", "Reviewing themes against data", run=stage_theme_review),

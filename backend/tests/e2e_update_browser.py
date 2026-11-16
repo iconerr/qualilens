@@ -126,6 +126,8 @@ with sync_playwright() as p:
     token_before = page.evaluate(TOKEN_JS)
     check(bool(token_before), "page holds server A's token")
     page.set_input_files("input[type=file]", BUNDLE)
+    # the app asks in its own dialog (2026-11-15), not the browser's confirm()
+    page.click(".modal.ask button.primary")
     page.wait_for_selector("text=Update installed", timeout=60000)
     check(True, "page shows 'Update installed'")
     for _ in range(40):

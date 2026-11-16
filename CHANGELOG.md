@@ -9,6 +9,66 @@ All notable changes to QualiLens. Release tags are semantic versions; each
 release also carries a build stamp (`build YYYY.MM.DD-HHMM`) that the in-app
 update check compares against your installation.
 
+## 1.11.0 — 2026-11-15
+
+- The interface takes the look of qualilens.org. Its type is IBM Plex,
+  with Plex Serif for page titles, report headings, and what you read (the
+  report, the coded-source reader, and quotes), Plex Sans for the rest, and
+  Plex Mono for model ids and build stamps. All three ship inside the app,
+  so the report and the reader look the same on every computer, where
+  before their serif was whatever the system had. The main buttons are
+  ink, links and focus are the mark's violet, the grays are warm, and
+  surfaces sit on hairlines instead of shadows.
+- Labels read in sentence case, including the tagline, which had been in
+  spaced capitals. A status shows as a colored dot beside its word, and a
+  run waiting for your review carries an amber rule down its left edge, as
+  a completed run carries a green one.
+- The top bar fits a narrow window, where at 390 pixels wide it ran past
+  the edge and cut off New analysis.
+- The four review screens are rebuilt around what a decision rests on. In
+  a code review, each code shows its first quote beside its definition,
+  with its source and a link into the document, and a category or theme
+  lists the codes it holds. Names and definitions read as text until you
+  choose Rename, each code offers Merge into, Delete, and Add a note, and a
+  note goes into the audit trail with its decision. Each decision is
+  written on its code, a tally beside the list counts them, and the
+  Approve button shows the number. Beside the list, a review of codes,
+  categories, or themes states how much of the least-coded transcript
+  carries no code and links to it. A review of more than 40 codes opens
+  with one line per code, and keys move through the list and act on the
+  code you are on.
+- The core category review shows the storyline as text you rewrite in
+  place, each category with its proposed relation and its weight beneath
+  the figure the report will draw, and the places where the data are thin.
+  The report reproduces those places as its Theoretical Sampling
+  Recommendations, and the review now lets you edit them, leave them out,
+  or add to them.
+- The charting review shows each weak assignment beside its framework
+  code's definition, offers Keep or Remove in place of a checkbox, and
+  indicates that a candidate code left undecided is discarded.
+- The extraction review opens as a table of papers by field with quote
+  counts, so thin and unsupported summaries stand out, and an opened paper
+  shows each summary beside the quotes that ground it. Excluding a paper
+  asks for a reason, which is recorded with the exclusion.
+- The instructions at the top of each review are rewritten to match the
+  rebuilt screens.
+- Confirmations appear in the app's own dialog instead of the browser's.
+  Each dialog names its buttons for what they do, and for an action that
+  cannot be undone, such as deleting a project or cancelling a run, the
+  safe choice holds the focus.
+- In the review screens, a word that a PDF broke across a line reads whole
+  again ("decomposes" rather than "decom- poses"), and the paper's own text
+  decides whether it keeps a hyphen. The stored quote, the spreadsheet, and
+  the audit export keep each quote exactly as it was extracted.
+- In the extraction review, the column names stay with the table instead
+  of hanging at the top of the window over an opened paper, and they
+  appear again below an opened paper, above the papers that follow it.
+- Word reports list QualiLens as their author, where the library that
+  writes them had put its own name.
+- The manual takes the same type and colors, and its chapter on
+  checkpoints, with the walkthrough and the chapters that refer to it,
+  describes the new review screens.
+
 ## 1.10.2 — 2026-11-04
 
 - The Mistral list offers `mistral-large-4` as the default, with

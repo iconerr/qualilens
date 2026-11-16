@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, dayLabel, methodLabel, statusLabel, type Project } from '../api'
+import { ask } from '../ask'
 import UpdateHint from '../UpdateHint'
 import MethodGlyph from '../Glyphs'
 
@@ -17,7 +18,11 @@ export default function Home() {
 
   const del = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation()
-    if (!confirm(`Delete project "${name}" and all its runs, codes, and reports? This cannot be undone.`)) return
+    if (!(await ask({
+      title: `Delete “${name}”?`,
+      body: ['This deletes the project with all its runs, codes, and reports, and it cannot be undone.'],
+      confirm: 'Delete the project', cancel: 'Keep it', danger: true,
+    }))) return
     try {
       await api.deleteProject(id)
       load()

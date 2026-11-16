@@ -26,6 +26,10 @@ def build_docx(payload: dict) -> bytes:
     # generator identification in the document properties (the visible
     # counterpart is the colophon at the end of the report)
     doc.core_properties.comments = "Generated with QualiLens (ql-a2f4467b)"
+    # Word lists the author and the last editor in its properties, and
+    # python-docx would otherwise put its own name in both
+    doc.core_properties.author = "QualiLens"
+    doc.core_properties.last_modified_by = "QualiLens"
     style = doc.styles["Normal"]
     style.font.name = "Georgia"
     style.font.size = Pt(11)

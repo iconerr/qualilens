@@ -66,9 +66,9 @@ Codes are reused across sources by exact name match. The coder is shown the code
 
 ### Review open codes
 
-The pipeline stops. Every open code appears with its excerpt count. You can search and sort the list, select codes and merge them in batches, rename or redefine any of them, delete them, or add a code of your own. Clicking a code opens all of its evidence beside the list, and each excerpt links into [the coded-source reader](10-coded-source-reader.md) at its place in the transcript. [Checkpoints](09-checkpoints.md) documents every control.
+The pipeline stops. Every open code appears beside its first excerpt, with its counts of excerpts and sources. You can search and sort the list, merge codes one at a time or in batches, rename or redefine any of them, delete them, note why you decided as you did, or add a code of your own. **Show all** loads every excerpt a code carries, and each excerpt links into [the coded-source reader](10-coded-source-reader.md) at its place in the transcript. [Checkpoints](09-checkpoints.md) documents every control.
 
-This is the checkpoint that most repays your care, because everything downstream is built from what survives it. Open coding fractures the data deliberately, so this list is long by design. Merge the near-duplicates here. Sorting by fewest excerpts first puts the duplicates in front of you.
+This is the checkpoint that most repays your care, because everything downstream is built from what survives it. Open coding fractures the data deliberately, so this list is long by design. Merge the near-duplicates here. The **Thinnest first** order puts the duplicates in front of you.
 
 ### Axial coding
 
@@ -88,7 +88,7 @@ It returns the core category, which may be one of the existing categories or a h
 
 ### Review core category
 
-You edit the core category's name, definition, and storyline directly. The proposed relationships are displayed for your information, and you cannot edit them at this checkpoint. The storyline is the spine of the final report, so this is the checkpoint where your own analytic voice enters the report most directly. The audit trail records which of the three fields you changed, and records an unchanged approval as exactly that.
+You edit the core category's name, definition, and storyline in place, and you can edit, leave out, or add to the theoretical gaps, which the report reproduces as its Theoretical Sampling Recommendations. The proposed relationships are drawn as the report's figure and listed for your information. You cannot edit them at this checkpoint, but a note can record where you disagree. The storyline is the spine of the final report, so this is the checkpoint where your own analytic voice enters the report most directly. The audit trail records which parts you changed, and records an unchanged approval as exactly that.
 
 ### Theory and report
 

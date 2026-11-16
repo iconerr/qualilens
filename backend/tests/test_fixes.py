@@ -810,6 +810,8 @@ def test_provenance_marks_present():
                "audit": {"events": 0, "checkpoints": [], "usage": {}}}
     d = _docx.Document(_B(report_docx.build_docx(payload)))
     assert "QualiLens" in (d.core_properties.comments or "")
+    assert d.core_properties.author == "QualiLens", d.core_properties.author
+    assert d.core_properties.last_modified_by == "QualiLens", d.core_properties.last_modified_by
 
 
 # ---------- model catalog maintenance ----------
@@ -2044,6 +2046,7 @@ def test_branch_remaps_code_ids_inside_meta(mock_llm):
                       "AND status='pending'", (nid,)).fetchone()
     assert "already applied" in cp["instructions"], \
         "the reopened review must say its earlier decisions are baked in"
+    assert "\u2014" not in cp["instructions"], "the note follows the house style"
 
 
 def test_branch_backfills_corpus_freeze_for_legacy_runs(mock_llm):
@@ -2082,3 +2085,20 @@ def test_branch_backfills_corpus_freeze_for_legacy_runs(mock_llm):
                                  (nid,)).fetchone()["state"])
     assert st["source_ids"] == [sid], \
         "the branch's corpus is what the copied artifacts reference"
+
+
+# ---------- quotes on screen (2026-11-15) ----------
+
+def test_quote_display_joins_words_broken_across_a_line():
+    """A PDF's line-end hyphenation survives in a stored quote; the review
+    shows the word whole, and the source decides whether it keeps a hyphen."""
+    from app.quotes import display
+    vocab = frozenset({"worst-case", "benchmark"})
+    assert display("This paper decom-\nposes total") == "This paper decomposes total"
+    assert display("This paper decom- poses total") == "This paper decomposes total"
+    assert display("and to communi- \ncate the") == "and to communicate the"
+    assert display("the worst- case bound", vocab) == "the worst-case bound"
+    assert display("a bench- mark study", vocab) == "a benchmark study"
+    assert display("pre- and post-test scores") == "pre- and post-test scores"   # suspended hyphen
+    assert display("the IS- Research link") == "the IS- Research link"            # a capital follows
+    assert display("well-known and long-run") == "well-known and long-run"        # nothing broken
